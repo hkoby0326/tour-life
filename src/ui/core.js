@@ -5,7 +5,7 @@
     W, D, S: null, tab: "home", modal: null, planSel: null, planWeekT: -1, runLog: null, running: false, screens: {},
     SAVE_KEY: "tourlife_v1", SETTINGS_KEY: "tourlife_settings_v1", HOF_KEY: "tourlife_hof_v1",
     DEFAULT_SETTINGS: { stopTournament: true, stopMilestone: true, stopInjury: true, stopSeason: true, stopEvent: true, stopRival: true, watchEnabled: true, watchGs: true, watchFinals: true, watchRival: true, watchTop10: true, watchTitle: true, watchSpeed: 300 },
-    VERSION: "v1.0",
+    VERSION: "v1.1",
   });
   U.ATTRL = W.ATTR_LABEL;
   U.ORIGINS = {
@@ -108,6 +108,7 @@
       app.querySelectorAll("[data-choice]").forEach((b) => b.onclick = () => { const txt = W.resolveEvent(S, b.dataset.choice); U.save(); U.modal = `<h2>結果</h2><p>${esc(txt)}</p><button class="primary" data-close>閉じる</button>`; U.render(); });
     }
     U.bindPlayerLinks(app);
+    if (U.bindWrapped) U.bindWrapped(app);
     const c = document.getElementById("content");
     (U.screens[U.tab] || U.screens.home)(c);
   };
@@ -122,7 +123,7 @@
     const surf = Object.keys(D.SURFACES).map((k) => `<div class="attr" style="grid-template-columns:84px 1fr 36px"><span>${D.SURFACES[k]}</span>${bar(p.surf[k], `var(--${k})`)}<span class="num">${p.surf[k]}</span></div>`).join("");
     return `<div class="row between"><div class="identity">${U.avatar(p)}<div><div class="name">${esc(p.name)} ${p.isRival ? '<span class="pill rival">宿敵</span>' : ""}${p.isHuman ? '<span class="pill">自分</span>' : ""}</div><div class="sub">${p.age}歳 ・ ${D.COUNTRIES[p.country].name} ・ ${p.hand === "L" ? "左利き" : "右利き"} ・ ${W.STYLE_LABEL[p.style] || p.style}</div></div></div><div style="text-align:right"><div class="kpi .v" style="font-size:22px;font-weight:800">${p.retired ? "引退" : p.rank ? p.rank + "位" : "ランク外"}</div><div class="small muted">${p.points}pt ・ 最高${p.bestRank || "-"}位 ・ 総合 ${p.overall}</div></div></div>
       ${p.injury ? `<p class="small red">${esc(p.injury.label)} 残り${p.injury.weeks}週</p>` : ""}
-      <div class="grid2" style="margin-top:10px"><div>${attrs}<h3 style="margin-top:8px">サーフェス</h3>${surf}</div>
+      <div class="grid2" style="margin-top:10px"><div>${U.radarSvg(p.attrs, p.isHuman ? null : U.human().attrs)}<div class="small muted" style="text-align:center;margin:-4px 0 8px"><span class="accent">■</span> ${esc(p.name)}${p.isHuman ? "" : ' <span class="red">■</span> 自分'}</div>${attrs}<h3 style="margin-top:8px">サーフェス</h3>${surf}</div>
       <div><div class="kpi"><div class="card"><div class="v">${p.titles}</div><div class="l">タイトル</div></div><div class="card"><div class="v">${p.gs}</div><div class="l">GS</div></div><div class="card"><div class="v">${p.w}-${p.l}</div><div class="l">通算</div></div><div class="card"><div class="v">${money(p.prize)}</div><div class="l">賞金</div></div></div>
         <p class="small">直近52週 ${p.tournaments52}大会 ・ 疲労 ${p.fatigue} ・ 同年代${p.peers}人中${p.peerPos ? p.peerPos + "番目" : "-"}</p>
         ${p.isHuman ? "" : `<p class="small"><b>対戦成績:</b> ${p.h2hW}勝${p.h2hL}敗${p.h2h.length ? "<br>" + p.h2h.map((m) => `<span class="${m.won ? "green" : "red"}">${cal(m.year)} ${esc(m.tour)} ${esc(m.round)} ${m.won ? "W" : "L"} ${esc(m.score)}</span>`).join("<br>") : ""}</p>`}
@@ -216,7 +217,7 @@
       <div class="grid3">${Object.entries(U.ORIGINS).map(([k, o]) => `<div class="card origin ${sel === k ? "sel" : ""}" data-o="${k}"><div style="font-size:26px">${o.icon}</div><h3>${o.name} <span class="muted small">${o.age}歳スタート</span></h3><p class="small">${o.desc}</p><p class="small muted">難易度: ${o.diff}</p></div>`).join("")}</div>
       <p class="small muted">ポテンシャル（能力の天井）はプレイヤーには見えません。コーチのコメントと同年代との比較から推測してください。約10%で「世代の才能」を引きます。</p>
       <button class="primary" id="start" style="padding:10px 22px;font-size:15px">キャリアを始める</button></div>
-      ${hof.length ? `<div class="panel"><h2>殿堂ギャラリー</h2><table><tr><th>選手</th><th>称号</th><th class="num">最高</th><th class="num">タイトル</th><th class="num">GS</th><th class="num">No.1週</th><th class="num">成績</th></tr>${hof.map((e) => `<tr><td>${flag(e.country)} ${esc(e.name)} <span class="muted small">${U.ORIGINS[e.origin] ? U.ORIGINS[e.origin].name : ""}</span></td><td class="${e.hof ? "gold" : ""}">${esc(e.tag)}${e.hof ? " 🏛" : ""}</td><td class="num">${e.bestRank || "-"}</td><td class="num">${e.titles}</td><td class="num">${e.gs}</td><td class="num">${e.weeksNo1}</td><td class="num">${e.w}-${e.l}</td></tr>`).join("")}</table></div>` : ""}
+      ${hof.length ? `<div class="panel"><h2>殿堂ギャラリー</h2>${hof.map((e) => `<div class="card"><div class="row between"><div><b>${flag(e.country)} ${esc(e.name)}</b> <span class="muted small">${U.ORIGINS[e.origin] ? U.ORIGINS[e.origin].name : ""} ・ ${e.seasons || "-"}シーズン ・ ${e.date || ""}</span><div class="${e.hof ? "gold" : "muted"}" style="font-weight:700">「${esc(e.tag)}」${e.hof ? " 🏛 殿堂入り" : ""}</div></div><div class="small muted" style="text-align:right">最高${e.bestRank || "-"}位 ・ ${e.titles}勝（GS${e.gs}）<br>No.1 ${e.weeksNo1}週 ・ ${e.w}-${e.l} ・ ${U.money(e.prize || 0)}</div></div>${e.timeline && e.timeline.length ? `<div class="timeline" style="margin-top:8px">${e.timeline.map((z) => `<div class="yr"><div class="muted">${z.y}<br><span class="tiny">${z.age}歳</span></div><div class="r ${z.rank && z.rank <= 10 ? "top10" : z.rank && z.rank <= 50 ? "top50" : ""}">${z.rank || "-"}</div><div>${z.w}-${z.l}</div>${z.titles ? `<div class="t">🏆×${z.titles}</div>` : ""}</div>`).join("")}</div>` : ""}</div>`).join("")}</div>` : ""}
     </div>`;
     app.querySelectorAll(".origin").forEach((el) => el.onclick = () => { window._origin = el.dataset.o; window._name = document.getElementById("name").value; window._country = document.getElementById("country").value; U.renderSetup(); });
     document.getElementById("start").onclick = () => {

@@ -31,6 +31,7 @@ const path = require("path"); const fs = require("fs"); const { chromium } = req
   for (let i = 0; i < 4; i++) { const ch = await page.$("[data-choice]"); if (ch) { await ch.click(); continue; } const cl = await page.$("[data-close]"); if (cl) { await cl.click(); continue; } break; }
   await page.screenshot({ path: shots + "/report.png" });
   const bb = await page.$("[data-bracket]"); if (bb) { await bb.click(); await page.waitForSelector(".bracket"); await page.waitForTimeout(400); await page.screenshot({ path: shots + "/bracket.png" }); await page.click("[data-close]"); }
+  await page.click("[data-more]"); await page.waitForSelector("[data-goto]"); await page.click('[data-goto="player"]'); await page.waitForSelector(".radar"); await page.screenshot({ path: shots + "/player.png", fullPage: true });
   await page.click('.rail .nav[data-tab="ranking"]'); await page.waitForSelector("#content .panel"); await page.screenshot({ path: shots + "/ranking.png" });
   const hasHScroll = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
   console.log("viewers:", viewers, "| horizontal page scroll:", hasHScroll);

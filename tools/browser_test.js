@@ -71,7 +71,7 @@ const { chromium } = require("playwright");
     const modal = await page.$(".modal");
     if (modal) {
       const txt = await modal.textContent();
-      if (txt.includes("シーズン総括")) { seasonSeen = true; await page.screenshot({ path: shots + "/04_season.png", fullPage: false }); }
+      if (txt.includes("Season") || txt.includes("シーズン総括")) { seasonSeen = true; await page.waitForTimeout(300); await page.screenshot({ path: shots + "/04_season.png", fullPage: false }); for (let k = 0; k < 5; k++) { const nx = await page.$("[data-wnext]"); if (nx) await nx.click(); } await page.screenshot({ path: shots + "/04_season_last.png", fullPage: false }); }
       else if (await page.$("[data-choice]")) { eventSeen = true; await page.screenshot({ path: shots + "/05_event.png", fullPage: false }); }
       await closeModals();
     }

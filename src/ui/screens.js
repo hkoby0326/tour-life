@@ -318,16 +318,20 @@
     const h2h = S.history.matches.filter((m) => m.oppId === S.rivalId);
     const top10 = S.history.matches.filter((m) => m.oppRank && m.oppRank <= 10);
     const titles = S.history.tournaments.filter((t) => t.winnerId === me.id);
+    const curSeason = { age: W.age(S, me), rank: me.rank, w: S.history.matches.filter((m) => m.year === S.year && m.won).length, l: S.history.matches.filter((m) => m.year === S.year && !m.won).length };
     c.innerHTML = `<div class="grid2"><div class="panel"><div class="identity" style="margin-bottom:12px">${U.avatar(me)}<div><div class="name">${esc(me.name)}</div><div class="sub">総合 ${ovr.toFixed(1)} ・ ${me.hand === "L" ? "左利き" : "右利き"} ・ ${W.STYLE_LABEL[me.style] || ""} ・ ${esc(hint)}</div></div></div>
+      ${U.radarSvg(me.attrs, rv && !rv.retired ? rv.attrs : null)}<div class="small muted" style="text-align:center;margin:-4px 0 10px"><span class="accent">■</span> 自分${rv && !rv.retired ? ` <span class="red">■</span> 宿敵 ${esc(rv.name)}` : ""}</div>
       <div class="attr" style="color:var(--muted);font-size:11px"><span></span><span></span><span class="num">値</span><span>4週</span><span>今季</span></div>${attrs}
       <h3 style="margin-top:12px">サーフェス適性</h3>${surf}
       <h3 style="margin-top:12px">総合の推移（直近${Math.min(hist.length, 120)}週）</h3>${sparkline(hist.map((x) => x.ovr))}
       <p class="small muted">同年代（±1歳）${peers.length + 1}人中 ${me.rank ? myPos + "番目" : "ランク外"}。成長は年齢・隠れた天井・練習の重点・コーチで決まる。</p></div>
-      <div><div class="panel"><h2>キャリア</h2><div class="kpi"><div class="card"><div class="v">${me.stats.bestRank || "-"}</div><div class="l">最高ランク</div></div><div class="card"><div class="v">${me.stats.titles}</div><div class="l">タイトル</div></div><div class="card"><div class="v">${me.stats.gs}</div><div class="l">GS</div></div><div class="card"><div class="v">${me.stats.m1000}</div><div class="l">1000</div></div><div class="card"><div class="v">${me.stats.weeksNo1}</div><div class="l">No.1週</div></div><div class="card"><div class="v">${money(me.stats.prize)}</div><div class="l">生涯賞金</div></div></div>
-        <p class="small">対Top10: ${top10.filter((m) => m.won).length}勝${top10.filter((m) => !m.won).length}敗 ・ 通算 ${me.stats.w}勝${me.stats.l}敗</p>
-        ${titles.length ? `<p class="small"><b class="gold">タイトル:</b> ${titles.map((t) => `${cal(t.year)} ${esc(t.name)}`).join("、")}</p>` : ""}</div>
+      <div><div class="panel"><div class="row between"><h2 style="margin:0;border:0;padding:0">キャリア</h2><button class="small" data-share>キャリアカードを保存</button></div><div class="kpi" style="margin-top:10px"><div class="card"><div class="v">${me.stats.bestRank || "-"}</div><div class="l">最高ランク</div></div><div class="card"><div class="v">${me.stats.titles}</div><div class="l">タイトル</div></div><div class="card"><div class="v">${me.stats.gs}</div><div class="l">GS</div></div><div class="card"><div class="v">${me.stats.m1000}</div><div class="l">1000</div></div><div class="card"><div class="v">${me.stats.weeksNo1}</div><div class="l">No.1週</div></div><div class="card"><div class="v">${money(me.stats.prize)}</div><div class="l">生涯賞金</div></div></div>
+        <p class="small">対Top10: ${top10.filter((m) => m.won).length}勝${top10.filter((m) => !m.won).length}敗 ・ 通算 ${me.stats.w}勝${me.stats.l}敗 ・ 怪我 ${(S.human.injuryLog || []).length}回</p>
+        <h3 style="margin-top:10px">年表</h3>${U.timelineHtml(S.history.seasons, curSeason)}
+        <h3 style="margin-top:10px">トロフィーケース</h3>${U.trophyCase(titles)}</div>
       ${rv ? `<div class="panel"><h2>宿敵</h2><div class="identity" data-player="${rv.id}">${U.avatar(rv)}<div><div class="name">${esc(rv.name)}</div><div class="sub">${W.age(S, rv)}歳 ・ ${rv.retired ? "引退" : rv.rank ? rv.rank + "位" : "ランク外"} ・ 最高${rv.stats.bestRank || "-"}位 ・ タイトル${rv.stats.titles}</div></div></div><p style="margin-top:8px">対戦成績 <b>${h2h.filter((m) => m.won).length}勝${h2h.filter((m) => !m.won).length}敗</b></p>${h2h.slice(-5).reverse().map((m) => `<div class="small ${m.won ? "green" : "red"}">${cal(m.year)} ${esc(m.tour)} ${esc(m.round)} ${m.won ? "WIN" : "LOSS"} ${esc(m.score)}</div>`).join("")}</div>` : ""}</div></div>`;
     U.bindPlayerLinks(c);
+    const sh = c.querySelector("[data-share]"); if (sh) sh.onclick = () => U.shareCard();
   };
 
   // ---------- チーム ----------

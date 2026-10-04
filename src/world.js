@@ -739,6 +739,7 @@
     }
     p.injury = inj;
     p.injuredAt = state.t;
+    if (p.isHuman) { state.human.injuryLog = state.human.injuryLog || []; state.human.injuryLog.push({ year: state.year, week: state.week, label: inj.label, weeks: inj.weeks, sev: inj.sev }); }
     if (p.isHuman || (p.rank && p.rank <= 10) || p.isRival || inj.sev === 3 && p.rank && p.rank <= 50) news(state, `${p.name} が ${inj.label} で ${inj.weeks}週間の離脱${T ? "（" + T.name + "）" : "（練習中）"}`);
   }
 
@@ -1235,6 +1236,10 @@
     const myRes = h.results.filter((r) => r.year === yr);
     const myMatches = state.history.matches.filter((m) => m.year === yr);
     summary.tournaments = new Set(myRes.map((r) => r.t)).size;
+    summary.injuries = (state.human.injuryLog || []).filter((i) => i.year === yr).map((i) => `${i.label}（${i.weeks}週）`);
+    summary.titleCats = myRes.filter((r) => r.round === "優勝").map((r) => r.cat);
+    const rankAt = (t) => { const e = (state.human.rankHist || []).find((x) => x.t === t); return e && e.rank ? e.rank : 9999; };
+    summary.upsets = myMatches.filter((m) => m.won && m.oppRank && m.oppRank < rankAt(m.t) - 20).length;
     summary.w = myMatches.filter((m) => m.won).length;
     summary.l = myMatches.length - summary.w;
     summary.titles = myRes.filter((r) => r.round === "優勝").map((r) => r.tid.startsWith("L") ? r.name : `${r.name} (${D.CATS[r.cat].short})`);
@@ -1339,7 +1344,10 @@
     const firstTitle = state.history.seasons.find((x) => x.titles.length > 0);
     const late = firstTitle && firstTitle.age >= 27 ? "遅咲きの" : "";
     const hof = s.gs >= 2 || s.weeksNo1 >= 20 || (s.gs >= 1 && s.m1000 >= 3);
+    const byCat = {};
+    for (const t of allTitles) byCat[t.cat] = (byCat[t.cat] || 0) + 1;
     return {
+      timeline: state.history.seasons.map((z) => ({ y: z.calendarYear, age: z.age, rank: z.rank, titles: z.titles.length, w: z.w, l: z.l })), byCat, injuries: (state.human.injuryLog || []).length,
       tag: late + tag, hof, name: h.name, country: h.country, origin: state.config.origin, seasons: state.history.seasons.length, titles: total, gs: s.gs, m1000: s.m1000, bestRank: s.bestRank, weeksNo1: s.weeksNo1, prize: Math.round(s.prize), w: s.w, l: s.l,
       lines: [
         `通算 ${s.w}勝${s.l}敗、タイトル${total}（GS ${s.gs}、1000 ${s.m1000}）`,
@@ -1418,6 +1426,7 @@
     s.cutoffs = s.cutoffs || {};
     H.ledger = H.ledger || [];
     H.rankHist = H.rankHist || [];
+    H.injuryLog = H.injuryLog || [];
     s.history.brackets = s.history.brackets || [];
     if (!H.staff) H.staff = { physio: !!H.physio, fitness: false, hitting: false, agent: false, analyst: false };
     if (!H.coachOffers.length) H.coachOffers = genCoachOffers(s);
