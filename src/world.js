@@ -1131,6 +1131,9 @@
     report.attrDelta = attrDelta;
     report.surfDelta = surfDelta;
     pushAttrHist(state);
+    state.human.rankHist = state.human.rankHist || [];
+    state.human.rankHist.push({ t: state.t, year: state.year, week: state.week, rank: h.rank, pts: h.points });
+    if (state.human.rankHist.length > 160) state.human.rankHist.shift();
     normalizeNumbers(state);
     report.news = state.history.news.slice(report.newsStart).map((n) => n.text);
     report.rivalNote = rv && !rv.retired ? `${rv.name}: ${rv.rank ? rv.rank + "位" : "ランク外"}` : null;
@@ -1156,17 +1159,17 @@
   }
   function autoAction(state, tours) {
     const h = human(state);
-    if (tours.length === 0) return { type: "camp", focus: state.human.focus };
+    if (tours.length === 0) return { type: "camp", focus: state.human.focus, reason: "オフシーズン。合宿で集中的に鍛える" };
     const r = rank6(state, h);
     // Real-world pacing: top players ~15-22 events/year, top-50 ~22-26, lower tiers ~26-30.
     const load8 = recentLoad(state, h, 8);
     const maxLoad = r <= 20 ? 4 : r <= 100 ? 5 : 6;
     const lastWeek = h.results.find((x) => x.t === state.t - 1 && x.cat !== "PREV");
     const bigLast = lastWeek && D.CATS[lastWeek.cat] && D.CATS[lastWeek.cat].tier >= 9;
-    if (h.fatigue > 45) return { type: "rest" };
-    if (bigLast && h.fatigue > 25) return { type: "rest" };
-    if (load8 >= maxLoad) return { type: h.fatigue > 30 ? "rest" : "train", focus: state.human.focus };
-    if ((h.consec || 0) >= 3) return { type: "train", focus: state.human.focus };
+    if (h.fatigue > 45) return { type: "rest", reason: `疲労が${Math.round(h.fatigue)}で高い。休養して回復` };
+    if (bigLast && h.fatigue > 25) return { type: "rest", reason: "グランドスラムの翌週は休養" };
+    if (load8 >= maxLoad) return { type: h.fatigue > 30 ? "rest" : "train", focus: state.human.focus, reason: `直近8週の負荷が上限（${load8}/${maxLoad}）。出場数の目安を守る` };
+    if ((h.consec || 0) >= 3) return { type: "train", focus: state.human.focus, reason: "3週連戦のあとは練習週にする" };
     const ranked = tours.filter((T) => T.cat !== "FINALS").map((T) => ({ T, st: humanStatus(state, T) }));
     if (state.human.money < 20 && state.human.lastRegion) ranked.sort((a, b) => b.T.def.tier - a.T.def.tier || (b.T.region === state.human.lastRegion) - (a.T.region === state.human.lastRegion));
     const pick = (codes, pred) => ranked.find((x) => codes.includes(x.st.code) && (!pred || pred(x.T)));
@@ -1175,9 +1178,9 @@
     const skip250 = (T) => !(r <= 20 && T.def.tier === 6 && T.country !== h.country && load8 >= 2);
     let c = pick(["direct"], (T) => atpOnly(T) && skip250(T)) || pick(["bubble"], atpOnly) || pick(["qual"], (T) => T.def.tier >= 6 && r <= 250) || pick(["wc"], (T) => T.country === h.country && T.def.tier >= 6);
     if (!c && r > 50) c = pick(["direct"], (T) => T.def.tier >= 4 || r > 100) || pick(["bubble"]) || pick(["wc"], (T) => T.def.tier <= 2);
-    if (!c && r <= 100 && h.fatigue > 35) return { type: "rest" };
-    if (c) return { type: "enter", tid: c.T.id, auto: true };
-    return { type: "train", focus: state.human.focus };
+    if (!c && r <= 100 && h.fatigue > 35) return { type: "rest", reason: "出られるツアー大会がない週。疲労もあるので休養" };
+    if (c) return { type: "enter", tid: c.T.id, auto: true, reason: c.st.code === "direct" ? "出られる最上位の大会（本戦ダイレクトイン見込み）" : c.st.code === "bubble" ? "当落線上だが最上位の大会に挑む" : c.st.code === "qual" ? "予選から上のカテゴリーに挑戦" : "ワイルドカードに期待してエントリー" };
+    return { type: "train", focus: state.human.focus, reason: "出られる大会がないので練習週" };
   }
 
   // ---------- season end ----------
@@ -1314,6 +1317,13 @@
     news(state, `${h.name} が現役引退を表明`);
   }
 
+  // Likely headliners for an event: best-ranked available players under the expected cutoff.
+  function likelyEntrants(state, T, n) {
+    const cut = expectedCut(state, T);
+    const floor = T.def.tier <= 2 ? 200 : T.def.tier <= 3 ? 100 : T.def.tier <= 5 ? 50 : 0; // top players skip lower tiers
+    return state.players.filter((p) => !p.retired && !p.isHuman && !p.injury && p.rank && p.rank <= cut && p.rank > floor && !(T.def.tier === 6 && p.rank <= 10 && p.country !== T.country)).sort((a, b) => a.rank - b.rank).slice(0, n || 4);
+  }
+
   // ---------- public view of any player (no hidden potential) ----------
   function playerInfo(state, id) {
     const p = state.players.find((x) => x.id === id);
@@ -1365,11 +1375,12 @@
     Object.assign(H, { coach: H.coach || null, physio: !!H.physio, coachOffers: H.coachOffers || [], plan: H.plan || "balanced", switchRule: H.switchRule || "none", event: H.event || null, lastEventT: H.lastEventT === undefined ? -99 : H.lastEventT, forceRest: !!H.forceRest, riskWeek: H.riskWeek === undefined ? -1 : H.riskWeek, sponsor2: H.sponsor2 || { weekly: 0, until: 0 }, pressureUntil: H.pressureUntil === undefined ? -1 : H.pressureUntil, attrHist: H.attrHist || [], seasonStartAttrs: H.seasonStartAttrs || null, exhibitionYear: H.exhibitionYear || 0 });
     s.cutoffs = s.cutoffs || {};
     H.ledger = H.ledger || [];
+    H.rankHist = H.rankHist || [];
     if (!H.staff) H.staff = { physio: !!H.physio, fitness: false, hitting: false, agent: false, analyst: false };
     if (!H.coachOffers.length) H.coachOffers = genCoachOffers(s);
     s.lastReport = null;
     return s;
   }
 
-  TL.World = { terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
+  TL.World = { likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
 })(typeof globalThis !== "undefined" ? globalThis : window);

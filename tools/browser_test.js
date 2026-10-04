@@ -15,12 +15,13 @@ const { chromium } = require("playwright");
   await page.fill("#name", "佐藤 大和"); await page.fill("#seed", "2026");
   await page.click('.origin[data-o="junior"]'); await page.click("#start");
   await page.waitForSelector(".topbar");
+  await page.screenshot({ path: shots + "/00_home.png", fullPage: true });
+  // open the planner, pick the first enterable tournament card in week 1
+  await page.click('.rail .nav[data-tab="plan"]');
+  await page.waitForSelector(".planner");
+  const card = await page.$(".pcol .tcard:not(.disabled)");
+  if (card) { await card.click(); await page.waitForSelector(".tcard.sel"); }
   await page.screenshot({ path: shots + "/01_plan.png", fullPage: true });
-  // pick a tournament in week 1 if any option is enabled, then run the 4-week plan
-  const sel = await page.$('select[data-week="0"]');
-  const options = await sel.$$eval("option", (os) => os.filter((o) => !o.disabled).map((o) => o.value));
-  const tourOpt = options.find((v) => !["auto", "train", "rest", "camp"].includes(v));
-  if (tourOpt) await sel.selectOption(tourOpt);
   let viewers = 0;
   // wait for a run to finish, driving the live match viewer when it appears
   async function settle() {

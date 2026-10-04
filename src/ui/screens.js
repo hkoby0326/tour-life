@@ -26,7 +26,70 @@
     return `<div class="strip">${cells.join("")}</div><div class="row between small muted"><span>1月</span><span>4月</span><span>7月</span><span>10月</span><span>オフ</span></div>`;
   }
 
-  // ---------- プラン ----------
+  // ---------- ホーム（UI-2） ----------
+  function decisionCard(me) {
+    const S = U.S;
+    const tours0 = W.weekTournaments(S);
+    const blocked = me.blockedUntil >= S.t;
+    const auto0 = blocked ? { type: "blocked", reason: "2週開催の大会の2週目" } : me.injury ? { type: "rest", reason: `${me.injury.label}。復帰まで${me.injury.weeks}週` } : W.autoAction(S, tours0);
+    const autoT = auto0.type === "enter" ? tours0.find((T) => T.id === auto0.tid) : null;
+    const label = auto0.type === "enter" ? `${flag(autoT.country)} ${esc(autoT.name)} にエントリー` : auto0.type === "rest" ? "休養" : auto0.type === "camp" ? "オフシーズン合宿" : auto0.type === "blocked" ? "大会2週目（移動・調整）" : `練習（${ATTRL[S.human.focus[0]]}・${ATTRL[S.human.focus[1]]}）`;
+    return { auto0, autoT, label };
+  }
+  U.screens.home = function (c) {
+    const S = U.S, me = human(), rv = rival();
+    if (S.human.careerOver) { c.innerHTML = `<div class="panel"><h2>キャリア終了</h2>${U.epilogueHtml()}<button class="danger" id="newgame">新しいキャリアを始める</button></div>`; document.getElementById("newgame").onclick = U.newGame; return; }
+    const { auto0, autoT, label } = decisionCard(me);
+    const load8 = W.recentLoad(S, me, 8);
+    const r0 = me.rank || 9999;
+    const maxLoad = r0 <= 20 ? 4 : r0 <= 100 ? 5 : 6;
+    const seasonT = new Set(me.results.filter((r) => r.year === S.year && r.cat !== "PREV").map((r) => r.t)).size;
+    const guide = r0 <= 20 ? "年15〜20大会" : r0 <= 100 ? "年22〜26大会" : "年26〜30大会";
+    // next event card
+    let nextCard = "";
+    if (autoT) {
+      const st = W.humanStatus(S, autoT);
+      const heads = W.likelyEntrants(S, autoT, 4);
+      const defend = me.results.filter((r) => r.tid === autoT.tid).reduce((s, r) => s + r.pts, 0);
+      nextCard = `<div class="card"><h3>次の大会</h3><div class="row between"><div><b style="font-size:16px">${flag(autoT.country)} ${esc(autoT.name)}</b> ${catPill(autoT)}${autoT.country === me.country ? ' <span class="pill gold">ホーム</span>' : ""}</div><span class="small"><span class="sdot ${st.code}"></span>${esc(st.label)}</span></div>
+        <div class="small muted" style="margin:6px 0">${autoT.def.draw}ドロー ・ 優勝 ${autoT.def.points[0]}pt / ${money(autoT.def.prize[0])} ・ 初戦敗退 ${money(autoT.def.prize[autoT.def.prize.length - 1])}${autoT.def.weeks === 2 ? " ・ 2週開催" : ""}${autoT.def.bo5 ? " ・ 5セット" : ""}${defend ? ` ・ <span class="gold">防衛 ${defend}pt</span>` : ""}</div>
+        ${heads.length ? `<div class="small">有力出場者: ${heads.map((p) => `<span data-player="${p.id}" class="accent">${esc(p.name)}</span><span class="muted">(${p.rank})</span>`).join("、")}</div>` : ""}</div>`;
+    }
+    // rank trend
+    const rh = (S.human.rankHist || []).filter((x) => x.rank);
+    const rankSpark = rh.length >= 2 ? sparkline(rh.map((x) => -x.rank), "var(--accent)") : '<span class="muted small">まだデータがない</span>';
+    const best = rh.length ? Math.min(...rh.map((x) => x.rank)) : null;
+    // inbox: pending event, recent news, coach comment
+    const hr = me.potential - TL.overall(me);
+    const coachLine = hr > 20 ? "伸びしろはまだ大きい。土台を作る時期だ" : hr > 10 ? "まだ伸びる。弱点を一つずつ潰そう" : hr > 4 ? "完成が近い。勝ち方を覚える段階だ" : "技術はほぼ完成形。維持とスケジュール管理が課題";
+    const items = [];
+    if (S.human.event) items.push(`<div class="item event"><span class="when">今</span><div><b class="gold">${esc(S.human.event.title)}</b><div class="muted">${esc(S.human.event.text)}</div><button class="primary small" data-ev style="margin-top:4px">選択する</button></div></div>`);
+    items.push(`<div class="item coach"><span class="when">${S.human.coach ? esc(S.human.coach.name) : "コーチ"}</span><div>${esc(coachLine)}${me.fatigue > 45 ? "。疲労が溜まっている、無理はするな" : ""}</div></div>`);
+    for (const n of S.history.news.slice().reverse().slice(0, 12)) items.push(`<div class="item"><span class="when">${cal(n.year)} W${n.week}</span><div>${esc(n.text)}</div></div>`);
+    // rival card
+    const h2h = S.history.matches.filter((m) => m.oppId === S.rivalId);
+    const rivalCard = rv ? `<div class="panel"><h2>宿敵</h2><div class="rivalcard"><div class="identity">${U.avatar(me)}<div><div class="name">${esc(me.name)}</div><div class="sub">${me.rank ? me.rank + "位" : "ランク外"} ・ ${me.stats.titles}勝</div></div></div><div class="vs">VS</div><div class="identity" data-player="${rv.id}" style="cursor:pointer">${U.avatar(rv)}<div><div class="name">${esc(rv.name)}</div><div class="sub">${rv.retired ? "引退" : rv.rank ? rv.rank + "位" : "ランク外"} ・ ${rv.stats.titles}勝</div></div></div></div>
+      <p class="small" style="margin-top:8px">対戦成績 <b>${h2h.filter((m) => m.won).length}勝${h2h.filter((m) => !m.won).length}敗</b>${rv.rank && me.rank ? ` ・ 順位差 ${me.rank < rv.rank ? `<span class="green">${rv.rank - me.rank}位リード</span>` : me.rank > rv.rank ? `<span class="red">${me.rank - rv.rank}位ビハインド</span>` : "同順位"}` : ""}${h2h.length ? ` ・ 前回 ${esc(h2h[h2h.length - 1].tour)} ${h2h[h2h.length - 1].won ? '<span class="green">勝ち</span>' : '<span class="red">負け</span>'}` : ""}</p></div>` : "";
+    c.innerHTML = `<div class="grid2" style="grid-template-columns:1.25fr .75fr">
+      <div>
+        <div class="card hero" style="padding:16px 18px"><h3>今週の決断 ・ ${cal()}年 第${S.week}週</h3><div style="font-size:22px;font-weight:800;margin:4px 0 6px">${label}</div><p class="small muted" style="margin:0 0 10px">${esc(auto0.reason || "")}</p>
+          <div class="row"><button class="primary bigbtn" data-go-auto>この判断で1週進める</button><button data-go="plan">4週プランを組む</button><button data-auto>自動進行（停止条件まで）</button></div></div>
+        ${nextCard}
+        <div class="panel"><h2>シーズン ・ ${cal()}年</h2>${seasonStrip(me)}<div class="row between small muted"><span>今季 ${seasonT}大会（目安 ${guide}）</span><span class="loadmeter">直近8週の負荷 <span class="bar"><div style="width:${Math.min(100, (load8 / maxLoad) * 100)}%;background:${load8 >= maxLoad ? "var(--red)" : load8 >= maxLoad - 1 ? "var(--gold)" : "var(--green)"}"></div></span> ${load8}/${maxLoad}</span></div></div>
+        <div class="grid2"><div class="panel"><h2>順位の推移</h2><div class="small muted" style="margin:-6px 0 6px">直近${rh.length}週${best ? ` ・ 最高${best}位` : ""}</div>${rankSpark}</div>
+        <div class="panel"><h2>コンディション</h2><div class="attr" style="grid-template-columns:70px 1fr 40px"><span>疲労</span><div class="bar"><div style="width:${me.fatigue}%;background:${me.fatigue > 60 ? "var(--red)" : me.fatigue > 40 ? "var(--gold)" : "var(--green)"}"></div></div><span class="num">${Math.round(me.fatigue)}</span></div>
+          <div class="small muted">${me.injury ? `<span class="red">${esc(me.injury.label)} 残り${me.injury.weeks}週</span>` : "怪我なし"} ・ 資金 <b class="${S.human.money < 0 ? "red" : ""}">${money(S.human.money)}</b></div>
+          <div class="small muted" style="margin-top:6px">試合プラン: ${TL.PLANS[S.human.plan].label} ・ 重点: ${ATTRL[S.human.focus[0]]}・${ATTRL[S.human.focus[1]]}</div></div></div>
+      </div>
+      <div>${rivalCard}<div class="panel"><h2>受信箱</h2><div class="inbox">${items.join("")}</div></div></div></div>`;
+    c.querySelector("[data-go-auto]").onclick = () => U.runWeeks([auto0.type === "blocked" ? { type: "blocked" } : { type: "auto" }]);
+    c.querySelector("[data-go]").onclick = () => { U.tab = "plan"; U.render(); };
+    c.querySelector("[data-auto]").onclick = () => U.autoRun(60);
+    const eb = c.querySelector("[data-ev]"); if (eb) eb.onclick = () => { U.modal = U.eventHtml(S.human.event); U.render(); };
+    U.bindPlayerLinks(c);
+  };
+
+  // ---------- プラン（UI-3: 月カレンダー形式） ----------
   function weekAt(i) { const S = U.S; let wk = S.week + i, yr = S.year; while (wk > 52) { wk -= 52; yr++; } return { wk, yr }; }
   function ensurePlan() { const S = U.S; if (U.planSel && U.planWeekT === S.t) return; U.planSel = [0, 1, 2, 3].map(() => ({ choice: "auto", doubles: false })); U.planWeekT = S.t; }
   function toAction(p) {
@@ -54,43 +117,48 @@
     const seasonT = new Set(me.results.filter((r) => r.year === S.year && r.cat !== "PREV").map((r) => r.t)).size;
     const load8 = W.recentLoad(S, me, 8);
     const r0 = me.rank || 9999;
-    const guide = r0 <= 20 ? "トップ20の目安: 年15〜20大会" : r0 <= 100 ? "トップ100の目安: 年22〜26大会" : "下部ツアーの目安: 年26〜30大会";
+    const guide = r0 <= 20 ? "年15〜20大会" : r0 <= 100 ? "年22〜26大会" : "年26〜30大会";
     const maxLoad = r0 <= 20 ? 4 : r0 <= 100 ? 5 : 6;
-    // next decision card: what "auto" would do this week
-    const tours0 = W.weekTournaments(S);
-    const auto0 = me.blockedUntil >= S.t ? { type: "blocked" } : W.autoAction(S, tours0);
-    const autoT = auto0.type === "enter" ? tours0.find((T) => T.id === auto0.tid) : null;
-    const autoLabel = auto0.type === "enter" ? `${flag(autoT.country)} ${esc(autoT.name)} にエントリー` : auto0.type === "rest" ? "休養（疲労か連戦のため）" : auto0.type === "camp" ? "オフシーズン合宿" : auto0.type === "blocked" ? "大会2週目" : `練習（${ATTRL[S.human.focus[0]]}・${ATTRL[S.human.focus[1]]}）`;
-    html += `<div class="grid2" style="grid-template-columns:1.2fr .8fr"><div class="card hero" style="margin:0 0 14px"><h3>今週の決断 ・ 第${S.week}週</h3><div style="font-size:18px;font-weight:800;margin:4px 0">${autoLabel}</div><p class="small muted" style="margin:0">「おまかせ」の判断。下のプランで上書きできる。負荷 ${load8}/${maxLoad}（直近8週）・疲労 ${Math.round(me.fatigue)}</p></div>
-      <div class="card" style="margin:0 0 14px"><h3>シーズン ・ ${cal()}年</h3>${seasonStrip(me)}<div class="small muted">今季 ${seasonT}大会 ・ ${guide}</div></div></div>`;
-    html += `<div class="panel"><h2>今月の方針</h2><div class="row" style="gap:16px">
-      <label class="small">重点スキル ${[0, 1].map((i) => `<select data-focus="${i}">${W.ATTRS.map((k) => `<option value="${k}" ${S.human.focus[i] === k ? "selected" : ""}>${ATTRL[k]}</option>`).join("")}</select>`).join(" ")}</label>
-      <label class="small">試合プラン <select data-plan>${Object.entries(TL.PLANS).map(([k, p]) => `<option value="${k}" ${S.human.plan === k ? "selected" : ""}>${p.label}</option>`).join("")}</select></label>
-      <label class="small">セット間 <select data-rule><option value="none" ${S.human.switchRule === "none" ? "selected" : ""}>切り替えない</option><option value="behind" ${S.human.switchRule === "behind" ? "selected" : ""}>セットを落としたら攻撃的に</option></select></label>
-    </div></div>`;
     const showAll = window._showAllTours;
     let hidden = 0;
-    html += `<div class="panel"><div class="row between"><h2>4週間のプラン <span class="muted small">第${S.week}週〜</span></h2><span class="small muted">「おまかせ」は出られる最上位の大会に出るが、疲労45超・負荷上限・GS翌週は休む</span></div>`;
+    // header: policy + load meter
+    html += `<div class="panel"><div class="row between"><h2 style="margin:0;border:0;padding:0">4週間のプラン <span class="muted small">第${S.week}週〜</span></h2><span class="loadmeter">今季 ${seasonT}大会（目安 ${guide}） ・ 負荷 <span class="bar"><div style="width:${Math.min(100, (load8 / maxLoad) * 100)}%;background:${load8 >= maxLoad ? "var(--red)" : load8 >= maxLoad - 1 ? "var(--gold)" : "var(--green)"}"></div></span> ${load8}/${maxLoad}</span></div>
+      <div class="row" style="gap:16px;margin-top:10px">
+      <label class="small">重点スキル ${[0, 1].map((i) => `<select data-focus="${i}">${W.ATTRS.map((k) => `<option value="${k}" ${S.human.focus[i] === k ? "selected" : ""}>${ATTRL[k]}</option>`).join("")}</select>`).join(" ")}</label>
+      <label class="small">試合プラン <select data-plan>${Object.entries(TL.PLANS).map(([k, p]) => `<option value="${k}" ${S.human.plan === k ? "selected" : ""}>${p.label}</option>`).join("")}</select></label>
+      <label class="small">セット間 <select data-rule><option value="none" ${S.human.switchRule === "none" ? "selected" : ""}>切り替えない</option><option value="behind" ${S.human.switchRule === "behind" ? "selected" : ""}>セットを落としたら攻撃的に</option></select></label></div></div>`;
+    // columns
+    let cols = "";
     let blockedNext = me.blockedUntil >= S.t;
     for (let i = 0; i < 4; i++) {
       const { wk, yr } = weekAt(i);
       const tours = W.weekTournaments(S, wk, yr);
       const sel = U.planSel[i];
-      if (blockedNext) { html += `<div class="card"><div class="row between"><b>第${wk}週</b><span class="muted small">大会2週目（移動・調整）</span></div></div>`; blockedNext = false; sel.choice = "blocked"; continue; }
+      if (blockedNext) { cols += `<div class="pcol blocked"><div><b>第${wk}週</b><div class="small muted">大会2週目<br>（移動・調整）</div></div></div>`; blockedNext = false; sel.choice = "blocked"; continue; }
       if (sel.choice === "blocked") sel.choice = "auto";
-      const opts = [["auto", "おまかせ"], ["train", `練習（${ATTRL[S.human.focus[0]]}・${ATTRL[S.human.focus[1]]}）`], ["rest", "休養"]];
-      if (tours.length === 0) opts.push(["camp", "オフシーズン合宿（練習×1.4）"]);
       const all = tours.map((T) => { const st = W.humanStatus(S, T); const ok = ["direct", "bubble", "qual", "wc"].includes(st.code) || (T.cat === "FINALS" && st.code === "direct"); return { T, st, ok }; });
-      const tourOpts = showAll ? all : all.filter((o) => (o.ok && !(o.st.code === "wc" && /低確率/.test(o.st.label))) || o.st.code === "money");
-      hidden += all.length - tourOpts.length;
-      html += `<div class="card"><div class="row between" style="align-items:flex-start"><div><b>第${wk}週</b> <span class="muted small">${yr !== S.year ? cal(yr) + "年" : ""}</span>
-        <div class="small" style="margin-top:4px">${tourOpts.map((o) => `<div>${flag(o.T.country)} ${esc(o.T.name)} ${catPill(o.T)} <span class="${o.st.code === "direct" ? "green" : o.st.code === "none" || o.st.code === "money" ? "red" : "gold"}">${o.st.label}</span>${o.T.def.weeks === 2 ? ' <span class="muted">2週</span>' : ""}</div>`).join("") || (tours.length ? '<span class="muted">出られる大会なし（この週は練習か休養）</span>' : '<span class="muted">大会なし（オフシーズン）</span>')}</div></div>
-        <div style="min-width:280px"><select data-week="${i}" style="width:100%">${opts.map(([k, l]) => `<option value="${k}" ${sel.choice === k ? "selected" : ""}>${l}</option>`).join("")}${tourOpts.map((o) => `<option value="${o.T.id}" ${sel.choice === o.T.id ? "selected" : ""} ${o.ok ? "" : "disabled"}>${o.T.name}（${o.T.def.short}）${o.ok ? "" : " ✕"}</option>`).join("")}</select>
-        ${tourOpts.some((o) => o.T.id === sel.choice && o.T.cat !== "FINALS") ? `<label class="small"><input type="checkbox" data-dbl="${i}" ${sel.doubles ? "checked" : ""}> ダブルスにも出る（賞金少・疲労・ネット経験）</label>` : ""}</div></div></div>`;
+      const vis = showAll ? all : all.filter((o) => (o.ok && !(o.st.code === "wc" && /低確率/.test(o.st.label))) || o.st.code === "money");
+      hidden += all.length - vis.length;
+      const isTour = !["auto", "train", "rest", "camp"].includes(sel.choice);
+      const segs = [["auto", "おまかせ"], ["train", "練習"], ["rest", "休養"]];
+      if (tours.length === 0) segs.push(["camp", "合宿"]);
+      const seg = `<div class="seg">${segs.map(([k, l]) => `<button class="${sel.choice === k ? "on" : ""}" data-seg="${i}:${k}">${l}</button>`).join("")}</div>`;
+      const cards = vis.map((o) => {
+        const T = o.T;
+        const defend = me.results.filter((r) => r.tid === T.tid).reduce((s, r) => s + r.pts, 0);
+        return `<div class="tcard t${T.def.tier} ${sel.choice === T.id ? "sel" : ""} ${o.ok ? "" : "disabled"}" data-pick="${i}:${T.id}" ${o.ok ? "" : 'data-disabled="1"'} title="${esc(o.st.label)}">
+          <div class="tname"><span>${flag(T.country)} ${esc(T.name)}</span><span class="pill tier${T.def.tier}">${T.def.short}</span></div>
+          <div class="tmeta"><span class="pill ${T.surface}">${D.SURFACES[T.surface]}</span><span>${T.def.draw}ドロー</span><span>${T.def.points[0]}pt</span><span>${money(T.def.prize[0])}</span>${T.def.weeks === 2 ? "<span>2週</span>" : ""}${T.country === me.country ? '<span class="gold">ホーム</span>' : ""}${defend ? `<span class="gold">防衛${defend}</span>` : ""}</div>
+          <div class="tstat"><span class="sdot ${o.st.code}"></span>${esc(o.st.label)}</div>
+          ${sel.choice === T.id && T.cat !== "FINALS" ? `<label class="tiny" style="display:block;margin-top:4px"><input type="checkbox" data-dbl="${i}" ${sel.doubles ? "checked" : ""}> ダブルスにも出る</label>` : ""}</div>`;
+      }).join("");
+      cols += `<div class="pcol"><div class="phead"><b>第${wk}週</b><span class="small muted">${yr !== S.year ? cal(yr) + "年" : ""}</span></div>${seg}${cards || (tours.length ? '<div class="small muted" style="text-align:center;padding:12px 0">出られる大会なし</div>' : '<div class="small muted" style="text-align:center;padding:12px 0">オフシーズン</div>')}</div>`;
       const chosen = tours.find((T) => T.id === sel.choice);
-      if (chosen && chosen.def.weeks === 2) blockedNext = true;
+      if (isTour && chosen && chosen.def.weeks === 2) blockedNext = true;
     }
-    html += `<div class="row between" style="margin-top:8px"><div class="row"><button class="primary" data-run="4">この4週を進める</button><button data-run="1">1週だけ進める</button><button data-auto="60">自動進行（停止条件まで）</button></div>${hidden || showAll ? `<button data-showall class="small">${showAll ? "出られない大会を隠す" : `出られない大会を表示（${hidden}）`}</button>` : ""}</div></div>`;
+    html += `<div class="panel"><div class="planner">${cols}</div>
+      <div class="row between" style="margin-top:12px"><div class="row"><button class="primary bigbtn" data-run="4">この4週を進める</button><button data-run="1">1週だけ進める</button><button data-auto="60">自動進行（停止条件まで）</button></div>${hidden || showAll ? `<button data-showall class="small">${showAll ? "出られない大会を隠す" : `出られない大会を表示（${hidden}）`}</button>` : ""}</div>
+      <p class="small muted" style="margin:8px 0 0">大会カードをクリックで選択。「おまかせ」は出られる最上位の大会に出るが、疲労45超・負荷上限・GS翌週は休む。先の週の当落は現在のランキングで推定。</p></div>`;
     html += `<div class="grid2"><div class="panel"><h2>自動進行の停止条件</h2>
       ${[["stopTournament", "自分の大会が終わるごと"], ["stopMilestone", "ランキングの節目"], ["stopInjury", "怪我"], ["stopEvent", "イベント（選択肢）"], ["stopRival", "宿敵との対戦"], ["stopSeason", "シーズン終了"]].map(([k, l]) => `<label class="small" style="display:inline-block;margin-right:14px"><input type="checkbox" data-set="${k}" ${settings[k] ? "checked" : ""}> ${l}</label>`).join("")}</div>
     <div class="panel"><h2>観戦モード</h2><p class="small muted">重要試合はポイント単位で観戦し、セット間にプランを変えられる。</p>
@@ -99,7 +167,8 @@
     c.querySelectorAll("[data-focus]").forEach((s) => s.onchange = () => { const f = [...c.querySelectorAll("[data-focus]")].map((x) => x.value); if (f[0] === f[1]) f[1] = W.ATTRS.find((k) => k !== f[0]); S.human.focus = f; U.save(); U.render(); });
     c.querySelector("[data-plan]").onchange = (e) => { S.human.plan = e.target.value; U.save(); };
     c.querySelector("[data-rule]").onchange = (e) => { S.human.switchRule = e.target.value; U.save(); };
-    c.querySelectorAll("[data-week]").forEach((s) => s.onchange = () => { U.planSel[parseInt(s.dataset.week, 10)].choice = s.value; U.render(); });
+    c.querySelectorAll("[data-seg]").forEach((b) => b.onclick = () => { const [i, k] = b.dataset.seg.split(":"); U.planSel[parseInt(i, 10)].choice = k; U.render(); });
+    c.querySelectorAll("[data-pick]").forEach((el) => el.onclick = (e) => { if (el.dataset.disabled || e.target.closest("[data-dbl]")) return; const idx = el.dataset.pick.indexOf(":"); const i = parseInt(el.dataset.pick.slice(0, idx), 10), tid = el.dataset.pick.slice(idx + 1); U.planSel[i].choice = U.planSel[i].choice === tid ? "auto" : tid; U.render(); });
     c.querySelectorAll("[data-dbl]").forEach((cb) => cb.onchange = () => { U.planSel[parseInt(cb.dataset.dbl, 10)].doubles = cb.checked; });
     c.querySelectorAll("[data-set]").forEach((cb) => cb.onchange = () => { settings[cb.dataset.set] = cb.checked; U.saveSettings(); });
     c.querySelectorAll("[data-run]").forEach((b) => b.onclick = () => U.runWeeks(U.planSel.slice(0, parseInt(b.dataset.run, 10)).map(toAction)));

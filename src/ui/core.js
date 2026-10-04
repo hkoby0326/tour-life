@@ -2,10 +2,10 @@
 (function () {
   const W = TL.World, D = TL.DATA;
   const U = (TL.UI = {
-    W, D, S: null, tab: "plan", modal: null, planSel: null, planWeekT: -1, runLog: null, running: false, screens: {},
+    W, D, S: null, tab: "home", modal: null, planSel: null, planWeekT: -1, runLog: null, running: false, screens: {},
     SAVE_KEY: "tourlife_v1", SETTINGS_KEY: "tourlife_settings_v1", HOF_KEY: "tourlife_hof_v1",
     DEFAULT_SETTINGS: { stopTournament: true, stopMilestone: true, stopInjury: true, stopSeason: true, stopEvent: true, stopRival: true, watchEnabled: true, watchGs: true, watchFinals: true, watchRival: true, watchTop10: true, watchTitle: true, watchSpeed: 300 },
-    VERSION: "v0.7.1",
+    VERSION: "v0.8",
   });
   U.ATTRL = W.ATTR_LABEL;
   U.ORIGINS = {
@@ -31,6 +31,7 @@
     return `<span class="avatar ${cls || ""}" style="background:linear-gradient(135deg,hsl(${hue},55%,42%),hsl(${(hue + 40) % 360},60%,28%))">${U.esc(init.toUpperCase())}<span class="fl">${U.flag(p.country)}</span></span>`;
   };
   const ICONS = {
+    home: '<path d="M3 11 12 3l9 8M5 10v10h5v-6h4v6h5V10"/>',
     plan: '<path d="M8 2v3M16 2v3M3 9h18M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"/><path d="m9 15 2 2 4-4"/>',
     report: '<path d="M4 5h16M4 12h10M4 19h7"/>',
     ranking: '<path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0z"/><path d="M7 6H4v2a3 3 0 0 0 3 3M17 6h3v2a3 3 0 0 1-3 3"/>',
@@ -42,7 +43,7 @@
     settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
   };
   U.icon = (n) => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[n] || ""}</svg>`;
-  U.TABS = [["plan", "プラン"], ["report", "結果"], ["ranking", "ランキング"], ["calendar", "カレンダー"], ["player", "選手"], ["team", "チーム"], ["finance", "財務"], ["records", "記録"], ["settings", "設定"]];
+  U.TABS = [["home", "ホーム"], ["plan", "プラン"], ["report", "結果"], ["ranking", "ランキング"], ["calendar", "カレンダー"], ["player", "選手"], ["team", "チーム"], ["finance", "財務"], ["records", "記録"], ["settings", "設定"]];
 
   // ---------- persistence ----------
   U.loadSettings = () => { try { return Object.assign({}, U.DEFAULT_SETTINGS, JSON.parse(localStorage.getItem(U.SETTINGS_KEY) || "{}")); } catch (e) { return Object.assign({}, U.DEFAULT_SETTINGS); } };
@@ -100,7 +101,7 @@
     }
     U.bindPlayerLinks(app);
     const c = document.getElementById("content");
-    (U.screens[U.tab] || U.screens.plan)(c);
+    (U.screens[U.tab] || U.screens.home)(c);
   };
 
   // ---------- shared html ----------
@@ -214,7 +215,7 @@
       const name = document.getElementById("name").value.trim() || "名無しの選手";
       const seedStr = document.getElementById("seed").value.trim();
       U.S = W.create({ name, country: document.getElementById("country").value, origin: sel, injuryRealism: document.getElementById("inj").value, seed: seedStr ? (parseInt(seedStr, 10) || TL.RNG.hash(seedStr)) : undefined });
-      U.save(); U.tab = "plan"; U.runLog = null; U.planSel = null; U.render();
+      U.save(); U.tab = "home"; U.runLog = null; U.planSel = null; U.render();
     };
   };
   U.newGame = () => { U.modal = `<h2>新しいキャリアを始める</h2><p>現在のキャリアを削除して新しく始めますか？この操作は取り消せません。</p><div class="row"><button class="danger" data-confirm-new>削除して始める</button><button data-close>やめる</button></div>`; U.render(); };

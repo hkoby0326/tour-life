@@ -10,6 +10,8 @@ const path = require("path"); const fs = require("fs"); const { chromium } = req
   await page.addInitScript((sv) => { localStorage.setItem("tourlife_v1", sv); }, save);
   await page.goto("file://" + path.resolve(__dirname, "../index.html"));
   await page.waitForSelector(".topbar");
+  await page.click('.rail .nav[data-tab="plan"]');
+  await page.waitForSelector(".planner");
   const shots = path.resolve(__dirname, "../../.shots");
   let viewers = 0, screenshotDone = false;
   await page.click('[data-run="4"]');
