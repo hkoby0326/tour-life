@@ -182,7 +182,7 @@
       config: { name: cfg.name || "選手", country: cfg.country || "JPN", origin: cfg.origin || "grinder", injuryRealism: cfg.injuryRealism || "standard", difficulty: DIFFICULTY[cfg.difficulty] ? cfg.difficulty : "normal" },
       rankSnaps: [], history: { tournaments: [], seasons: [], matches: [], news: [] }, lastReport: null,
       human: { money: 0, sponsorWeekly: 0, sponsorUntil: 0, wcBoostUntil: 0, lastRegion: null, focus: ["serve", "fh"], careerOver: false, epilogue: null, milestones: {},
-        coach: null, physio: false, coachOffers: [], plan: "balanced", switchRule: "none", event: null, lastEventT: -99, forceRest: false, riskWeek: -1, sponsor2: { weekly: 0, until: 0 }, pressureUntil: -1, attrHist: [], seasonStartAttrs: null, exhibitionYear: 0, rivalry: { heat: 25, log: [], flags: {}, lastCross: -99 }, rivalAhead: null, focusBoostUntil: -1 },
+        coach: null, physio: false, coachOffers: [], plan: "balanced", switchRule: "none", event: null, lastEventT: -99, forceRest: false, riskWeek: -1, sponsor2: { weekly: 0, until: 0 }, pressureUntil: -1, attrHist: [], seasonStartAttrs: null, exhibitionYear: 0, rivalry: { heat: 25, log: [], flags: {}, lastCross: -99 }, rivalAhead: null, focusBoostUntil: -1, assets: { jet: false, medical: false, base: false, academy: false }, investment: null, pendingPurchase: 0 },
       cutoffs: {},
     };
     state.rng = new TL.RNG(seed);
@@ -477,6 +477,12 @@
       ev = { id: "successor", title: "「西織の後継者」報道", text: "トップ100入りで国内メディアが一斉に報じた。スポンサーは注目を利用したがっている。", choices: [
         { key: "embrace", label: "期待に応える", desc: "スポンサー ＋$1.0k/週（1年）。半年間、重圧でクラッチ −3" },
         { key: "ignore", label: "受け流す", desc: "変化なし" }] };
+    } else if (r <= 100 && H.money >= 800 && !H.investment && rng.chance(0.04)) {
+      const amount = Math.round(H.money * 0.3);
+      const label = rng.pick(["テニスアパレルの新ブランド", "地元のスポーツクラブ", "元選手が立ち上げるアカデミー", "スポーツテック企業"]);
+      ev = { id: "invest", title: "投資の持ちかけ", text: `エージェント経由で「${label}」への出資話。$${amount}k を1年。うまくいけば倍近く、外せばほぼ消える。`, amount, label, choices: [
+        { key: "yes", label: "出資する", desc: `$${amount}k を1年間拘束。1年後に 45% で約1.8倍、35% で微増、20% でほぼ損失` },
+        { key: "no", label: "見送る", desc: "変化なし" }] };
     } else if (state.week === 47 && rng.chance(0.5) && H.money > 10) {
       ev = { id: "camp", title: "クレー強化合宿の誘い", text: "スペインのアカデミーから2週間の合宿の誘い。費用 $6k。", choices: [
         { key: "accept", label: "参加する", desc: "クレー適性 ＋4、資金 −$6k、疲労 ＋10" },
@@ -512,6 +518,8 @@
       case "rivalcamp:solo": h.attrs.clutch = clamp(h.attrs.clutch + 0.4, 25, 99); rivalHeat(state, 8); text = "独りでコートに立ち続けた。"; break;
       case "rivalinjury:visit": h.attrs.focus = clamp(h.attrs.focus + 0.5, 25, 99); rivalHeat(state, -20); text = "短い返事が来た。「戻ったら、また」。"; break;
       case "rivalinjury:focus": H.focusBoostUntil = state.t + 4; rivalHeat(state, 10); text = "練習量を上げた。相手が戻る前に差をつける。"; break;
+      case "invest:yes": H.money -= ev.amount; H.investment = { amount: ev.amount, label: ev.label, until: state.t + 52 }; text = `${ev.label} に $${ev.amount}k を出資した。結果は1年後。`; break;
+      case "invest:no": text = "見送った。"; break;
       case "camp:accept": H.money -= 6; h.surf.clay = clamp(h.surf.clay + 4, 20, 85); h.fatigue = clamp(h.fatigue + 10, 0, 100); text = "スペインで2週間クレーを打ち込んだ。"; break;
       default: text = "見送った。";
     }
@@ -827,7 +835,7 @@
     const a = age(state, p);
     if (a >= 33) f *= 1.8; else if (a >= 30) f *= 1.4;
     if (p.fragile) f *= 1.3;
-    if (p.isHuman) { f *= diff(state).injury; const st = staffOf(state); if (st.physio) f *= 0.7; if (st.fitness) f *= 0.85; if (state.human.riskWeek === state.t) f *= 2; }
+    if (p.isHuman) { f *= diff(state).injury; if (assetsOf(state).medical) f *= 0.7; const st = staffOf(state); if (st.physio) f *= 0.7; if (st.fitness) f *= 0.85; if (state.human.riskWeek === state.t) f *= 2; }
     return f * (1 + Math.max(0, p.fatigue - 45) / 20) * (1.7 - p.attrs.durability / 100);
   }
   // Target (calibrated with tools/injury_stats.js): ~1 injury per player-season, ~4 weeks lost, ~11% chance of a 10+ week layoff.
@@ -854,6 +862,7 @@
         state.human.lastEventT = state.t;
       }
     }
+    if (p.isHuman && assetsOf(state).medical && inj.sev >= 2) inj.weeks = Math.max(1, Math.round(inj.weeks * 0.8));
     p.injury = inj;
     p.injuredAt = state.t;
     if (p.isHuman) { state.human.injuryLog = state.human.injuryLog || []; state.human.injuryLog.push({ year: state.year, week: state.week, label: inj.label, weeks: inj.weeks, sev: inj.sev }); }
@@ -1007,6 +1016,7 @@
         if (st.hitting) f *= 1.15;
         if (coach) f *= 1 + (coach.compat || 0);
         if (state.human.focusBoostUntil > state.t) f *= 1.25;
+        if (assetsOf(state).base) f *= 1.1;
         f *= diff(state).grow;
       }
       p.attrs[k] = clamp(p.attrs[k] + f * mult * (0.7 + 0.6 * rng.next()), 25, 99);
@@ -1165,6 +1175,7 @@
         state.human.lastRegion = run.T.region;
         state.human.loc = run.T.country;
         state.human.money -= travel;
+        if (tq.lag) h.fatigue = clamp(h.fatigue + tq.lag, 0, 100);
         if (staffOf(state).agent && !run.finals && (run.T.def.tier === 6 || run.T.def.tier === 7) && h.rank && h.rank <= 50) {
           const r0 = h.rank;
           fee = run.T.def.tier === 7 ? (r0 <= 10 ? 100 : r0 <= 20 ? 40 : 12) : (r0 <= 10 ? 60 : r0 <= 20 ? 25 : 8);
@@ -1193,7 +1204,7 @@
         h.consec = 0;
         report.items.push({ type: "train", text: `練習ブロック: ${focus.map((k) => ATTR_LABEL[k]).join("・")} を重点強化${act.fallback ? "（大会に入れなかったため）" : ""}` });
       } else if (act.type === "rest") {
-        h.fatigue = clamp(h.fatigue - 30, 0, 100);
+        h.fatigue = clamp(h.fatigue - 30 - (assetsOf(state).base ? 5 : 0), 0, 100);
         h.consec = 0;
         trainPlayer(state, h, [], 0.5);
         report.items.push({ type: "rest", text: act.forced === "injury" ? `リハビリ中（${h.injury.label}、残り${h.injury.weeks}週）` : "休養週: 疲労を回復" });
@@ -1222,18 +1233,40 @@
     const extra = state.human.sponsor2 && state.human.sponsor2.until > state.t ? state.human.sponsor2.weekly : 0;
     const r = h.rank || 9999;
     const agentMult = staffOf(state).agent ? 1.3 : 1;
-    const rankSponsor = Math.round((r <= 5 ? 40 : r <= 10 ? 25 : r <= 20 ? 12 : r <= 50 ? 5 : r <= 100 ? 2.5 : r <= 200 ? 0.8 : r <= 300 ? 0.3 : 0) * agentMult * 10) / 10;
+    // sponsors pay for appearances: an injured player loses the ranking-linked bonus while out
+    const injCut = h.injury ? 0.5 : 1;
+    const rankSponsor = Math.round((r <= 5 ? 40 : r <= 10 ? 25 : r <= 20 ? 12 : r <= 50 ? 5 : r <= 100 ? 2.5 : r <= 200 ? 0.8 : r <= 300 ? 0.3 : 0) * agentMult * injCut * 10) / 10;
     const team = (state.human.coach ? state.human.coach.cost : 0) + staffCost(state);
     const base = 0.5;
     const prize = (report.human ? report.human.humanPrize || 0 : 0) + (report.human && report.human.doubles ? report.human.doubles.prize : 0);
     const income = (support + extra + rankSponsor) * diff(state).income, expense = base + team;
-    state.human.money += income - expense;
-    const entry = { t: state.t, year: state.year, week: state.week, prize, support, rankSponsor, extra: extra + fee, fee, base, team, travel, travelInfo, net: Math.round((prize + fee + income - expense - travel) * 100) / 100, balance: Math.round(state.human.money * 10) / 10 };
+    // tax on prize money and sponsor income (support from family or federation is untaxed)
+    const tax = Math.round((prize + fee + (extra + rankSponsor) * diff(state).income) * TAX * 10) / 10;
+    const agentFee = staffOf(state).agent ? Math.round((fee + (extra + rankSponsor) * diff(state).income) * AGENT_CUT * 10) / 10 : 0;
+    // rehab and medical bills while injured; the medical contract halves them
+    const sev = h.injury ? h.injury.sev || 2 : 0;
+    const rehab = sev ? Math.round((sev === 3 ? 10 : sev === 2 ? 5 : 2) * (assetsOf(state).medical ? 0.5 : 1) * 10) / 10 : 0;
+    const assetsCost = Math.round(assetsWeekly(state) * 10) / 10;
+    const purchase = state.human.pendingPurchase || 0;
+    state.human.pendingPurchase = 0;
+    state.human.money += income - expense - tax - agentFee - rehab - assetsCost;
+    const entry = { t: state.t, year: state.year, week: state.week, prize, support, rankSponsor, extra: extra + fee, fee, base, team, travel, travelInfo, tax, agentFee, rehab, assetsCost, purchase, net: Math.round((prize + fee + income - expense - travel - tax - agentFee - rehab - assetsCost - purchase) * 100) / 100, balance: Math.round(state.human.money * 10) / 10 };
     state.human.ledger = state.human.ledger || [];
     state.human.ledger.push(entry);
     if (state.human.ledger.length > 160) state.human.ledger.shift();
     report.finance = Object.assign({ income, expense }, entry);
 
+    // --- investments mature ---
+    const inv = state.human.investment;
+    if (inv && state.t >= inv.until) {
+      const u = rng.next();
+      const mult = u < 0.45 ? 1.8 : u < 0.8 ? 1.1 : 0.25;
+      const back = Math.round(inv.amount * mult);
+      state.human.money += back;
+      state.human.investment = null;
+      news(state, `${inv.label}: 投資 $${inv.amount}k が $${back}k で戻った（${mult >= 1.5 ? "大成功" : mult >= 1 ? "小さな利益" : "ほぼ損失"}）`);
+      report.items.push({ type: "invest", text: `${inv.label}: $${inv.amount}k → $${back}k` });
+    }
     // --- time ---
     state.t++;
     state.week++;
@@ -1290,6 +1323,28 @@
     const h = Math.sin(dLat / 2) ** 2 + Math.cos(a[0] * toR) * Math.cos(b[0] * toR) * Math.sin(dLon / 2) ** 2;
     return Math.round(2 * R * Math.asin(Math.sqrt(h)));
   }
+  // ---------- money sinks (v1.5): what a wealthy player can buy ----------
+  const TAX = 0.3;          // flat tax on prize money and sponsor income
+  const AGENT_CUT = 0.15;   // agent's commission on sponsor income and appearance fees
+  const ASSETS = {
+    jet: { label: "プライベート移動", type: "toggle", cost: 0, unlock: 9999, desc: "チャーター便で移動。移動費 ×3（1回 $25k以上）、長距離移動の疲労を半減" },
+    medical: { label: "専属メディカル契約", type: "weekly", cost: 5.8, unlock: 30, desc: "年 $300k。怪我確率 ×0.7、リハビリ費 −50%、離脱期間 −20%" },
+    base: { label: "トレーニング拠点", type: "once", cost: 1500, unlock: 50, desc: "一括 $1.5M。練習効果 ＋10%、休養週の回復 ＋5" },
+    academy: { label: "アカデミー設立", type: "once", cost: 3000, unlock: 20, desc: "一括 $3M。母国に若手育成の場を作る。毎年アカデミー出身の新人が登場し、引退時の評価に加わる" },
+  };
+  function assetsOf(state) { return state.human.assets || (state.human.assets = { jet: false, medical: false, base: false, academy: false }); }
+  function assetUnlocked(state, k) { const h = human(state); return (h.stats.bestRank || 9999) <= ASSETS[k].unlock || ASSETS[k].unlock >= 9999; }
+  function buyAsset(state, k) {
+    const A = ASSETS[k], as = assetsOf(state);
+    if (!A || !assetUnlocked(state, k)) return false;
+    if (A.type === "toggle" || A.type === "weekly") { as[k] = !as[k]; news(state, `${A.label}: ${as[k] ? "開始" : "解約"}`); return true; }
+    if (as[k] || state.human.money < A.cost) return false;
+    state.human.money -= A.cost; as[k] = true;
+    state.human.pendingPurchase = (state.human.pendingPurchase || 0) + A.cost;
+    news(state, `${A.label} に $${(A.cost / 1000).toFixed(1)}M を投資`);
+    return true;
+  }
+  function assetsWeekly(state) { const as = assetsOf(state); let c = 0; for (const k of Object.keys(ASSETS)) if (as[k] && ASSETS[k].type === "weekly") c += ASSETS[k].cost; return c; }
   // Travelling party: the player, the coach and the staff who travel.
   function partySize(state) {
     const st = staffOf(state);
@@ -1304,8 +1359,16 @@
     const from = state.human.loc || home;
     const dist = distKm(from, T.country);
     const party = partySize(state);
-    const perHead = 0.35 + 0.25 * (dist / 1000) + 0.4 + (T.def.weeks === 2 ? 0.4 : 0);
-    return { from, to: T.country, dist, party, cost: Math.round(perHead * party * 10) / 10 };
+    // top players travel the way their status demands: better flights and hotels for the whole party
+    const r = human(state).rank || 9999;
+    const cls = r <= 10 ? 2.5 : r <= 30 ? 2.0 : r <= 100 ? 1.4 : 1;
+    const perHead = (0.35 + 0.25 * (dist / 1000) + 0.4 + (T.def.weeks === 2 ? 0.4 : 0)) * cls;
+    let cost = perHead * party;
+    const jet = assetsOf(state).jet;
+    if (jet) cost = Math.max(25, cost * 3);
+    // long-haul fatigue (jet lag) carried into the following week; a charter halves it
+    const lag = (dist > 8000 ? 6 : dist > 4000 ? 3 : 0) * (jet ? 0.5 : 1);
+    return { from, to: T.country, dist, party, cls, jet, lag, cost: Math.round(cost * 10) / 10 };
   }
   function travelCost(state, T) {
     return travelQuote(state, T).cost;
@@ -1389,7 +1452,7 @@
     summary.no1 = state.players.filter((p) => p.rank === 1).map((p) => p.name)[0] || "-";
     summary.gsWinners = state.history.tournaments.filter((t) => t.year === yr && t.cat === "GS").map((t) => `${t.name}: ${t.winner}`);
     summary.ovrDelta = (h.stats.seasons.length ? summary.overall - h.stats.seasons[h.stats.seasons.length - 1].overall : null);
-    const fin = { prize: 0, support: 0, rankSponsor: 0, extra: 0, base: 0, team: 0, travel: 0 };
+    const fin = { prize: 0, support: 0, rankSponsor: 0, extra: 0, base: 0, team: 0, travel: 0, tax: 0, agentFee: 0, rehab: 0, assetsCost: 0, purchase: 0 };
     for (const e of (state.human.ledger || [])) if (e.year === yr) for (const k of Object.keys(fin)) fin[k] += e[k] || 0;
     for (const k of Object.keys(fin)) fin[k] = Math.round(fin[k] * 10) / 10;
     summary.finance = fin;
@@ -1425,13 +1488,16 @@
     }
     summary.retired = retired.filter((p) => p.real || p.isRival || (p.stats.bestRank && p.stats.bestRank <= 30)).map((p) => `${p.name}（最高${p.stats.bestRank || "-"}位、${p.stats.titles}勝）`);
     if (rv && rv.retired) news(state, `宿敵 ${rv.name} が現役引退を表明`);
+    const academy = assetsOf(state).academy;
     const active = state.players.filter((p) => !p.retired).length;
     const need = Math.max(12, ROSTER + 1 - active);
     const newcomers = [];
     for (let i = 0; i < need; i++) {
       const country = randomCountry(rng);
       const a = rng.pick([17, 18, 18, 19, 19, 20]);
-      const p = newPlayer(state, { name: randomName(rng, country), country, birthYear: START_YEAR + yr - a, overall: 44 + rng.gauss(0, 3) + (a - 17) * 1.2, eliteP: 0.04 });
+      const grad = academy && i === 0;
+      const p = newPlayer(state, { name: randomName(rng, grad ? h.country : country), country: grad ? h.country : country, birthYear: START_YEAR + yr - a, overall: 44 + rng.gauss(0, 3) + (a - 17) * 1.2 + (grad ? 3 : 0), eliteP: grad ? 0.25 : 0.04 });
+      if (grad) { p.academy = true; news(state, `${h.name} のアカデミーから ${p.name}（${a}歳）がプロ転向`); }
       state.players.push(p);
       if (rng.chance(0.6)) p.results.push({ t: state.t - rng.int(1, 20), tid: "jr", name: "ITF下部大会", cat: "M15", pts: rng.int(5, 40), prize: 0, round: "-" });
       newcomers.push(p);
@@ -1476,7 +1542,9 @@
         `最高ランキング ${s.bestRank || "-"}位、No.1在位 ${s.weeksNo1}週、トップ10在位 ${s.weeksTop10}週`,
         `生涯賞金 $${(s.prize / 1000).toFixed(2)}M`,
         hof ? "国際テニス殿堂に選出" : "殿堂入りには届かなかったが、記録はここに残る",
+        ...(assetsOf(state).academy ? [`母国にアカデミーを設立。${state.players.filter((p) => p.academy).length}人の卒業生がツアーに出た`] : []),
       ],
+      academy: !!assetsOf(state).academy,
     };
   }
 
@@ -1559,6 +1627,9 @@
     H.rivalry.flags = H.rivalry.flags || {};
     if (H.rivalAhead === undefined) H.rivalAhead = null;
     if (H.focusBoostUntil === undefined) H.focusBoostUntil = -1;
+    H.assets = H.assets || { jet: false, medical: false, base: false, academy: false };
+    if (H.investment === undefined) H.investment = null;
+    H.pendingPurchase = H.pendingPurchase || 0;
     H.ledger = H.ledger || [];
     H.rankHist = H.rankHist || [];
     H.injuryLog = H.injuryLog || [];
@@ -1569,5 +1640,5 @@
     return s;
   }
 
-  TL.World = { DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
+  TL.World = { ASSETS, TAX, AGENT_CUT, assetsOf, assetUnlocked, buyAsset, assetsWeekly, DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
 })(typeof globalThis !== "undefined" ? globalThis : window);

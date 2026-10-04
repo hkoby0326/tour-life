@@ -5,7 +5,7 @@
     W, D, S: null, tab: "home", modal: null, planSel: null, planWeekT: -1, runLog: null, running: false, screens: {},
     SAVE_KEY: "tourlife_v1", SETTINGS_KEY: "tourlife_settings_v1", HOF_KEY: "tourlife_hof_v1",
     DEFAULT_SETTINGS: { stopTournament: true, stopMilestone: true, stopInjury: true, stopSeason: true, stopEvent: true, stopRival: true, watchEnabled: true, watchGs: true, watchFinals: true, watchRival: true, watchTop10: true, watchTitle: true, watchSpeed: 300, sound: false, volume: 0.5, reduceMotion: false, slot: 1, introSeen: false, hints: {}, hintsAlways: false },
-    VERSION: "v1.4",
+    VERSION: "v1.5",
   });
   U.ATTRL = W.ATTR_LABEL;
   U.ORIGINS = {
@@ -145,6 +145,7 @@
     layer.querySelectorAll("[data-slot-copy-confirm]").forEach((b) => b.onclick = () => U.copyToSlot(parseInt(b.dataset.slotCopyConfirm, 10)));
     layer.querySelectorAll("[data-slot-del-confirm]").forEach((b) => b.onclick = () => U.deleteSlot(parseInt(b.dataset.slotDelConfirm, 10)));
     if (S) {
+      layer.querySelectorAll("[data-asset-confirm]").forEach((b) => b.onclick = () => { W.buyAsset(S, b.dataset.assetConfirm); U.save(); U.modal = null; U.render(); });
       layer.querySelectorAll("[data-confirm-fire]").forEach((b) => b.onclick = () => { W.fireCoach(S); U.save(); U.modal = null; U.render(); });
       layer.querySelectorAll("[data-confirm-retire]").forEach((b) => b.onclick = () => { W.retireNow(S); U.save(); U.pushHof(S.human.epilogue); U.modal = `<h2>引退</h2>${U.epilogueHtml()}<button data-close>閉じる</button>`; U.tab = "plan"; U.render(); });
       layer.querySelectorAll("[data-choice]").forEach((b) => b.onclick = () => { const txt = W.resolveEvent(S, b.dataset.choice); U.save(); U.modalDirty = true; U.openModal(`<h2>結果</h2><p>${esc(txt)}</p><button class="primary" data-close>閉じる</button>`, false, true); });
@@ -312,7 +313,7 @@
       <p class="small muted">ポテンシャル（能力の天井）はプレイヤーには見えません。コーチのコメントと同年代との比較から推測してください。約10%で「世代の才能」を引きます。</p>
       <button class="primary" id="start" style="padding:10px 22px;font-size:15px">キャリアを始める</button></div>
       ${[1, 2, 3].some((n) => U.slotInfo(n)) ? `<div class="panel"><h2>セーブデータ</h2>${U.slotsHtml(true)}</div>` : ""}
-      ${hof.length ? `<div class="panel"><h2>殿堂ギャラリー</h2>${hof.map((e) => `<div class="card"><div class="row between"><div><b>${flag(e.country)} ${esc(e.name)}</b> <span class="muted small">${U.ORIGINS[e.origin] ? U.ORIGINS[e.origin].name : ""} ・ ${e.seasons || "-"}シーズン ・ ${e.date || ""}</span><div class="${e.hof ? "gold" : "muted"}" style="font-weight:700">「${esc(e.tag)}」${e.hof ? " 🏛 殿堂入り" : ""}</div></div><div class="small muted" style="text-align:right">最高${e.bestRank || "-"}位 ・ ${e.titles}勝（GS${e.gs}）<br>No.1 ${e.weeksNo1}週 ・ ${e.w}-${e.l} ・ ${U.money(e.prize || 0)}</div></div>${e.timeline && e.timeline.length ? `<div class="timeline" style="margin-top:8px">${e.timeline.map((z) => `<div class="yr"><div class="muted">${z.y}<br><span class="tiny">${z.age}歳</span></div><div class="r ${z.rank && z.rank <= 10 ? "top10" : z.rank && z.rank <= 50 ? "top50" : ""}">${z.rank || "-"}</div><div>${z.w}-${z.l}</div>${z.titles ? `<div class="t">🏆×${z.titles}</div>` : ""}</div>`).join("")}</div>` : ""}</div>`).join("")}</div>` : ""}
+      ${hof.length ? `<div class="panel"><h2>殿堂ギャラリー</h2>${hof.map((e) => `<div class="card"><div class="row between"><div><b>${flag(e.country)} ${esc(e.name)}</b> <span class="muted small">${U.ORIGINS[e.origin] ? U.ORIGINS[e.origin].name : ""} ・ ${e.seasons || "-"}シーズン ・ ${e.date || ""}</span><div class="${e.hof ? "gold" : "muted"}" style="font-weight:700">「${esc(e.tag)}」${e.hof ? " 🏛 殿堂入り" : ""}${e.academy ? " 🎓" : ""}</div></div><div class="small muted" style="text-align:right">最高${e.bestRank || "-"}位 ・ ${e.titles}勝（GS${e.gs}）<br>No.1 ${e.weeksNo1}週 ・ ${e.w}-${e.l} ・ ${U.money(e.prize || 0)}</div></div>${e.timeline && e.timeline.length ? `<div class="timeline" style="margin-top:8px">${e.timeline.map((z) => `<div class="yr"><div class="muted">${z.y}<br><span class="tiny">${z.age}歳</span></div><div class="r ${z.rank && z.rank <= 10 ? "top10" : z.rank && z.rank <= 50 ? "top50" : ""}">${z.rank || "-"}</div><div>${z.w}-${z.l}</div>${z.titles ? `<div class="t">🏆×${z.titles}</div>` : ""}</div>`).join("")}</div>` : ""}</div>`).join("")}</div>` : ""}
     </div>`;
     app.querySelectorAll(".origin").forEach((el) => el.onclick = () => { window._origin = el.dataset.o; window._name = document.getElementById("name").value; window._country = document.getElementById("country").value; window._diff = document.getElementById("diff").value; U.renderSetup(); });
     document.getElementById("start").onclick = () => {
