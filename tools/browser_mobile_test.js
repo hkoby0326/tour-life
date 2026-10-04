@@ -11,7 +11,7 @@ const path = require("path"); const fs = require("fs"); const { chromium } = req
   const save = process.argv[2] ? fs.readFileSync(process.argv[2], "utf8") : null;
   if (save) await page.addInitScript((sv) => { localStorage.setItem("tourlife_v1", sv); }, save);
   await page.goto("file://" + path.resolve(__dirname, "../index.html"));
-  if (!save) { await page.screenshot({ path: shots + "/setup.png" }); await page.fill("#name", "佐藤 大和"); await page.click('.origin[data-o="junior"]'); await page.click("#start"); }
+  if (!save) { await page.screenshot({ path: shots + "/setup.png" }); await page.fill("#name", "佐藤 大和"); await page.click('.origin[data-o="junior"]'); await page.click("#start"); await page.waitForSelector(".intro [data-close]"); await page.click(".intro [data-close]"); }
   await page.waitForSelector(".topbar");
   await page.screenshot({ path: shots + "/home.png" });
   await page.click('.rail .nav[data-tab="plan"]'); await page.waitForSelector(".planner");

@@ -69,7 +69,9 @@
     // rival card
     const h2h = S.history.matches.filter((m) => m.oppId === S.rivalId);
     const rivalCard = rv ? `<div class="panel"><h2>宿敵</h2><div class="rivalcard"><div class="identity">${U.avatar(me)}<div><div class="name">${esc(me.name)}</div><div class="sub">${me.rank ? me.rank + "位" : "ランク外"} ・ ${me.stats.titles}勝</div></div></div><div class="vs">VS</div><div class="identity" data-player="${rv.id}" style="cursor:pointer">${U.avatar(rv)}<div><div class="name">${esc(rv.name)}</div><div class="sub">${rv.retired ? "引退" : rv.rank ? rv.rank + "位" : "ランク外"} ・ ${rv.stats.titles}勝</div></div></div></div>
-      <p class="small" style="margin-top:8px">対戦成績 <b>${h2h.filter((m) => m.won).length}勝${h2h.filter((m) => !m.won).length}敗</b>${rv.rank && me.rank ? ` ・ 順位差 ${me.rank < rv.rank ? `<span class="green">${rv.rank - me.rank}位リード</span>` : me.rank > rv.rank ? `<span class="red">${me.rank - rv.rank}位ビハインド</span>` : "同順位"}` : ""}${h2h.length ? ` ・ 前回 ${esc(h2h[h2h.length - 1].tour)} ${h2h[h2h.length - 1].won ? '<span class="green">勝ち</span>' : '<span class="red">負け</span>'}` : ""}</p></div>` : "";
+      <p class="small" style="margin-top:8px">対戦成績 <b>${h2h.filter((m) => m.won).length}勝${h2h.filter((m) => !m.won).length}敗</b>${rv.rank && me.rank ? ` ・ 順位差 ${me.rank < rv.rank ? `<span class="green">${rv.rank - me.rank}位リード</span>` : me.rank > rv.rank ? `<span class="red">${me.rank - rv.rank}位ビハインド</span>` : "同順位"}` : ""}${h2h.length ? ` ・ 前回 ${esc(h2h[h2h.length - 1].tour)} ${h2h[h2h.length - 1].won ? '<span class="green">勝ち</span>' : '<span class="red">負け</span>'}` : ""}</p>
+      <div class="row small" style="gap:8px;margin-top:6px"><span class="muted">関係</span><span class="heat" title="因縁メーター"><div style="width:${Math.round(S.human.rivalry ? S.human.rivalry.heat : 25)}%"></div></span><b>${W.rivalryLabel(S.human.rivalry ? S.human.rivalry.heat : 25)}</b></div>
+      ${S.human.rivalry && S.human.rivalry.log.length ? `<div class="small muted" style="margin-top:6px">${S.human.rivalry.log.slice(-3).reverse().map((l) => `<div>${cal(l.year)} W${l.week} ・ ${esc(l.text)}</div>`).join("")}</div>` : ""}</div>` : "";
     c.innerHTML = `<div class="grid2" style="grid-template-columns:1.25fr .75fr">
       <div>
         <div class="card hero" style="padding:16px 18px"><h3>今週の決断 ・ ${cal()}年 第${S.week}週</h3><div style="font-size:22px;font-weight:800;margin:4px 0 6px">${label}</div><p class="small muted" style="margin:0 0 10px">${esc(auto0.reason || "")}</p>
@@ -85,7 +87,7 @@
     c.querySelector("[data-go-auto]").onclick = () => U.runWeeks([auto0.type === "blocked" ? { type: "blocked" } : { type: "auto" }]);
     c.querySelector("[data-go]").onclick = () => { U.tab = "plan"; U.render(); };
     c.querySelector("[data-auto]").onclick = () => U.autoRun(60);
-    const eb = c.querySelector("[data-ev]"); if (eb) eb.onclick = () => { U.modal = U.eventHtml(S.human.event); U.render(); };
+    const eb = c.querySelector("[data-ev]"); if (eb) eb.onclick = () => U.openModal(U.eventHtml(S.human.event));
     U.bindPlayerLinks(c);
   };
 
@@ -209,9 +211,7 @@
       <div class="bracket" style="margin-top:10px">${cols}</div>`;
   };
   U.openBracket = function (entry, onlyMine) {
-    U.modal = U.bracketHtml(entry, onlyMine);
-    U.modalWide = true;
-    U.render();
+    U.openModal(U.bracketHtml(entry, onlyMine), true);
     const btn = document.querySelector("[data-bmine]");
     if (btn) btn.onclick = () => U.openBracket(entry, btn.dataset.bmine === "1");
   };
@@ -270,8 +270,8 @@
     c.querySelector("[data-go]").onclick = () => { U.tab = "plan"; U.render(); };
     U.bindPlayerLinks(c);
     c.querySelectorAll("[data-bracket]").forEach((b) => b.onclick = () => { const [y, w, name] = b.dataset.bracket.split(":"); const e = (S.history.brackets || []).find((x) => x.year === parseInt(y, 10) && x.week === parseInt(w, 10)) || (S.history.brackets || []).find((x) => x.name === name); if (e) U.openBracket(e, e.bracket.N > 32); });
-    const sb = c.querySelector("[data-season]"); if (sb) sb.onclick = () => { U.modal = U.seasonHtml(last.season); U.render(); };
-    const eb = c.querySelector("[data-ev]"); if (eb) eb.onclick = () => { if (S.human.event) { U.modal = U.eventHtml(S.human.event); U.render(); } };
+    const sb = c.querySelector("[data-season]"); if (sb) sb.onclick = () => U.openModal(U.seasonHtml(last.season));
+    const eb = c.querySelector("[data-ev]"); if (eb) eb.onclick = () => { if (S.human.event) U.openModal(U.eventHtml(S.human.event)); };
   };
 
   // ---------- ランキング ----------
@@ -353,7 +353,7 @@
         <label class="small">セット間: <select data-rule><option value="none" ${H.switchRule === "none" ? "selected" : ""}>切り替えない</option><option value="behind" ${H.switchRule === "behind" ? "selected" : ""}>セットを落としたら攻撃的に</option></select></label></div></div>
       <div class="panel"><h2>チームの効果</h2><ul class="small muted"><li>技術コーチ: 練習週の重点スキル</li><li>フィジカル: 練習週の身体系＋毎週の疲労回復</li><li>メンタル: クラッチ・集中の練習効果＋全試合のブレークポイント</li><li>クレー／芝の専門家: 練習週に適性が上がり、そのサーフェスの試合経験値が増える</li><li>スタッフ: フィジオ（怪我・回復）、トレーナー（身体系・回復・怪我）、ヒッティング（練習・経験値）、エージェント（スポンサー・アピアランスフィー・WC）、アナリスト（格上戦）</li></ul></div></div></div>`;
     c.querySelectorAll("[data-hire]").forEach((b) => b.onclick = () => { W.hireCoach(S, parseInt(b.dataset.hire, 10)); U.save(); U.render(); });
-    const f = c.querySelector("[data-fire]"); if (f) f.onclick = () => { const fee = W.terminationFee(S); U.modal = `<h2>契約解除</h2><p>${esc(H.coach.name)} との契約を解除しますか？残り期間の半額（上限26週）が違約金になります: <b>${money(fee)}</b></p><div class="row"><button class="danger" data-confirm-fire>解除する</button><button data-close>やめる</button></div>`; U.render(); };
+    const f = c.querySelector("[data-fire]"); if (f) f.onclick = () => { const fee = W.terminationFee(S); U.openModal(`<h2>契約解除</h2><p>${esc(H.coach.name)} との契約を解除しますか？残り期間の半額（上限26週）が違約金になります: <b>${money(fee)}</b></p><div class="row"><button class="danger" data-confirm-fire>解除する</button><button data-close>やめる</button></div>`); };
     c.querySelectorAll("[data-staff]").forEach((cb) => cb.onchange = () => { W.setStaff(S, cb.dataset.staff, cb.checked); U.save(); U.render(); });
     c.querySelector("[data-plan]").onchange = (e) => { H.plan = e.target.value; U.save(); };
     c.querySelector("[data-rule]").onchange = (e) => { H.switchRule = e.target.value; U.save(); };
@@ -398,12 +398,25 @@
       <div class="row"><button data-export>エクスポート（JSON）</button><label>インポート <input type="file" id="imp" accept=".json"></label></div>
       <p class="small muted" style="margin-top:8px">シード: ${S.seed} ・ 出自: ${U.ORIGINS[S.config.origin].name} ・ 怪我: ${S.config.injuryRealism === "low" ? "低頻度" : "標準"}</p></div>
       ${S.human.careerOver ? "" : `<div class="panel"><h2>引退</h2><p class="small muted">現役を退く。キャリアの総括と殿堂判定が行われ、殿堂ギャラリーに記録される。36歳のシーズン終了時には自動的に引退。</p><button class="danger" id="retire">引退する</button></div>`}
-      <div class="panel"><h2>新しいキャリア</h2><p class="small muted">現在のセーブは消える。</p><button class="danger" id="newgame">新しいキャリアを始める</button></div>
+      <div class="panel"><h2>セーブスロット</h2><p class="small muted">3つのキャリアを並行して持てる。殿堂ギャラリーは共通。</p>${U.slotsHtml(false)}</div>
+      <div class="panel"><h2>表示とサウンド</h2>
+        <label class="small" style="display:flex;gap:8px;align-items:center;margin:6px 0"><input type="checkbox" style="width:auto;margin:0" data-setting="sound" ${U.settings.sound ? "checked" : ""}> サウンド（観戦モードの効果音・節目のファンファーレ）</label>
+        <label class="small" style="display:flex;gap:8px;align-items:center;margin:6px 0">音量 <input type="range" min="0" max="1" step="0.1" value="${U.settings.volume == null ? 0.5 : U.settings.volume}" data-volume style="vertical-align:middle;width:140px"> <button class="small" data-sound-test>テスト</button></label>
+        <label class="small" style="display:flex;gap:8px;align-items:center;margin:6px 0"><input type="checkbox" style="width:auto;margin:0" data-setting="reduceMotion" ${U.settings.reduceMotion ? "checked" : ""}> アニメーションを減らす（ボールの動き・画面遷移）</label>
+        <label class="small" style="display:flex;gap:8px;align-items:center;margin:6px 0"><input type="checkbox" style="width:auto;margin:0" data-setting="hintsAlways" ${U.settings.hintsAlways ? "checked" : ""}> 2シーズン目以降もヒントを表示</label>
+        <div class="row" style="margin-top:8px"><button class="small" data-hints-reset>ヒントをもう一度表示</button><button class="small" data-intro>遊び方を見る</button></div></div>
+      <div class="panel"><h2>新しいキャリア</h2><p class="small muted">現在のスロットのセーブは消える。</p><button class="danger" id="newgame">新しいキャリアを始める</button></div>
       <div class="panel"><h2>このゲームについて</h2><p class="small muted">Tour Life ${U.VERSION}。登場選手はすべて架空（2025/26年のツアーをモデルにした近似名）。能力値は推定であり公式データではない。ポイント表は現行ATPルールの近似。</p></div>`;
     c.querySelector("[data-export]").onclick = () => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([W.serialize(S)], { type: "application/json" })); a.download = `tourlife_${cal()}_w${S.week}.json`; a.click(); };
-    document.getElementById("imp").onchange = (e) => { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = () => { try { U.S = W.deserialize(r.result); U.save(); U.tab = "plan"; U.runLog = null; U.planSel = null; U.render(); } catch (err) { U.modal = `<h2>読み込めませんでした</h2><p class="small">${esc(err.message)}</p><button data-close>閉じる</button>`; U.render(); } }; r.readAsText(f); };
+    document.getElementById("imp").onchange = (e) => { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = () => { try { U.S = W.deserialize(r.result); U.save(); U.tab = "plan"; U.runLog = null; U.planSel = null; U.render(); } catch (err) { U.openModal(`<h2>読み込めませんでした</h2><p class="small">${esc(err.message)}</p><button data-close>閉じる</button>`); } }; r.readAsText(f); };
     document.getElementById("newgame").onclick = U.newGame;
+    U.bindSlots(c);
+    c.querySelectorAll("[data-setting]").forEach((cb) => cb.onchange = () => { U.settings[cb.dataset.setting] = cb.checked; U.saveSettings(); if (U.applyMotion) U.applyMotion(); if (cb.dataset.setting === "sound" && cb.checked && U.sfx) U.sfx("click"); });
+    c.querySelector("[data-volume]").oninput = (e) => { U.settings.volume = parseFloat(e.target.value); U.saveSettings(); };
+    c.querySelector("[data-sound-test]").onclick = () => { if (!U.settings.sound) { U.toast("サウンドがオフです"); return; } U.sfx("win"); };
+    c.querySelector("[data-hints-reset]").onclick = () => { U.settings.hints = {}; U.saveSettings(); U.toast("ヒントを再表示します"); };
+    c.querySelector("[data-intro]").onclick = () => U.openModal(U.introHtml());
     const rb = document.getElementById("retire");
-    if (rb) rb.onclick = () => { U.modal = `<h2>引退する</h2><p>${esc(human().name)}（${W.age(S, human())}歳、${human().rank ? human().rank + "位" : "ランク外"}）は現役を退きますか？この操作は取り消せません。</p><div class="row"><button class="danger" data-confirm-retire>引退する</button><button data-close>やめる</button></div>`; U.render(); };
+    if (rb) rb.onclick = () => { U.openModal(`<h2>引退する</h2><p>${esc(human().name)}（${W.age(S, human())}歳、${human().rank ? human().rank + "位" : "ランク外"}）は現役を退きますか？この操作は取り消せません。</p><div class="row"><button class="danger" data-confirm-retire>引退する</button><button data-close>やめる</button></div>`); };
   };
 })();

@@ -4,8 +4,8 @@
   const U = (TL.UI = {
     W, D, S: null, tab: "home", modal: null, planSel: null, planWeekT: -1, runLog: null, running: false, screens: {},
     SAVE_KEY: "tourlife_v1", SETTINGS_KEY: "tourlife_settings_v1", HOF_KEY: "tourlife_hof_v1",
-    DEFAULT_SETTINGS: { stopTournament: true, stopMilestone: true, stopInjury: true, stopSeason: true, stopEvent: true, stopRival: true, watchEnabled: true, watchGs: true, watchFinals: true, watchRival: true, watchTop10: true, watchTitle: true, watchSpeed: 300 },
-    VERSION: "v1.1",
+    DEFAULT_SETTINGS: { stopTournament: true, stopMilestone: true, stopInjury: true, stopSeason: true, stopEvent: true, stopRival: true, watchEnabled: true, watchGs: true, watchFinals: true, watchRival: true, watchTop10: true, watchTitle: true, watchSpeed: 300, sound: false, volume: 0.5, reduceMotion: false, slot: 1, introSeen: false, hints: {}, hintsAlways: false },
+    VERSION: "v1.2",
   });
   U.ATTRL = W.ATTR_LABEL;
   U.ORIGINS = {
@@ -53,8 +53,31 @@
   U.settings = U.loadSettings();
   U.saveSettings = () => { try { localStorage.setItem(U.SETTINGS_KEY, JSON.stringify(U.settings)); } catch (e) {} };
   U.watchOpts = () => ({ enabled: U.settings.watchEnabled, gs: U.settings.watchGs, finals: U.settings.watchFinals, rival: U.settings.watchRival, top10: U.settings.watchTop10, titleMatch: U.settings.watchTitle });
-  U.save = () => { try { localStorage.setItem(U.SAVE_KEY, W.serialize(U.S)); } catch (e) { console.warn(e); } };
-  U.load = () => { try { const j = localStorage.getItem(U.SAVE_KEY); if (j) U.S = W.deserialize(j); } catch (e) { console.warn(e); U.S = null; } };
+  // save slots: slot 1 keeps the historical key so existing saves carry over
+  U.slot = () => U.settings.slot || 1;
+  U.saveKeyFor = (n) => (n === 1 ? U.SAVE_KEY : `${U.SAVE_KEY}_s${n}`);
+  U.save = () => { try { localStorage.setItem(U.saveKeyFor(U.slot()), W.serialize(U.S)); } catch (e) { console.warn(e); } };
+  U.load = () => { try { const j = localStorage.getItem(U.saveKeyFor(U.slot())); U.S = j ? W.deserialize(j) : null; } catch (e) { console.warn(e); U.S = null; } };
+  U.slotInfo = (n) => { try { const j = localStorage.getItem(U.saveKeyFor(n)); if (!j) return null; const s = JSON.parse(j); const h = s.players.find((p) => p.id === s.humanId); return { name: h.name, country: h.country, year: W.START_YEAR + s.year - 1, week: s.week, rank: h.rank, titles: h.stats.titles, age: W.START_YEAR + s.year - 1 - h.birthYear, over: !!s.human.careerOver, kb: Math.round(j.length / 1024) }; } catch (e) { return null; } };
+  U.switchSlot = (n) => { if (U.S) U.save(); U.settings.slot = n; U.saveSettings(); U.modal = null; U.runLog = null; U.planSel = null; U.tab = "home"; U.load(); U.render(); };
+  U.copyToSlot = (n) => { try { localStorage.setItem(U.saveKeyFor(n), W.serialize(U.S)); } catch (e) {} U.toast(`スロット${n}に保存した`); U.closeModal(); U.render(); };
+  U.deleteSlot = (n) => { try { localStorage.removeItem(U.saveKeyFor(n)); } catch (e) {} if (n === U.slot()) { U.S = null; U.runLog = null; U.planSel = null; } U.modal = null; U.render(); };
+  U.slotsHtml = (compact) => {
+    const { esc, flag } = U;
+    return [1, 2, 3].map((n) => {
+      const i = U.slotInfo(n), on = n === U.slot();
+      const info = i ? `<b>${flag(i.country)} ${esc(i.name)}</b> <span class="small muted">${i.year}年 第${i.week}週 ・ ${i.age}歳 ・ ${i.over ? "引退" : i.rank ? i.rank + "位" : "ランク外"} ・ ${i.titles}勝</span>` : '<span class="muted">空き</span>';
+      const btns = compact
+        ? (i && !on ? `<button class="primary small" data-slot-switch="${n}">続ける</button>` : on ? '<span class="pill">このスロットに作成</span>' : `<button class="small" data-slot-switch="${n}">ここで始める</button>`)
+        : `${on ? '<span class="pill gold">使用中</span>' : `<button class="small" data-slot-switch="${n}">${i ? "切り替え" : "ここで新規"}</button>`}${U.S && !on ? ` <button class="small" data-slot-copy="${n}">ここにコピー</button>` : ""}${i ? ` <button class="small danger" data-slot-del="${n}">削除</button>` : ""}`;
+      return `<div class="slot ${on ? "on" : ""}"><div><div class="small muted">スロット${n}</div>${info}</div><div class="row" style="gap:6px;flex-wrap:wrap;justify-content:flex-end">${btns}</div></div>`;
+    }).join("");
+  };
+  U.bindSlots = (root) => {
+    root.querySelectorAll("[data-slot-switch]").forEach((b) => b.onclick = () => U.switchSlot(parseInt(b.dataset.slotSwitch, 10)));
+    root.querySelectorAll("[data-slot-copy]").forEach((b) => b.onclick = () => { const n = parseInt(b.dataset.slotCopy, 10); if (U.slotInfo(n)) U.openModal(`<h2>スロット${n}を上書き</h2><p>スロット${n}の既存セーブを現在のキャリアで上書きしますか？</p><div class="row"><button class="danger" data-slot-copy-confirm="${n}">上書きする</button><button data-close>やめる</button></div>`); else U.copyToSlot(n); });
+    root.querySelectorAll("[data-slot-del]").forEach((b) => b.onclick = () => { const n = parseInt(b.dataset.slotDel, 10); U.openModal(`<h2>スロット${n}を削除</h2><p>このセーブは消えます。取り消せません。</p><div class="row"><button class="danger" data-slot-del-confirm="${n}">削除する</button><button data-close>やめる</button></div>`); });
+  };
   U.loadHof = () => { try { return JSON.parse(localStorage.getItem(U.HOF_KEY) || "[]"); } catch (e) { return []; } };
   U.pushHof = (e) => { try { const l = U.loadHof(); l.unshift(Object.assign({ date: new Date().toISOString().slice(0, 10) }, e)); localStorage.setItem(U.HOF_KEY, JSON.stringify(l.slice(0, 30))); } catch (err) {} };
 
@@ -77,6 +100,8 @@
     const inj = me.injury ? `<span class="chip" style="border-color:var(--red)"><b class="red">${esc(me.injury.label)}</b> 残り${me.injury.weeks}週</span>` : "";
     const delta = me.prevRank && me.rank ? me.prevRank - me.rank : 0;
     const staffN = Object.values(W.staffOf(S)).filter(Boolean).length;
+    const sameTab = U._renderedTab === U.tab;
+    const scrollY = window.scrollY;
     app.innerHTML = `<div class="app">
       <nav class="rail"><div class="brand"><span class="logo">TL</span><span>Tour Life</span></div>
         ${U.TABS.map(([k, l]) => `<button class="nav ${U.tab === k ? "active" : ""} ${U.PRIMARY.includes(k) ? "" : "more-hidden"}" data-tab="${k}" title="${l}">${U.icon(k)}<span>${l}</span>${k === "report" && S.human.event ? '<span class="badge">!</span>' : ""}</button>`).join("")}
@@ -92,26 +117,70 @@
         <div class="stat"><span class="l">Team</span><span class="v small">${S.human.coach ? esc(S.human.coach.name) : "コーチなし"}</span><span class="d">${S.human.coach ? W.COACH_TYPES[S.human.coach.type].label : ""}${staffN ? ` ・ スタッフ${staffN}` : ""}</span></div>
         ${rv ? `<div class="stat"><span class="l">Rival</span><span class="v small" data-player="${rv.id}" style="cursor:pointer">${esc(rv.name)}</span><span class="d">${rv.rank ? rv.rank + "位" : rv.retired ? "引退" : "ランク外"}</span></div>` : ""}
         ${inj}
-        </div></header><div class="content" id="content"></div></div></div>
-      ${U.modal ? `<div class="modal-bg" id="modalbg"><div class="modal ${U.modalWide ? "wide" : ""}">${U.modal}</div></div>` : ""}`;
-    if (!U.modal) U.modalWide = false;
+        </div></header><div class="content" id="content"></div></div></div>`;
     app.querySelectorAll(".rail .nav[data-tab]").forEach((b) => b.onclick = () => { U.tab = b.dataset.tab; U.render(); });
     const more = app.querySelector("[data-more]");
-    if (more) more.onclick = () => { U.modal = `<h2>メニュー</h2><div class="grid2" style="grid-template-columns:repeat(2,1fr)">${U.TABS.filter(([k]) => !U.PRIMARY.includes(k)).map(([k, l]) => `<button class="${U.tab === k ? "primary" : ""}" data-goto="${k}" style="display:flex;gap:8px;align-items:center;justify-content:flex-start">${U.icon(k)} ${l}</button>`).join("")}</div><div style="margin-top:10px"><button data-close>閉じる</button></div>`; U.render(); app.querySelectorAll("[data-goto]").forEach((g) => g.onclick = () => { U.tab = g.dataset.goto; U.modal = null; U.render(); }); };
-    const bg = document.getElementById("modalbg");
-    if (bg) {
-      bg.onclick = (e) => { if (e.target === bg && !S.human.event) { U.modal = null; U.render(); } };
-      app.querySelectorAll("[data-close]").forEach((b) => b.onclick = () => { U.modal = null; U.modalWide = false; U.render(); });
-      app.querySelectorAll("[data-confirm-new]").forEach((b) => b.onclick = U.resetGame);
-      app.querySelectorAll("[data-confirm-fire]").forEach((b) => b.onclick = () => { W.fireCoach(S); U.save(); U.modal = null; U.render(); });
-      app.querySelectorAll("[data-confirm-retire]").forEach((b) => b.onclick = () => { W.retireNow(S); U.save(); U.pushHof(S.human.epilogue); U.modal = `<h2>引退</h2>${U.epilogueHtml()}<button data-close>閉じる</button>`; U.tab = "plan"; U.render(); });
-      app.querySelectorAll("[data-choice]").forEach((b) => b.onclick = () => { const txt = W.resolveEvent(S, b.dataset.choice); U.save(); U.modal = `<h2>結果</h2><p>${esc(txt)}</p><button class="primary" data-close>閉じる</button>`; U.render(); });
-    }
+    if (more) more.onclick = () => U.openModal(`<h2>メニュー</h2><div class="grid2" style="grid-template-columns:repeat(2,1fr)">${U.TABS.filter(([k]) => !U.PRIMARY.includes(k)).map(([k, l]) => `<button class="${U.tab === k ? "primary" : ""}" data-goto="${k}" style="display:flex;gap:8px;align-items:center;justify-content:flex-start">${U.icon(k)} ${l}</button>`).join("")}</div><div style="margin-top:10px"><button data-close>閉じる</button></div>`);
     U.bindPlayerLinks(app);
-    if (U.bindWrapped) U.bindWrapped(app);
     const c = document.getElementById("content");
     (U.screens[U.tab] || U.screens.home)(c);
+    U.applyHints(c);
+    U._renderedTab = U.tab;
+    // same screen re-rendered (e.g. a plan pick): keep the reader's place instead of jumping to the top
+    window.scrollTo(0, sameTab ? scrollY : 0);
+    U.renderModal();
   };
+  // The modal lives in its own layer so opening/closing one never rebuilds the screen behind it.
+  U.renderModal = function () {
+    let layer = document.getElementById("modal-layer");
+    if (!layer) { layer = document.createElement("div"); layer.id = "modal-layer"; document.body.appendChild(layer); }
+    if (!U.modal) { layer.innerHTML = ""; U.modalWide = false; return; }
+    const S = U.S, { esc } = U;
+    layer.innerHTML = `<div class="modal-bg" id="modalbg"><div class="modal ${U.modalWide ? "wide" : ""}">${U.modal}</div></div>`;
+    const bg = document.getElementById("modalbg");
+    bg.onclick = (e) => { if (e.target === bg && !(S && S.human.event)) U.closeModal(); };
+    layer.querySelectorAll("[data-close]").forEach((b) => b.onclick = () => U.closeModal());
+    layer.querySelectorAll("[data-goto]").forEach((g) => g.onclick = () => { U.tab = g.dataset.goto; U.modal = null; U.render(); });
+    layer.querySelectorAll("[data-confirm-new]").forEach((b) => b.onclick = U.resetGame);
+    layer.querySelectorAll("[data-slot-copy-confirm]").forEach((b) => b.onclick = () => U.copyToSlot(parseInt(b.dataset.slotCopyConfirm, 10)));
+    layer.querySelectorAll("[data-slot-del-confirm]").forEach((b) => b.onclick = () => U.deleteSlot(parseInt(b.dataset.slotDelConfirm, 10)));
+    if (S) {
+      layer.querySelectorAll("[data-confirm-fire]").forEach((b) => b.onclick = () => { W.fireCoach(S); U.save(); U.modal = null; U.render(); });
+      layer.querySelectorAll("[data-confirm-retire]").forEach((b) => b.onclick = () => { W.retireNow(S); U.save(); U.pushHof(S.human.epilogue); U.modal = `<h2>引退</h2>${U.epilogueHtml()}<button data-close>閉じる</button>`; U.tab = "plan"; U.render(); });
+      layer.querySelectorAll("[data-choice]").forEach((b) => b.onclick = () => { const txt = W.resolveEvent(S, b.dataset.choice); U.save(); U.modalDirty = true; U.openModal(`<h2>結果</h2><p>${esc(txt)}</p><button class="primary" data-close>閉じる</button>`, false, true); });
+    }
+    U.bindPlayerLinks(layer);
+    if (U.bindWrapped) U.bindWrapped(layer);
+  };
+  U.openModal = (html, wide, keepDirty) => { U.modal = html; U.modalWide = !!wide; if (!keepDirty) U.modalDirty = false; U.renderModal(); };
+  // closing re-renders the screen only when the modal changed game state (an event choice)
+  U.closeModal = () => { U.modal = null; U.modalWide = false; if (U.modalDirty) { U.modalDirty = false; U.render(); } else U.renderModal(); };
+
+  // ---------- onboarding (UI-9): first-season hints per screen, replayable from settings ----------
+  U.HINTS = {
+    home: ["ホームの読み方", "「今週の決断」は自動方針の提案。そのまま1週進めるか、「4週プラン」で大会・練習・休養を自分で組む。受信箱には選択肢つきのイベントとニュースが届く。"],
+    plan: ["4週プランの組み方", "各週は 自動／大会／練習／休養／合宿 から選ぶ。大会カードの点はエントリー見込み（緑=本戦、黄=予選、赤=カットオフ外）。負荷メーターが赤なら休養を。重要試合は観戦モードになる。"],
+    report: ["結果の見方", "試合ごとのスコアと、練習で伸びた能力が週単位で出る。「ドロー表」で本戦の全試合を確認できる。"],
+    team: ["チームの作り方", "コーチは契約年数と相性つき。相性は数ヶ月かけて判明する。スタッフ枠はランキングが上がると解禁され、同行させる人数ぶん移動費も増える。"],
+    finance: ["お金の流れ", "収入は賞金・スポンサー・支援。支出はチーム給与と移動費（ホームからの距離 × 同行人数）。資金がマイナスだとコーチが雇えない。"],
+    player: ["成長の見方", "能力の天井（ポテンシャル）は見えない。コーチのコメントと同年代比較から推測する。重点スキルは4週プランで変えられる。"],
+    ranking: ["ランキングの仕組み", "直近52週のベスト19大会（＋ファイナルズ）の合計。昨年の同じ週のポイントは消える（防衛）。他の選手名を押すとスカウティングレポート。"],
+  };
+  U.applyHints = (c) => {
+    const h = U.HINTS[U.tab]; if (!h || !U.S) return;
+    const seen = U.settings.hints || {};
+    if (seen[U.tab] || (U.S.year > 1 && !U.settings.hintsAlways)) return;
+    c.insertAdjacentHTML("afterbegin", `<div class="hintcard"><div class="ic">💡</div><div><b>${h[0]}</b><div class="small">${h[1]}</div></div><button class="x" data-hint-close title="閉じる">×</button></div>`);
+    c.querySelector("[data-hint-close]").onclick = (e) => { U.settings.hints = Object.assign({}, seen, { [U.tab]: 1 }); U.saveSettings(); e.target.closest(".hintcard").remove(); };
+  };
+  U.introHtml = () => `<div class="intro"><h2>Tour Life の遊び方</h2>
+    <div class="steps">
+      <div class="step"><div class="n">1</div><div><b>1週＝1ターン</b><div class="small muted">大会に出る・練習する・休む。4週まとめてプランを組み、「進める」で時間が進む。迷ったら「今週の決断」に任せてよい。</div></div></div>
+      <div class="step"><div class="n">2</div><div><b>試合は観るもの</b><div class="small muted">グランドスラムや宿敵戦などの重要試合はポイント単位の観戦モードに。セット間に試合プランを変えられる。</div></div></div>
+      <div class="step"><div class="n">3</div><div><b>伸びしろは見えない</b><div class="small muted">コーチのコメントと同年代比較から才能を推測する。宿敵はあなたと同い年のライバルで、物語はランキングの交差や対戦で動く。</div></div></div>
+      <div class="step"><div class="n">4</div><div><b>自動進行と停止条件</b><div class="small muted">自動進行は大会終了・怪我・ランキングの節目・イベントで止まる。条件はプラン画面の下で変えられる。</div></div></div>
+    </div><p class="small muted">最初のシーズンは各画面の上にヒントが出ます（設定からいつでも再表示できます）。</p>
+    <button class="primary bigbtn" data-close>キャリアを始める</button></div>`;
 
   // ---------- shared html ----------
   U.playerModalHtml = function (id) {
@@ -121,17 +190,17 @@
     const bar = (v, cls) => `<div class="bar"><div style="width:${v}%;background:${cls || (v >= 80 ? "var(--gold)" : v >= 65 ? "var(--green)" : "var(--accent)")}"></div></div>`;
     const attrs = W.ATTRS.map((k) => `<div class="attr" style="grid-template-columns:84px 1fr 36px"><span>${ATTRL[k]}</span>${bar(p.attrs[k])}<span class="num">${p.attrs[k]}</span></div>`).join("");
     const surf = Object.keys(D.SURFACES).map((k) => `<div class="attr" style="grid-template-columns:84px 1fr 36px"><span>${D.SURFACES[k]}</span>${bar(p.surf[k], `var(--${k})`)}<span class="num">${p.surf[k]}</span></div>`).join("");
-    return `<div class="row between"><div class="identity">${U.avatar(p)}<div><div class="name">${esc(p.name)} ${p.isRival ? '<span class="pill rival">宿敵</span>' : ""}${p.isHuman ? '<span class="pill">自分</span>' : ""}</div><div class="sub">${p.age}歳 ・ ${D.COUNTRIES[p.country].name} ・ ${p.hand === "L" ? "左利き" : "右利き"} ・ ${W.STYLE_LABEL[p.style] || p.style}</div></div></div><div style="text-align:right"><div class="kpi .v" style="font-size:22px;font-weight:800">${p.retired ? "引退" : p.rank ? p.rank + "位" : "ランク外"}</div><div class="small muted">${p.points}pt ・ 最高${p.bestRank || "-"}位 ・ 総合 ${p.overall}</div></div></div>
+    return `<div class="row between"><div class="identity">${U.avatar(p)}<div><div class="name">${esc(p.name)} ${p.isRival ? '<span class="pill rival">宿敵</span>' : ""}${p.isHuman ? '<span class="pill">自分</span>' : ""}</div><div class="sub">${p.age}歳 ・ ${D.COUNTRIES[p.country].name} ・ ${p.hand === "L" ? "左利き" : "右利き"} ・ ${W.STYLE_LABEL[p.style] || p.style}</div></div></div><div style="text-align:right"><div class="kpi .v" style="font-size:22px;font-weight:800">${p.retired ? "引退" : p.rank ? p.rank + "位" : "ランク外"}</div><div class="small muted">${p.points}pt ・ 最高${p.bestRank || "-"}位 ・ 総合 ${p.overall}${p.scout && !p.scout.exact ? `<span class="pill" style="margin-left:4px">推定 ±${p.scout.amp}</span>` : ""}</div></div></div>
       ${p.injury ? `<p class="small red">${esc(p.injury.label)} 残り${p.injury.weeks}週</p>` : ""}
       <div class="grid2" style="margin-top:10px"><div>${U.radarSvg(p.attrs, p.isHuman ? null : U.human().attrs)}<div class="small muted" style="text-align:center;margin:-4px 0 8px"><span class="accent">■</span> ${esc(p.name)}${p.isHuman ? "" : ' <span class="red">■</span> 自分'}</div>${attrs}<h3 style="margin-top:8px">サーフェス</h3>${surf}</div>
       <div><div class="kpi"><div class="card"><div class="v">${p.titles}</div><div class="l">タイトル</div></div><div class="card"><div class="v">${p.gs}</div><div class="l">GS</div></div><div class="card"><div class="v">${p.w}-${p.l}</div><div class="l">通算</div></div><div class="card"><div class="v">${money(p.prize)}</div><div class="l">賞金</div></div></div>
         <p class="small">直近52週 ${p.tournaments52}大会 ・ 疲労 ${p.fatigue} ・ 同年代${p.peers}人中${p.peerPos ? p.peerPos + "番目" : "-"}</p>
         ${p.isHuman ? "" : `<p class="small"><b>対戦成績:</b> ${p.h2hW}勝${p.h2hL}敗${p.h2h.length ? "<br>" + p.h2h.map((m) => `<span class="${m.won ? "green" : "red"}">${cal(m.year)} ${esc(m.tour)} ${esc(m.round)} ${m.won ? "W" : "L"} ${esc(m.score)}</span>`).join("<br>") : ""}</p>`}
         ${p.titleList.length ? `<p class="small"><b class="gold">最近のタイトル:</b> ${p.titleList.map((t) => `${cal(t.year)} ${esc(t.name)}`).join("、")}</p>` : ""}</div></div>
-      <p class="small muted">能力値はスカウティングレポート（公開情報）。伸びしろは本人にも見えない。</p>
+      <p class="small muted">${p.isHuman ? "自分の能力値は正確。伸びしろ（天井）は見えない。" : p.scout && p.scout.exact ? "アナリストが精査したレポート（正確な値）。伸びしろは分からない。" : `スカウティングによる推定値（誤差 ±${p.scout ? p.scout.amp : 6}）。対戦を重ねると精度が上がり、アナリストを雇うと正確になる。`}</p>
       <button class="primary" data-close>閉じる</button>`;
   };
-  U.bindPlayerLinks = (root) => root.querySelectorAll("[data-player]").forEach((el) => { el.style.cursor = "pointer"; el.onclick = (e) => { e.stopPropagation(); U.modal = U.playerModalHtml(parseInt(el.dataset.player, 10)); U.render(); }; });
+  U.bindPlayerLinks = (root) => root.querySelectorAll("[data-player]").forEach((el) => { el.style.cursor = "pointer"; el.onclick = (e) => { e.stopPropagation(); U.openModal(U.playerModalHtml(parseInt(el.dataset.player, 10))); }; });
   U.eventHtml = (ev) => `<h2>${U.esc(ev.title)}</h2><p>${U.esc(ev.text)}</p>${ev.choices.map((c) => `<div class="card"><div class="row between"><div><b>${U.esc(c.label)}</b><div class="small muted">${U.esc(c.desc)}</div></div><button class="primary" data-choice="${c.key}">選ぶ</button></div></div>`).join("")}`;
   U.seasonHtml = function (z) {
     const { esc, money, signed } = U, ATTRL = U.ATTRL;
@@ -140,7 +209,7 @@
       <div class="kpi"><div class="card"><div class="v">${z.rank ? z.rank + "位" : "-"}</div><div class="l">年末ランキング</div></div><div class="card"><div class="v">${z.w}-${z.l}</div><div class="l">年間成績</div></div><div class="card"><div class="v">${z.tournaments || "-"}</div><div class="l">出場大会</div></div><div class="card"><div class="v">${z.titles.length}</div><div class="l">タイトル</div></div><div class="card"><div class="v">${money(z.prize)}</div><div class="l">年間賞金</div></div><div class="card"><div class="v ${z.money < 0 ? "red" : ""}">${money(z.money)}</div><div class="l">資金残高</div></div></div>
       ${z.titles.length ? `<p><b class="gold">優勝:</b> ${z.titles.map(esc).join("、")}</p>` : ""}
       <p><b>ベストマッチ:</b> ${esc(z.bestWin)}</p><p><b>サーフェス別:</b> ${surf || "-"}</p>
-      ${z.rivalH2H ? `<p><b>宿敵 ${esc(z.rivalH2H.name)}:</b> 今季の対戦 ${z.rivalH2H.w}勝${z.rivalH2H.l}敗 ・ 相手は${z.rivalH2H.rank ? z.rivalH2H.rank + "位" : "ランク外"}、今季${z.rivalH2H.titles}勝</p>` : ""}
+      ${z.rivalH2H ? `<p><b>宿敵 ${esc(z.rivalH2H.name)}:</b> 今季の対戦 ${z.rivalH2H.w}勝${z.rivalH2H.l}敗 ・ 相手は${z.rivalH2H.rank ? z.rivalH2H.rank + "位" : "ランク外"}、今季${z.rivalH2H.titles}勝${z.rivalH2H.label ? ` ・ 関係「${z.rivalH2H.label}」` : ""}</p>` : ""}
       <p><b>今季の成長:</b> ${(z.attrDelta || []).map(([k, v]) => `<span class="${v > 0 ? "green" : "red"}">${ATTRL[k]} ${signed(v)}</span>`).join(" ・ ") || "—"}</p>
       <p><b>来季の防衛ポイント:</b> 1-3月 ${z.defend[0]} / 4-6月 ${z.defend[1]} / 7-9月 ${z.defend[2]} / 10-12月 ${z.defend[3]}</p>
       <p class="accent">${esc(z.coach)}${z.ovrDelta !== null && z.ovrDelta !== undefined ? ` <span class="muted small">（総合 ${signed(z.ovrDelta)}）</span>` : ""}</p>
@@ -193,10 +262,12 @@
     const seasonRep = log.find((r) => r.season);
     if (seasonRep) U.modal = U.seasonHtml(seasonRep.season);
     if (S.human.careerOver) { U.pushHof(S.human.epilogue); U.modal = `<h2>引退</h2>${U.epilogueHtml()}<button data-close>閉じる</button>`; }
+    let fanfare = false;
     for (const r of log) {
-      for (const it of r.items) if (it.type === "milestone") U.toast(`🏅 ${U.esc(it.text)}`, "gold");
-      if (r.human && r.human.humanRound === "優勝") U.toast(`🏆 ${U.esc(r.human.T.name)} 優勝！ +${r.human.humanPts}pt`, "gold");
+      for (const it of r.items) if (it.type === "milestone") { U.toast(`🏅 ${U.esc(it.text)}`, "gold"); fanfare = true; }
+      if (r.human && r.human.humanRound === "優勝") { U.toast(`🏆 ${U.esc(r.human.T.name)} 優勝！ +${r.human.humanPts}pt`, "gold"); fanfare = true; }
     }
+    if (fanfare && U.sfx) U.sfx("milestone");
     U.tab = "report"; U.render();
   };
 
@@ -217,6 +288,7 @@
       <div class="grid3">${Object.entries(U.ORIGINS).map(([k, o]) => `<div class="card origin ${sel === k ? "sel" : ""}" data-o="${k}"><div style="font-size:26px">${o.icon}</div><h3>${o.name} <span class="muted small">${o.age}歳スタート</span></h3><p class="small">${o.desc}</p><p class="small muted">難易度: ${o.diff}</p></div>`).join("")}</div>
       <p class="small muted">ポテンシャル（能力の天井）はプレイヤーには見えません。コーチのコメントと同年代との比較から推測してください。約10%で「世代の才能」を引きます。</p>
       <button class="primary" id="start" style="padding:10px 22px;font-size:15px">キャリアを始める</button></div>
+      ${[1, 2, 3].some((n) => U.slotInfo(n)) ? `<div class="panel"><h2>セーブデータ</h2>${U.slotsHtml(true)}</div>` : ""}
       ${hof.length ? `<div class="panel"><h2>殿堂ギャラリー</h2>${hof.map((e) => `<div class="card"><div class="row between"><div><b>${flag(e.country)} ${esc(e.name)}</b> <span class="muted small">${U.ORIGINS[e.origin] ? U.ORIGINS[e.origin].name : ""} ・ ${e.seasons || "-"}シーズン ・ ${e.date || ""}</span><div class="${e.hof ? "gold" : "muted"}" style="font-weight:700">「${esc(e.tag)}」${e.hof ? " 🏛 殿堂入り" : ""}</div></div><div class="small muted" style="text-align:right">最高${e.bestRank || "-"}位 ・ ${e.titles}勝（GS${e.gs}）<br>No.1 ${e.weeksNo1}週 ・ ${e.w}-${e.l} ・ ${U.money(e.prize || 0)}</div></div>${e.timeline && e.timeline.length ? `<div class="timeline" style="margin-top:8px">${e.timeline.map((z) => `<div class="yr"><div class="muted">${z.y}<br><span class="tiny">${z.age}歳</span></div><div class="r ${z.rank && z.rank <= 10 ? "top10" : z.rank && z.rank <= 50 ? "top50" : ""}">${z.rank || "-"}</div><div>${z.w}-${z.l}</div>${z.titles ? `<div class="t">🏆×${z.titles}</div>` : ""}</div>`).join("")}</div>` : ""}</div>`).join("")}</div>` : ""}
     </div>`;
     app.querySelectorAll(".origin").forEach((el) => el.onclick = () => { window._origin = el.dataset.o; window._name = document.getElementById("name").value; window._country = document.getElementById("country").value; U.renderSetup(); });
@@ -225,8 +297,11 @@
       const seedStr = document.getElementById("seed").value.trim();
       U.S = W.create({ name, country: document.getElementById("country").value, origin: sel, injuryRealism: document.getElementById("inj").value, seed: seedStr ? (parseInt(seedStr, 10) || TL.RNG.hash(seedStr)) : undefined });
       U.save(); U.tab = "home"; U.runLog = null; U.planSel = null; U.render();
+      if (!U.settings.introSeen) { U.settings.introSeen = true; U.saveSettings(); U.openModal(U.introHtml()); }
     };
+    U.bindSlots(app);
+    U.renderModal();
   };
-  U.newGame = () => { U.modal = `<h2>新しいキャリアを始める</h2><p>現在のキャリアを削除して新しく始めますか？この操作は取り消せません。</p><div class="row"><button class="danger" data-confirm-new>削除して始める</button><button data-close>やめる</button></div>`; U.render(); };
-  U.resetGame = () => { try { localStorage.removeItem(U.SAVE_KEY); } catch (e) {} U.S = null; U.modal = null; U.runLog = null; U.planSel = null; U.render(); };
+  U.newGame = () => U.openModal(`<h2>新しいキャリアを始める</h2><p>スロット${U.slot()}のキャリアを削除して新しく始めますか？この操作は取り消せません。別のスロットで始めるなら設定の「セーブスロット」から。</p><div class="row"><button class="danger" data-confirm-new>削除して始める</button><button data-close>やめる</button></div>`);
+  U.resetGame = () => { try { localStorage.removeItem(U.saveKeyFor(U.slot())); } catch (e) {} U.S = null; U.modal = null; U.runLog = null; U.planSel = null; U.render(); };
 })();

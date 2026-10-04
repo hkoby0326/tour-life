@@ -6,10 +6,10 @@
   const clamp = TL.clamp;
 
   const SURF = {
-    hard: { base: 0.63, k1: 0.0013, k2: 0.0010, netW: 0.10, rally: 4.5, ace: 1.0 },
+    hard: { base: 0.63, k1: 0.0013, k2: 0.0010, netW: 0.10, rally: 4.8, ace: 1.0 },
     clay: { base: 0.60, k1: 0.0010, k2: 0.0013, netW: 0.05, rally: 6.0, ace: 0.7 },
-    grass: { base: 0.66, k1: 0.0016, k2: 0.0008, netW: 0.18, rally: 3.5, ace: 1.35 },
-    indoor: { base: 0.65, k1: 0.0015, k2: 0.0009, netW: 0.12, rally: 4.0, ace: 1.15 },
+    grass: { base: 0.66, k1: 0.0016, k2: 0.0008, netW: 0.18, rally: 3.8, ace: 1.35 },
+    indoor: { base: 0.65, k1: 0.0015, k2: 0.0009, netW: 0.12, rally: 4.3, ace: 1.15 },
   };
   TL.MATCH_SURF = SURF;
 
@@ -86,8 +86,11 @@
     const SHOTS = ["fh", "bh", "fh", "bh", "net"];
     function pointKind(sv, rt, w) {
       const A = comp[sv];
-      const aceP = clamp((0.045 + (A.serve - 60) * 0.0025) * S.ace, 0.02, 0.2);
-      const dfP = clamp(0.035 - (A.serve - 60) * 0.0006, 0.015, 0.06);
+      // Calibrated against tour averages (per player, bo3 on hard): ~5-6 aces, ~2.5 double faults,
+      // i.e. ~8-9% of service points are aces and ~3.5% double faults. aceP applies to points the
+      // server wins (~63%), dfP to points the server loses (~37%).
+      const aceP = clamp((0.06 + (A.serve - 60) * 0.0035) * S.ace, 0.03, 0.28);
+      const dfP = clamp(0.10 - (A.serve - 60) * 0.0015, 0.05, 0.14);
       const r = rng.next();
       let kind, rally, shot = null;
       if (w === sv) {

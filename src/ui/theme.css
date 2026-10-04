@@ -191,6 +191,21 @@ tr.flash-me td{animation:flashMe .45s} tr.flash-op td{animation:flashOp .45s}
 .tplan{display:flex;flex-direction:column;gap:2px;align-items:flex-start;text-align:left;padding:8px 10px}
 .tplan.on{border-color:var(--gold);background:rgba(251,191,36,.15)}
 #v-stats td,#v-stats th{padding:3px 6px;font-size:12px}
+
+/* onboarding hints, intro, rivalry heat, save slots, motion preference */
+.hintcard{display:flex;gap:10px;align-items:flex-start;background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.35);border-radius:var(--r-md);padding:10px 36px 10px 12px;margin-bottom:12px;position:relative;animation:pop .2s}
+.hintcard .ic{font-size:18px;line-height:1.2}
+.hintcard .x{position:absolute;right:4px;top:4px;background:transparent;border:0;color:var(--muted);font-size:18px;padding:2px 8px;min-height:0;line-height:1}
+.intro .steps{display:flex;flex-direction:column;gap:10px;margin:12px 0}
+.intro .step{display:flex;gap:12px;align-items:flex-start;background:var(--panel2);border:1px solid var(--line);border-radius:var(--r-md);padding:10px 12px}
+.intro .step .n{width:28px;height:28px;border-radius:50%;background:var(--accent);color:#07111a;font-weight:800;display:grid;place-items:center;flex:none}
+.heat{height:8px;border-radius:4px;background:var(--panel3);overflow:hidden;flex:1;min-width:60px}
+.heat div{height:100%;background:linear-gradient(90deg,var(--green),var(--gold),var(--red));border-radius:4px}
+.slot{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel2);margin-bottom:8px;flex-wrap:wrap}
+.slot.on{border-color:var(--accent)}
+.reduce-motion *,.reduce-motion *::before,.reduce-motion *::after{animation-duration:.001s!important;transition-duration:.001s!important}
+@media (prefers-reduced-motion: reduce){*,*::before,*::after{animation-duration:.001s!important;transition-duration:.001s!important}}
+
 @media(max-width:800px){.vgrid{grid-template-columns:1fr}.tgrid{grid-template-columns:repeat(2,1fr)}}
 /* bracket (UI-5) */
 .bracket{display:flex;gap:18px;overflow-x:auto;padding:6px 2px 12px}
@@ -251,7 +266,11 @@ tr.flash-me td{animation:flashMe .45s} tr.flash-op td{animation:flashOp .45s}
   .modal.wide{max-width:none}
   @keyframes sheet{from{transform:translateY(24px);opacity:0}to{transform:none;opacity:1}}
   /* viewer: full-screen sheet, court on top */
-  .viewer{max-height:100vh;height:100vh;border-radius:0;display:flex;flex-direction:column}
+  /* the viewer is a full-screen sheet: anchor it to the top and size it to the *visible* viewport
+     (100dvh shrinks with the browser address bar) so the title row is never pushed off-screen */
+  .modal-bg.full{align-items:flex-start}
+  .viewer{max-height:100vh;height:100vh;max-height:100dvh;height:100dvh;border-radius:0;display:block;overflow:auto;padding-top:calc(10px + env(safe-area-inset-top))}
+  .viewer .vgrid{margin-top:4px}
   .vgrid{grid-template-columns:1fr;gap:8px}
   .court-wrap{order:-1}
   .court{max-height:150px;margin:0 auto}

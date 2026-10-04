@@ -15,6 +15,7 @@ const { chromium } = require("playwright");
   await page.fill("#name", "佐藤 大和"); await page.fill("#seed", "2026");
   await page.click('.origin[data-o="junior"]'); await page.click("#start");
   await page.waitForSelector(".topbar");
+  await page.waitForSelector(".intro [data-close]"); await page.screenshot({ path: shots + "/00_intro.png" }); await page.click(".intro [data-close]");
   await page.screenshot({ path: shots + "/00_home.png", fullPage: true });
   // open the planner, pick the first enterable tournament card in week 1
   await page.click('.rail .nav[data-tab="plan"]');

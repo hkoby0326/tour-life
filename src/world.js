@@ -130,7 +130,7 @@
       config: { name: cfg.name || "選手", country: cfg.country || "JPN", origin: cfg.origin || "grinder", injuryRealism: cfg.injuryRealism || "standard" },
       rankSnaps: [], history: { tournaments: [], seasons: [], matches: [], news: [] }, lastReport: null,
       human: { money: 0, sponsorWeekly: 0, sponsorUntil: 0, wcBoostUntil: 0, lastRegion: null, focus: ["serve", "fh"], careerOver: false, epilogue: null, milestones: {},
-        coach: null, physio: false, coachOffers: [], plan: "balanced", switchRule: "none", event: null, lastEventT: -99, forceRest: false, riskWeek: -1, sponsor2: { weekly: 0, until: 0 }, pressureUntil: -1, attrHist: [], seasonStartAttrs: null, exhibitionYear: 0 },
+        coach: null, physio: false, coachOffers: [], plan: "balanced", switchRule: "none", event: null, lastEventT: -99, forceRest: false, riskWeek: -1, sponsor2: { weekly: 0, until: 0 }, pressureUntil: -1, attrHist: [], seasonStartAttrs: null, exhibitionYear: 0, rivalry: { heat: 25, log: [], flags: {}, lastCross: -99 }, rivalAhead: null, focusBoostUntil: -1 },
       cutoffs: {},
     };
     state.rng = new TL.RNG(seed);
@@ -331,6 +331,41 @@
   }
 
   // ---------- events with choices ----------
+  // ---------- rivalry story ----------
+  // heat 0-100: how charged the rivalry is. Rises with head-to-heads, rank crossings and media;
+  // cools with friendly choices and time. High heat makes rival matches swing more on big points.
+  function rivalryLabel(heat) { return heat >= 70 ? "因縁" : heat >= 45 ? "ライバル" : heat >= 25 ? "意識" : "友好"; }
+  function rivalLog(state, text, quiet) {
+    const R = state.human.rivalry;
+    R.log.push({ year: state.year, week: state.week, text });
+    if (R.log.length > 40) R.log.shift();
+    if (!quiet) news(state, text);
+  }
+  function rivalHeat(state, d) { const R = state.human.rivalry; R.heat = clamp(Math.round((R.heat + d) * 10) / 10, 0, 100); }
+  function rivalMeet(state, T, m) {
+    const rv = rival(state);
+    if (!rv) return;
+    const final = m.round === "優勝" || m.round === "決勝";
+    rivalHeat(state, final ? 18 : T.def.tier >= 8 ? 12 : 8);
+    if (final || T.def.tier >= 9) rivalLog(state, `${T.name} ${m.round}で宿敵 ${rv.name} と対戦、${m.won ? "勝利" : "敗戦"}（${m.score}）`, true);
+  }
+  function rivalWeekly(state, h, rv) {
+    const H = state.human, R = H.rivalry;
+    if (!rv || rv.retired) return;
+    // drift back toward a baseline; staying neck-and-neck in the ranking keeps it warm
+    rivalHeat(state, (25 - R.heat) * 0.03);
+    if (rv.rank && h.rank && Math.abs(rv.rank - h.rank) <= 25) rivalHeat(state, 0.5);
+    for (const r of rv.results) if (r.t === state.t && r.round === "優勝") { rivalHeat(state, r.cat === "GS" ? 10 : 4); if (r.cat === "GS" || r.cat === "M1000L" || r.cat === "M1000S" || r.cat === "FINALS") rivalLog(state, `宿敵 ${rv.name} が ${r.name} で優勝`, true); }
+    const ahead = h.rank && rv.rank ? h.rank < rv.rank : null;
+    if (ahead !== null) {
+      if (H.rivalAhead !== null && ahead !== H.rivalAhead && state.t - R.lastCross >= 8 && state.t > 4) {
+        R.lastCross = state.t;
+        rivalHeat(state, 6);
+        rivalLog(state, ahead ? `宿敵 ${rv.name} を追い抜いた（${h.rank}位 vs ${rv.rank}位）` : `宿敵 ${rv.name} に追い抜かれた（${rv.rank}位 vs ${h.rank}位）`);
+      }
+      H.rivalAhead = ahead;
+    }
+  }
   function maybeEvent(state, report) {
     const H = state.human;
     if (H.event) return;
@@ -347,12 +382,28 @@
       return;
     }
     if (state.t - H.lastEventT < 5) return;
+    const rv = rival(state), R = H.rivalry;
     const countryName = D.COUNTRIES[h.country].name;
     const topOfCountry = state.players.filter((p) => !p.retired && p.country === h.country && p.rank && p.rank < r).length < 4;
     if (h.fatigue > 70 && !h.injury && rng.chance(0.35)) {
       ev = { id: "niggle", title: "身体に違和感", text: "トレーナーは「今週は休んだほうがいい」と言っている。疲労が溜まっている。", choices: [
         { key: "rest", label: "今週は休む", desc: "次の週は休養に固定される" },
         { key: "play", label: "予定どおり出る", desc: "次の週の怪我確率が2倍" }] };
+    } else if (rv && !rv.retired && R.heat >= 40 && !R.flags["media" + state.year] && rng.chance(0.08)) {
+      R.flags["media" + state.year] = 1;
+      ev = { id: "rivalmedia", title: `「${rv.name} との因縁」特集`, text: `メディアが${rv.name}との対戦成績や過去の発言を並べて因縁を煽っている。インタビューでどう答える？`, choices: [
+        { key: "fire", label: "挑発に乗る", desc: "「次は負けない」。注目が集まりスポンサー ＋$0.3k/週（半年）、因縁 ＋15（宿敵戦の勝負所が荒れる）" },
+        { key: "cool", label: "受け流す", desc: "「ただの一選手」。集中力 ＋0.5、因縁 −10" }] };
+    } else if (rv && !rv.retired && state.week >= 46 && state.week <= 49 && rv.rank && h.rank && Math.abs(rv.rank - h.rank) <= 80 && !R.flags["camp" + state.year] && rng.chance(0.5)) {
+      R.flags["camp" + state.year] = 1;
+      ev = { id: "rivalcamp", title: `${rv.name} から合同練習の誘い`, text: `オフシーズンに2週間、${rv.name}のチームと合同で練習しないかという連絡。手の内を見せ合うことになる。`, choices: [
+        { key: "join", label: "一緒に練習する", desc: "自分の最弱スキル ＋0.8（相手も強くなる）、因縁 −15" },
+        { key: "solo", label: "断って独りで鍛える", desc: "クラッチ ＋0.4、因縁 ＋8" }] };
+    } else if (rv && !rv.retired && rv.injury && rv.injury.weeks >= 6 && !R.flags["inj" + rv.injuredAt]) {
+      R.flags["inj" + rv.injuredAt] = 1;
+      ev = { id: "rivalinjury", title: `${rv.name} が長期離脱`, text: `宿敵が${rv.injury.label}で${rv.injury.weeks}週の離脱。連絡を取るか、黙って差を広げるか。`, choices: [
+        { key: "visit", label: "見舞いのメッセージを送る", desc: "集中力 ＋0.5、因縁 −20" },
+        { key: "focus", label: "好機とみて練習に集中", desc: "4週間、練習効果 ＋25%、因縁 ＋10" }] };
     } else if ((state.week === 4 || state.week === 36) && r <= 150 && topOfCountry && !h.injury) {
       ev = { id: "daviscup", title: `デビスカップ ${countryName}代表に招集`, text: "代表戦は国の期待を背負う。経験は得られるが、翌週の大会に疲労を持ち越す。", choices: [
         { key: "accept", label: "受ける", desc: "疲労＋15、クラッチ＋0.8、国内スポンサー ＋$0.3k/週（1年）" },
@@ -402,10 +453,17 @@
       case "contract:release": text = `${H.coach.name} と別れた。`; H.coach = null; break;
       case "limit:continue": h.fragile = true; text = "リハビリに入る。身体と相談しながら続ける。"; break;
       case "limit:retire": H.retireAtSeasonEnd = true; text = "今シーズン限りでの引退を決めた。"; break;
+      case "rivalmedia:fire": H.sponsor2 = { weekly: (H.sponsor2.weekly || 0) + 0.3, until: state.t + 26 }; rivalHeat(state, 15); text = "「次は必ず勝つ」と答えた。記事は大きく取り上げられた。"; break;
+      case "rivalmedia:cool": h.attrs.focus = clamp(h.attrs.focus + 0.5, 25, 99); rivalHeat(state, -10); text = "淡々と答えた。話題はすぐに消えた。"; break;
+      case "rivalcamp:join": { const rv = rival(state); const weakest = ATTRS.reduce((a, k) => (h.attrs[k] < h.attrs[a] ? k : a), ATTRS[0]); h.attrs[weakest] = clamp(h.attrs[weakest] + 0.8, 25, 99); if (rv) { const k2 = ATTRS.reduce((a, k) => (rv.attrs[k] < rv.attrs[a] ? k : a), ATTRS[0]); rv.attrs[k2] = clamp(rv.attrs[k2] + 0.6, 25, 99); } rivalHeat(state, -15); text = `2週間打ち合った。${ATTR_LABEL[weakest]}に手応えがある。`; break; }
+      case "rivalcamp:solo": h.attrs.clutch = clamp(h.attrs.clutch + 0.4, 25, 99); rivalHeat(state, 8); text = "独りでコートに立ち続けた。"; break;
+      case "rivalinjury:visit": h.attrs.focus = clamp(h.attrs.focus + 0.5, 25, 99); rivalHeat(state, -20); text = "短い返事が来た。「戻ったら、また」。"; break;
+      case "rivalinjury:focus": H.focusBoostUntil = state.t + 4; rivalHeat(state, 10); text = "練習量を上げた。相手が戻る前に差をつける。"; break;
       case "camp:accept": H.money -= 6; h.surf.clay = clamp(h.surf.clay + 4, 20, 85); h.fatigue = clamp(h.fatigue + 10, 0, 100); text = "スペインで2週間クレーを打ち込んだ。"; break;
       default: text = "見送った。";
     }
     news(state, `${ev.title}: ${c.label}`);
+    if (ev.id.indexOf("rival") === 0) rivalLog(state, `${ev.title} → ${c.label}`, true);
     H.event = null;
     return text;
   }
@@ -670,6 +728,8 @@
     const edge = [0, 0];
     const me = a.isHuman ? a : b, opp = a.isHuman ? b : a;
     if (staffOf(state).analyst && (opp.rank || 9999) < (me.rank || 9999)) edge[idx] = 1;
+    // charged rivalry: big points swing more for both (clutch difference matters more)
+    if (opp.isRival && H.rivalry && H.rivalry.heat >= 60) { const k = (H.rivalry.heat - 60) / 40; clutch[idx] += (me.attrs.clutch - opp.attrs.clutch) * 0.15 * k; }
     return { plans, rules, clutch, edge };
   }
   // per-match consequences: stats, fatigue, xp, injury roll
@@ -889,6 +949,7 @@
         if (st.fitness && PHYS.includes(k)) f *= 1.3;
         if (st.hitting) f *= 1.15;
         if (coach) f *= 1 + (coach.compat || 0);
+        if (state.human.focusBoostUntil > state.t) f *= 1.25;
       }
       p.attrs[k] = clamp(p.attrs[k] + f * mult * (0.7 + 0.6 * rng.next()), 25, 99);
     }
@@ -1037,7 +1098,8 @@
       if (rep.humanPlayed) {
         report.human = rep;
         report.stops.push("tournament");
-        if (rep.humanMatches.some((m) => m.oppId === state.rivalId)) report.stops.push("rival");
+        const rvMs = rep.humanMatches.filter((m) => m.oppId === state.rivalId);
+        if (rvMs.length) { report.stops.push("rival"); for (const m of rvMs) rivalMeet(state, run.T, m); }
         const tq = travelQuote(state, run.T);
         travel = tq.cost;
         travelInfo = tq;
@@ -1129,6 +1191,7 @@
     if (h.rank && h.rank <= 10) h.stats.weeksTop10++;
     if (h.rank && (!h.stats.bestRank || h.rank < h.stats.bestRank)) h.stats.bestRank = h.rank;
     if (rv && rv.rank && (!rv.stats.bestRank || rv.rank < rv.stats.bestRank)) rv.stats.bestRank = rv.rank;
+    rivalWeekly(state, h, rv);
     for (const m of [300, 200, 100, 50, 20, 10, 5, 1]) {
       if (h.rank && h.rank <= m && !state.human.milestones[m]) {
         state.human.milestones[m] = { year: state.year, week: state.week };
@@ -1251,7 +1314,7 @@
     const wins = myMatches.filter((m) => m.won && m.oppRank).sort((a, b) => a.oppRank - b.oppRank);
     summary.bestWin = wins[0] ? `${wins[0].opp}（${wins[0].oppRank}位）${wins[0].tour} ${wins[0].round} ${wins[0].score}` : "なし";
     const rvM = myMatches.filter((m) => m.oppId === state.rivalId);
-    summary.rivalH2H = rv ? { name: rv.name, w: rvM.filter((m) => m.won).length, l: rvM.filter((m) => !m.won).length, rank: rv.rank, titles: rv.results.filter((r) => r.year === yr && r.round === "優勝").length } : null;
+    summary.rivalH2H = rv ? { name: rv.name, w: rvM.filter((m) => m.won).length, l: rvM.filter((m) => !m.won).length, rank: rv.rank, titles: rv.results.filter((r) => r.year === yr && r.round === "優勝").length, heat: state.human.rivalry.heat, label: rivalryLabel(state.human.rivalry.heat) } : null;
     const bySurf = {};
     for (const m of myMatches) { bySurf[m.surface] = bySurf[m.surface] || { w: 0, l: 0 }; bySurf[m.surface][m.won ? "w" : "l"]++; }
     summary.bySurface = bySurf;
@@ -1382,12 +1445,19 @@
     const h2h = state.history.matches.filter((m) => m.oppId === id);
     const titles = state.history.tournaments.filter((t) => t.winnerId === id);
     const seasonRes = p.results.filter((r) => r.year === state.year || (r.t > state.t - 52 && r.cat !== "PREV"));
+    // Scouting precision: your own numbers are exact; other players are estimates whose error
+    // shrinks with head-to-heads and vanishes with an analyst on staff. The noise is deterministic
+    // per player/attribute/season so the report does not flicker between views.
+    const exact = p.isHuman || !!staffOf(state).analyst;
+    const amp = exact ? 0 : h2h.length >= 3 ? 2 : h2h.length >= 1 ? 4 : 6;
+    const noise = (k) => (amp ? Math.round(((TL.RNG.hash(`${state.seed}:${p.id}:${k}:${state.year}`) % 2001) / 1000 - 1) * amp) : 0);
     const attrs = {};
-    for (const k of ATTRS) attrs[k] = Math.round(p.attrs[k]);
+    for (const k of ATTRS) attrs[k] = clamp(Math.round(p.attrs[k]) + noise(k), 25, 99);
     const surf = {};
-    for (const k of Object.keys(p.surf)) surf[k] = Math.round(p.surf[k]);
+    for (const k of Object.keys(p.surf)) surf[k] = clamp(Math.round(p.surf[k]) + noise("s" + k), 20, 85);
+    const ovrEst = exact ? Math.round(TL.overall(p) * 10) / 10 : Math.round(TL.overall(p) + noise("ovr") / 2);
     const peers = state.players.filter((x) => !x.retired && x.rank && Math.abs(x.birthYear - p.birthYear) <= 1);
-    return { id: p.id, name: p.name, country: p.country, age: age(state, p), hand: p.hand, style: p.style, rank: p.rank, points: p.points, bestRank: p.stats.bestRank, overall: Math.round(TL.overall(p) * 10) / 10,
+    return { id: p.id, name: p.name, country: p.country, age: age(state, p), hand: p.hand, style: p.style, rank: p.rank, points: p.points, bestRank: p.stats.bestRank, overall: ovrEst, scout: { exact, amp, seen: h2h.length },
       attrs, surf, w: p.stats.w, l: p.stats.l, titles: p.stats.titles, gs: p.stats.gs, m1000: p.stats.m1000, prize: p.stats.prize, injury: p.injury, fatigue: Math.round(p.fatigue), retired: p.retired,
       isHuman: p.isHuman, isRival: !!p.isRival, real: p.real, h2hW: h2h.filter((m) => m.won).length, h2hL: h2h.filter((m) => !m.won).length, h2h: h2h.slice(-6).reverse(),
       titleList: titles.slice(-8).reverse(), tournaments52: new Set(seasonRes.map((r) => r.t)).size, peers: peers.length,
@@ -1424,6 +1494,10 @@
     const H = s.human;
     Object.assign(H, { coach: H.coach || null, physio: !!H.physio, coachOffers: H.coachOffers || [], plan: H.plan || "balanced", switchRule: H.switchRule || "none", event: H.event || null, lastEventT: H.lastEventT === undefined ? -99 : H.lastEventT, forceRest: !!H.forceRest, riskWeek: H.riskWeek === undefined ? -1 : H.riskWeek, sponsor2: H.sponsor2 || { weekly: 0, until: 0 }, pressureUntil: H.pressureUntil === undefined ? -1 : H.pressureUntil, attrHist: H.attrHist || [], seasonStartAttrs: H.seasonStartAttrs || null, exhibitionYear: H.exhibitionYear || 0 });
     s.cutoffs = s.cutoffs || {};
+    H.rivalry = H.rivalry || { heat: 25, log: [], flags: {}, lastCross: -99 };
+    H.rivalry.flags = H.rivalry.flags || {};
+    if (H.rivalAhead === undefined) H.rivalAhead = null;
+    if (H.focusBoostUntil === undefined) H.focusBoostUntil = -1;
     H.ledger = H.ledger || [];
     H.rankHist = H.rankHist || [];
     H.injuryLog = H.injuryLog || [];
@@ -1434,5 +1508,5 @@
     return s;
   }
 
-  TL.World = { travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
+  TL.World = { rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
 })(typeof globalThis !== "undefined" ? globalThis : window);
