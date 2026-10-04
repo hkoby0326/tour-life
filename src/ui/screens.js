@@ -73,7 +73,7 @@
     c.innerHTML = `<div class="grid2" style="grid-template-columns:1.25fr .75fr">
       <div>
         <div class="card hero" style="padding:16px 18px"><h3>今週の決断 ・ ${cal()}年 第${S.week}週</h3><div style="font-size:22px;font-weight:800;margin:4px 0 6px">${label}</div><p class="small muted" style="margin:0 0 10px">${esc(auto0.reason || "")}</p>
-          <div class="row"><button class="primary bigbtn" data-go-auto>この判断で1週進める</button><button data-go="plan">4週プランを組む</button><button data-auto>自動進行（停止条件まで）</button></div></div>
+          <div class="row actions"><button class="primary bigbtn" data-go-auto>この判断で1週進める</button><button data-go="plan">4週プランを組む</button><button data-auto>自動進行（停止条件まで）</button></div></div>
         ${nextCard}
         <div class="panel"><h2>シーズン ・ ${cal()}年</h2>${seasonStrip(me)}<div class="row between small muted"><span>今季 ${seasonT}大会（目安 ${guide}）</span><span class="loadmeter">直近8週の負荷 <span class="bar"><div style="width:${Math.min(100, (load8 / maxLoad) * 100)}%;background:${load8 >= maxLoad ? "var(--red)" : load8 >= maxLoad - 1 ? "var(--gold)" : "var(--green)"}"></div></span> ${load8}/${maxLoad}</span></div></div>
         <div class="grid2"><div class="panel"><h2>順位の推移</h2><div class="small muted" style="margin:-6px 0 6px">直近${rh.length}週${best ? ` ・ 最高${best}位` : ""}</div>${rankSpark}</div>
@@ -127,14 +127,17 @@
       <label class="small">重点スキル ${[0, 1].map((i) => `<select data-focus="${i}">${W.ATTRS.map((k) => `<option value="${k}" ${S.human.focus[i] === k ? "selected" : ""}>${ATTRL[k]}</option>`).join("")}</select>`).join(" ")}</label>
       <label class="small">試合プラン <select data-plan>${Object.entries(TL.PLANS).map(([k, p]) => `<option value="${k}" ${S.human.plan === k ? "selected" : ""}>${p.label}</option>`).join("")}</select></label>
       <label class="small">セット間 <select data-rule><option value="none" ${S.human.switchRule === "none" ? "selected" : ""}>切り替えない</option><option value="behind" ${S.human.switchRule === "behind" ? "selected" : ""}>セットを落としたら攻撃的に</option></select></label></div></div>`;
-    // columns
+    // columns (phones show one week at a time via .wtabs)
     let cols = "";
+    const activeW = U.planWeekTab || 0;
+    let wtabs = "";
     let blockedNext = me.blockedUntil >= S.t;
     for (let i = 0; i < 4; i++) {
       const { wk, yr } = weekAt(i);
       const tours = W.weekTournaments(S, wk, yr);
       const sel = U.planSel[i];
-      if (blockedNext) { cols += `<div class="pcol blocked"><div><b>第${wk}週</b><div class="small muted">大会2週目<br>（移動・調整）</div></div></div>`; blockedNext = false; sel.choice = "blocked"; continue; }
+      wtabs += `<button class="${activeW === i ? "on" : ""}" data-wtab="${i}">第${wk}週<span class="sub">${blockedNext ? "大会2週目" : sel.choice === "auto" ? "おまかせ" : sel.choice === "train" ? "練習" : sel.choice === "rest" ? "休養" : sel.choice === "camp" ? "合宿" : "大会"}</span></button>`;
+      if (blockedNext) { cols += `<div class="pcol blocked ${activeW === i ? "active" : ""}"><div><b>第${wk}週</b><div class="small muted">大会2週目<br>（移動・調整）</div></div></div>`; blockedNext = false; sel.choice = "blocked"; continue; }
       if (sel.choice === "blocked") sel.choice = "auto";
       const all = tours.map((T) => { const st = W.humanStatus(S, T); const ok = ["direct", "bubble", "qual", "wc"].includes(st.code) || (T.cat === "FINALS" && st.code === "direct"); return { T, st, ok }; });
       const vis = showAll ? all : all.filter((o) => (o.ok && !(o.st.code === "wc" && /低確率/.test(o.st.label))) || o.st.code === "money");
@@ -152,12 +155,12 @@
           <div class="tstat"><span class="sdot ${o.st.code}"></span>${esc(o.st.label)}</div>
           ${sel.choice === T.id && T.cat !== "FINALS" ? `<label class="tiny" style="display:block;margin-top:4px"><input type="checkbox" data-dbl="${i}" ${sel.doubles ? "checked" : ""}> ダブルスにも出る</label>` : ""}</div>`;
       }).join("");
-      cols += `<div class="pcol"><div class="phead"><b>第${wk}週</b><span class="small muted">${yr !== S.year ? cal(yr) + "年" : ""}</span></div>${seg}${cards || (tours.length ? '<div class="small muted" style="text-align:center;padding:12px 0">出られる大会なし</div>' : '<div class="small muted" style="text-align:center;padding:12px 0">オフシーズン</div>')}</div>`;
+      cols += `<div class="pcol ${activeW === i ? "active" : ""}"><div class="phead"><b>第${wk}週</b><span class="small muted">${yr !== S.year ? cal(yr) + "年" : ""}</span></div>${seg}${cards || (tours.length ? '<div class="small muted" style="text-align:center;padding:12px 0">出られる大会なし</div>' : '<div class="small muted" style="text-align:center;padding:12px 0">オフシーズン</div>')}</div>`;
       const chosen = tours.find((T) => T.id === sel.choice);
       if (isTour && chosen && chosen.def.weeks === 2) blockedNext = true;
     }
-    html += `<div class="panel"><div class="planner">${cols}</div>
-      <div class="row between" style="margin-top:12px"><div class="row"><button class="primary bigbtn" data-run="4">この4週を進める</button><button data-run="1">1週だけ進める</button><button data-auto="60">自動進行（停止条件まで）</button></div>${hidden || showAll ? `<button data-showall class="small">${showAll ? "出られない大会を隠す" : `出られない大会を表示（${hidden}）`}</button>` : ""}</div>
+    html += `<div class="panel"><div class="wtabs">${wtabs}</div><div class="planner">${cols}</div>
+      <div class="row between actions" style="margin-top:12px"><div class="row actions" style="flex:1"><button class="primary bigbtn" data-run="4">この4週を進める</button><button data-run="1">1週だけ進める</button><button data-auto="60">自動進行（停止条件まで）</button></div>${hidden || showAll ? `<button data-showall class="small">${showAll ? "出られない大会を隠す" : `出られない大会を表示（${hidden}）`}</button>` : ""}</div>
       <p class="small muted" style="margin:8px 0 0">大会カードをクリックで選択。「おまかせ」は出られる最上位の大会に出るが、疲労45超・負荷上限・GS翌週は休む。先の週の当落は現在のランキングで推定。</p></div>`;
     html += `<div class="grid2"><div class="panel"><h2>自動進行の停止条件</h2>
       ${[["stopTournament", "自分の大会が終わるごと"], ["stopMilestone", "ランキングの節目"], ["stopInjury", "怪我"], ["stopEvent", "イベント（選択肢）"], ["stopRival", "宿敵との対戦"], ["stopSeason", "シーズン終了"]].map(([k, l]) => `<label class="small" style="display:inline-block;margin-right:14px"><input type="checkbox" data-set="${k}" ${settings[k] ? "checked" : ""}> ${l}</label>`).join("")}</div>
@@ -167,6 +170,7 @@
     c.querySelectorAll("[data-focus]").forEach((s) => s.onchange = () => { const f = [...c.querySelectorAll("[data-focus]")].map((x) => x.value); if (f[0] === f[1]) f[1] = W.ATTRS.find((k) => k !== f[0]); S.human.focus = f; U.save(); U.render(); });
     c.querySelector("[data-plan]").onchange = (e) => { S.human.plan = e.target.value; U.save(); };
     c.querySelector("[data-rule]").onchange = (e) => { S.human.switchRule = e.target.value; U.save(); };
+    c.querySelectorAll("[data-wtab]").forEach((b) => b.onclick = () => { U.planWeekTab = parseInt(b.dataset.wtab, 10); U.render(); });
     c.querySelectorAll("[data-seg]").forEach((b) => b.onclick = () => { const [i, k] = b.dataset.seg.split(":"); U.planSel[parseInt(i, 10)].choice = k; U.render(); });
     c.querySelectorAll("[data-pick]").forEach((el) => el.onclick = (e) => { if (el.dataset.disabled || e.target.closest("[data-dbl]")) return; const idx = el.dataset.pick.indexOf(":"); const i = parseInt(el.dataset.pick.slice(0, idx), 10), tid = el.dataset.pick.slice(idx + 1); U.planSel[i].choice = U.planSel[i].choice === tid ? "auto" : tid; U.render(); });
     c.querySelectorAll("[data-dbl]").forEach((cb) => cb.onchange = () => { U.planSel[parseInt(cb.dataset.dbl, 10)].doubles = cb.checked; });
@@ -366,7 +370,7 @@
     c.innerHTML = `<div class="kpi"><div class="card"><div class="v ${H.money < 0 ? "red" : ""}">${money(H.money)}</div><div class="l">残高</div></div><div class="card"><div class="v">${money(sum(season, "net"))}</div><div class="l">今季の純増減</div></div><div class="card"><div class="v ${weekly < 0 ? "red" : "green"}">${(weekly >= 0 ? "+" : "") + money(weekly)}</div><div class="l">大会に出ない週の収支</div></div><div class="card"><div class="v">${money(me.stats.prize)}</div><div class="l">生涯賞金</div></div></div>
       <div class="grid2"><div class="panel"><h2>今季の内訳 <span class="muted small">${cal()}年 ${season.length}週</span></h2><table>${rows(season)}</table>
         <p class="small muted" style="margin-top:8px">固定収入: ${H.sponsorUntil > S.t ? `支援 ${money(H.sponsorWeekly)}/週（残り${H.sponsorUntil - S.t}週）` : "支援なし"}${H.sponsor2 && H.sponsor2.until > S.t ? ` ・ 契約 ${money(H.sponsor2.weekly)}/週（残り${H.sponsor2.until - S.t}週）` : ""} ・ ランキング連動 ${last ? money(last.rankSponsor) : "-"}/週<br>固定支出: 基本 $0.5k/週${H.coach ? ` ・ コーチ ${money(H.coach.cost)}/週` : ""}${W.staffCost(S) ? ` ・ スタッフ ${money(W.staffCost(S))}/週` : ""}<br>移動費: 拠点（${D.COUNTRIES[me.country].name}。連戦中は前の大会地）からの距離で決まり、1人あたり $0.75k ＋ $0.25k/1,000km（2週大会は＋$0.4k）。帯同は現在 <b>${W.partySize(S)}人</b>（本人＋コーチ＋帯同スタッフ）なので人数倍。残高が負だと2,500km超の移動ができない</p></div>
-      <div class="panel"><h2>残高の推移 <span class="muted small">直近${led.length}週</span></h2>${sparkline(led.map((e) => e.balance), "var(--green)")}<h3 style="margin-top:12px">直近12週</h3><table><tr><th>週</th><th class="num">賞金</th><th class="num">スポンサー</th><th class="num">経費</th><th class="num">移動</th><th class="num">純増減</th><th class="num">残高</th></tr>${led.slice(-12).reverse().map((e) => `<tr><td>${cal(e.year)} W${e.week}</td><td class="num">${e.prize ? money(e.prize) : "-"}</td><td class="num">${money(e.support + e.rankSponsor + e.extra)}</td><td class="num">${money(e.base + e.team)}</td><td class="num" title="${e.travelInfo ? `${D.COUNTRIES[e.travelInfo.from].name}→${D.COUNTRIES[e.travelInfo.to].name} ${e.travelInfo.dist}km ×${e.travelInfo.party}人` : ""}">${e.travel ? money(e.travel) + (e.travelInfo ? `<span class="tiny muted"> ${e.travelInfo.dist}km×${e.travelInfo.party}</span>` : "") : "-"}</td><td class="num ${e.net < 0 ? "red" : "green"}">${money(e.net)}</td><td class="num">${money(e.balance)}</td></tr>`).join("")}</table></div></div>
+      <div class="panel"><h2>残高の推移 <span class="muted small">直近${led.length}週</span></h2>${sparkline(led.map((e) => e.balance), "var(--green)")}<h3 style="margin-top:12px">直近12週</h3><div class="tscroll"><table><tr><th>週</th><th class="num">賞金</th><th class="num">スポンサー</th><th class="num">経費</th><th class="num">移動</th><th class="num">純増減</th><th class="num">残高</th></tr>${led.slice(-12).reverse().map((e) => `<tr><td>${cal(e.year)} W${e.week}</td><td class="num">${e.prize ? money(e.prize) : "-"}</td><td class="num">${money(e.support + e.rankSponsor + e.extra)}</td><td class="num">${money(e.base + e.team)}</td><td class="num" title="${e.travelInfo ? `${D.COUNTRIES[e.travelInfo.from].name}→${D.COUNTRIES[e.travelInfo.to].name} ${e.travelInfo.dist}km ×${e.travelInfo.party}人` : ""}">${e.travel ? money(e.travel) + (e.travelInfo ? `<span class="tiny muted"> ${e.travelInfo.dist}km×${e.travelInfo.party}</span>` : "") : "-"}</td><td class="num ${e.net < 0 ? "red" : "green"}">${money(e.net)}</td><td class="num">${money(e.balance)}</td></tr>`).join("")}</table></div></div></div>
       ${seasonsHist.length ? `<div class="panel"><h2>シーズン別</h2><table><tr><th>年</th><th class="num">賞金</th><th class="num">支援・スポンサー</th><th class="num">チーム</th><th class="num">移動</th><th class="num">年末残高</th></tr>${seasonsHist.slice().reverse().map((z) => `<tr><td>${z.calendarYear}</td><td class="num">${money(z.finance.prize)}</td><td class="num">${money(z.finance.support + z.finance.rankSponsor + z.finance.extra)}</td><td class="num">${money(z.finance.team)}</td><td class="num">${money(z.finance.travel)}</td><td class="num ${z.money < 0 ? "red" : ""}">${money(z.money)}</td></tr>`).join("")}</table></div>` : ""}`;
   };
 

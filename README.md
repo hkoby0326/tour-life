@@ -1,8 +1,11 @@
-# Tour Life — ATPキャリアシミュレーション (v0.9 / UI-5)
+# Tour Life — ATPキャリアシミュレーション (v1.0 / スマホ対応)
 
 公開ページ: https://hkoby0326.github.io/tour-life/
 
 「試合は観るもの、人生は選ぶもの」。17歳前後の無名選手として、1週＝1ターンで出場大会・練習・休養を選び、ATP No.1を目指すテキスト中心のキャリアシム。実際にプレーする要素はなく、試合はポイント単位の確率モデルで自動生成される。
+
+## スマホ前提のUI（v1.0〜）
+縦画面 390px 幅を基準に設計。下タブ（ホーム／プラン／結果／ランキング／その他）、上部は2行のコンパクトなステータス（横スクロール）、モーダルはボトムシート、観戦は全画面でコート図が上、プランナーは週タブで1週ずつ、ドロー表は横スクロール。ホーム画面に追加（PWA: `manifest.webmanifest`、`icon.svg`）できる。PC では左ナビ＋4週並列のレイアウトに自動で切り替わる。
 
 ## 画面構成（v0.8〜）
 - **ホーム**: 今週の決断（おまかせの判断と理由、ワンクリック実行）、次の大会（当落・賞金・有力出場者）、52週シーズンストリップと負荷メーター、順位の推移、コンディション、宿敵カード、受信箱（イベント・コーチの一言・ニュース）
@@ -49,6 +52,7 @@ node tools/calibrate.js 2000      # Phase 0: 能力差→勝率の校正表
 node tools/smoke.js 8 7           # 3出自×8シーズンの自動進行、不変条件チェック、セーブ決定性
 NODE_PATH=/opt/node22/lib/node_modules node tools/browser_test.js   # Playwrightでの画面テスト
 NODE_PATH=/opt/node22/lib/node_modules node tools/browser_viewer_test.js <save.json>  # 上位選手のセーブで観戦モードを検証
+NODE_PATH=/opt/node22/lib/node_modules node tools/browser_mobile_test.js [save.json]   # 390px幅での画面テスト（横スクロールが出たら失敗）
 ```
 
 ## GitHub Pages で公開する

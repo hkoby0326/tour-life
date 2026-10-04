@@ -42,6 +42,9 @@ input[type=checkbox]{accent-color:var(--accent)}
 .brand .logo{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--accent),#2563eb);display:grid;place-items:center;color:#06202c;font-size:13px;font-weight:900}
 .rail .nav{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:var(--r-md);background:transparent;border:0;color:var(--muted);font-weight:500;text-align:left;width:100%}
 .rail .nav svg{width:18px;height:18px;flex:none;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.rail .nav svg circle{fill:currentColor;stroke:none}
+svg.ico{width:18px;height:18px;flex:none;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;vertical-align:middle}
+svg.ico circle{fill:currentColor;stroke:none}
 .rail .nav:hover{background:var(--panel);color:var(--text);transform:none}
 .rail .nav.active{background:var(--panel2);color:var(--accent)}
 .rail .nav .badge{margin-left:auto;background:var(--red);color:#fff;border-radius:10px;font-size:10px;padding:0 6px;font-weight:700}
@@ -137,10 +140,8 @@ details[open] summary::before{content:"▾ "}
 tr.flash-me td{animation:flashMe .45s} tr.flash-op td{animation:flashOp .45s}
 @keyframes flashMe{from{background:rgba(52,211,153,.35)}to{background:transparent}}
 @keyframes flashOp{from{background:rgba(248,113,113,.35)}to{background:transparent}}
-/* responsive */
+/* responsive: tablet */
 @media(max-width:1100px){.rail{width:64px;padding:12px 8px}.rail .nav span,.brand span,.rail .version{display:none}.rail .nav{justify-content:center}.brand{justify-content:center;padding-bottom:12px}}
-@media(max-width:800px){.grid2,.grid3{grid-template-columns:1fr}.app{flex-direction:column}.rail{width:100%;height:auto;position:fixed;bottom:0;top:auto;flex-direction:row;border-right:0;border-top:1px solid var(--line);padding:6px;z-index:20;overflow-x:auto}.brand,.rail .spacer,.rail .version{display:none}.content{padding:12px 12px 80px}.topbar{padding:8px 12px;gap:12px}.attr{grid-template-columns:70px 1fr 32px 40px 40px}}
-
 /* planner (UI-3) */
 .planner{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
 .pcol{background:var(--panel2);border:1px solid var(--line);border-radius:var(--r-md);padding:10px;display:flex;flex-direction:column;gap:8px;min-height:220px}
@@ -207,3 +208,81 @@ tr.flash-me td{animation:flashMe .45s} tr.flash-op td{animation:flashOp .45s}
 .bm .bp.hum{color:var(--accent)}
 .bm .bp.riv{color:var(--red)}
 .bm.bye{opacity:.5}
+
+/* ===== phone-first layer (<=800px): bottom tabs, compact status, sheets, one-week planner ===== */
+@media(max-width:800px){
+  html{font-size:15px}
+  body{font-size:14px}
+  button{min-height:40px;padding:8px 14px;font-size:14px}
+  button.small{min-height:32px;padding:4px 10px;font-size:12px}
+  input,select{font-size:16px;min-height:40px}
+  .grid2,.grid3,.grid2[style]{grid-template-columns:1fr!important}
+  .app{flex-direction:column}
+  /* bottom tab bar */
+  .rail{width:100%;height:auto;position:fixed;left:0;right:0;bottom:0;top:auto;flex-direction:row;border-right:0;border-top:1px solid var(--line);padding:4px 4px calc(4px + env(safe-area-inset-bottom));z-index:30;background:rgba(13,18,27,.96);backdrop-filter:blur(10px);gap:0}
+  .brand,.rail .spacer,.rail .version{display:none}
+  .rail .nav{flex:1;flex-direction:column;gap:2px;justify-content:center;padding:6px 2px;font-size:10px;border-radius:8px;min-height:48px}
+  .rail .nav span{display:block;line-height:1}
+  .rail .nav svg{width:20px;height:20px}
+  .rail .nav.more-hidden{display:none}
+  .rail .nav .badge{position:absolute;top:4px;right:calc(50% - 16px);margin:0}
+  .rail .nav{position:relative}
+  /* compact top bar: identity row + scrollable chip row */
+  .topbar{padding:8px 12px;gap:8px;flex-wrap:nowrap;flex-direction:column;align-items:stretch}
+  .identity{min-width:0}
+  .identity .name{font-size:15px}
+  .statrow{display:flex;gap:14px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+  .statrow::-webkit-scrollbar{display:none}
+  .statrow .stat{flex:none;min-width:auto}
+  .stat .v{font-size:14px}
+  .content{padding:12px 12px calc(84px + env(safe-area-inset-bottom))}
+  .panel{padding:12px;border-radius:12px;margin-bottom:10px}
+  .card{padding:10px 12px}
+  .kpi{grid-template-columns:repeat(2,1fr);gap:8px}
+  .kpi .v{font-size:18px}
+  h2{font-size:14px}
+  table{font-size:12px}
+  th,td{padding:6px 6px}
+  .tscroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .attr{grid-template-columns:64px 1fr 30px 38px 38px;gap:6px;font-size:12px}
+  /* modals become bottom sheets */
+  .modal-bg{align-items:flex-end;padding:0}
+  .modal{max-width:none;width:100%;max-height:92vh;border-radius:16px 16px 0 0;padding:16px 14px calc(16px + env(safe-area-inset-bottom));animation:sheet .22s}
+  .modal.wide{max-width:none}
+  @keyframes sheet{from{transform:translateY(24px);opacity:0}to{transform:none;opacity:1}}
+  /* viewer: full-screen sheet, court on top */
+  .viewer{max-height:100vh;height:100vh;border-radius:0;display:flex;flex-direction:column}
+  .vgrid{grid-template-columns:1fr;gap:8px}
+  .court-wrap{order:-1}
+  .court{max-height:150px;margin:0 auto}
+  .viewer .scoreboard td{padding:7px 8px;font-size:14px}
+  .viewer .feed{max-height:120px}
+  .tgrid{grid-template-columns:repeat(2,1fr)}
+  .tplan{padding:8px}
+  /* planner: one week at a time with a week switcher */
+  .wtabs{display:flex;gap:4px;background:var(--panel3);border-radius:10px;padding:3px;margin-bottom:10px}
+  .wtabs button{flex:1;min-height:38px;border:0;background:transparent;border-radius:8px;font-size:13px;color:var(--muted)}
+  .wtabs button.on{background:var(--panel);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.4)}
+  .wtabs button .sub{display:block;font-size:10px;color:var(--dim)}
+  .planner{grid-template-columns:1fr}
+  .pcol{display:none}
+  .pcol.active{display:flex}
+  .tcard{padding:10px 10px 10px 12px}
+  .tcard .tname{font-size:14px}
+  .bigbtn{width:100%;justify-content:center;padding:14px 16px;font-size:16px}
+  .row.actions{flex-direction:column;align-items:stretch}
+  .row.actions button{width:100%}
+  /* bracket: narrower columns */
+  .bround{width:170px}
+  .bm{font-size:11px}
+  /* home */
+  .rivalcard{flex-wrap:wrap}
+  .inbox{max-height:none}
+  .strip div{height:10px}
+  /* setup */
+  .setup{margin:12px auto}
+  .setup .hero-title{font-size:30px}
+  .setup .row label{width:100%}
+  .setup .row input,.setup .row select{width:100%}
+}
+@media(min-width:801px){.wtabs{display:none}.rail .nav.more-hidden{display:flex}.rail .nav.more-only{display:none}.statrow{display:contents}}

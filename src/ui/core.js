@@ -5,7 +5,7 @@
     W, D, S: null, tab: "home", modal: null, planSel: null, planWeekT: -1, runLog: null, running: false, screens: {},
     SAVE_KEY: "tourlife_v1", SETTINGS_KEY: "tourlife_settings_v1", HOF_KEY: "tourlife_hof_v1",
     DEFAULT_SETTINGS: { stopTournament: true, stopMilestone: true, stopInjury: true, stopSeason: true, stopEvent: true, stopRival: true, watchEnabled: true, watchGs: true, watchFinals: true, watchRival: true, watchTop10: true, watchTitle: true, watchSpeed: 300 },
-    VERSION: "v0.9",
+    VERSION: "v1.0",
   });
   U.ATTRL = W.ATTR_LABEL;
   U.ORIGINS = {
@@ -32,6 +32,7 @@
   };
   const ICONS = {
     home: '<path d="M3 11 12 3l9 8M5 10v10h5v-6h4v6h5V10"/>',
+    more: '<circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/>',
     plan: '<path d="M8 2v3M16 2v3M3 9h18M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"/><path d="m9 15 2 2 4-4"/>',
     report: '<path d="M4 5h16M4 12h10M4 19h7"/>',
     ranking: '<path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0z"/><path d="M7 6H4v2a3 3 0 0 0 3 3M17 6h3v2a3 3 0 0 1-3 3"/>',
@@ -42,8 +43,10 @@
     records: '<path d="M4 4h12a2 2 0 0 1 2 2v14H6a2 2 0 0 1-2-2zM4 18a2 2 0 0 1 2-2h12"/>',
     settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
   };
-  U.icon = (n) => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[n] || ""}</svg>`;
+  U.icon = (n) => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n] || ""}</svg>`;
   U.TABS = [["home", "ホーム"], ["plan", "プラン"], ["report", "結果"], ["ranking", "ランキング"], ["calendar", "カレンダー"], ["player", "選手"], ["team", "チーム"], ["finance", "財務"], ["records", "記録"], ["settings", "設定"]];
+  U.PRIMARY = ["home", "plan", "report", "ranking"]; // bottom tab bar on phones; the rest live behind "その他"
+  U.TAB_LABEL = Object.fromEntries(U.TABS);
 
   // ---------- persistence ----------
   U.loadSettings = () => { try { return Object.assign({}, U.DEFAULT_SETTINGS, JSON.parse(localStorage.getItem(U.SETTINGS_KEY) || "{}")); } catch (e) { return Object.assign({}, U.DEFAULT_SETTINGS); } };
@@ -76,10 +79,12 @@
     const staffN = Object.values(W.staffOf(S)).filter(Boolean).length;
     app.innerHTML = `<div class="app">
       <nav class="rail"><div class="brand"><span class="logo">TL</span><span>Tour Life</span></div>
-        ${U.TABS.map(([k, l]) => `<button class="nav ${U.tab === k ? "active" : ""}" data-tab="${k}" title="${l}">${U.icon(k)}<span>${l}</span>${k === "report" && S.human.event ? '<span class="badge">!</span>' : ""}</button>`).join("")}
+        ${U.TABS.map(([k, l]) => `<button class="nav ${U.tab === k ? "active" : ""} ${U.PRIMARY.includes(k) ? "" : "more-hidden"}" data-tab="${k}" title="${l}">${U.icon(k)}<span>${l}</span>${k === "report" && S.human.event ? '<span class="badge">!</span>' : ""}</button>`).join("")}
+        <button class="nav more-only ${U.PRIMARY.includes(U.tab) ? "" : "active"}" data-more title="その他">${U.icon("more")}<span>${U.PRIMARY.includes(U.tab) ? "その他" : U.TAB_LABEL[U.tab]}</span></button>
         <div class="spacer"></div><div class="version">${U.VERSION}</div></nav>
       <div class="main"><header class="topbar">
         <div class="identity">${U.avatar(me)}<div><div class="name">${esc(me.name)}</div><div class="sub">${U.cal()}年 第${S.week}週 ・ ${W.age(S, me)}歳 ・ ${U.ORIGINS[S.config.origin].name}</div></div></div>
+        <div class="statrow">
         <div class="stat"><span class="l">Ranking</span><span class="v">${me.rank ? me.rank + "位" : "ランク外"}</span><span class="d">${me.points}pt ${delta > 0 ? `<span class="green">▲${delta}</span>` : delta < 0 ? `<span class="red">▼${-delta}</span>` : ""}</span></div>
         <div class="stat"><span class="l">Money</span><span class="v ${S.human.money < 0 ? "red" : ""}">${money(S.human.money)}</span><span class="d">${S.human.ledger && S.human.ledger.length ? (S.human.ledger[S.human.ledger.length - 1].net >= 0 ? '<span class="green">+' : '<span class="red">') + money(S.human.ledger[S.human.ledger.length - 1].net) + "/週</span>" : ""}</span></div>
         <div class="stat"><span class="l">Fatigue ${Math.round(me.fatigue)}</span><div class="gauge"><div style="width:${me.fatigue}%;background:${me.fatigue > 60 ? "var(--red)" : me.fatigue > 40 ? "var(--gold)" : "var(--green)"}"></div></div></div>
@@ -87,10 +92,12 @@
         <div class="stat"><span class="l">Team</span><span class="v small">${S.human.coach ? esc(S.human.coach.name) : "コーチなし"}</span><span class="d">${S.human.coach ? W.COACH_TYPES[S.human.coach.type].label : ""}${staffN ? ` ・ スタッフ${staffN}` : ""}</span></div>
         ${rv ? `<div class="stat"><span class="l">Rival</span><span class="v small" data-player="${rv.id}" style="cursor:pointer">${esc(rv.name)}</span><span class="d">${rv.rank ? rv.rank + "位" : rv.retired ? "引退" : "ランク外"}</span></div>` : ""}
         ${inj}
-      </header><div class="content" id="content"></div></div></div>
+        </div></header><div class="content" id="content"></div></div></div>
       ${U.modal ? `<div class="modal-bg" id="modalbg"><div class="modal ${U.modalWide ? "wide" : ""}">${U.modal}</div></div>` : ""}`;
     if (!U.modal) U.modalWide = false;
-    app.querySelectorAll(".rail .nav").forEach((b) => b.onclick = () => { U.tab = b.dataset.tab; U.render(); });
+    app.querySelectorAll(".rail .nav[data-tab]").forEach((b) => b.onclick = () => { U.tab = b.dataset.tab; U.render(); });
+    const more = app.querySelector("[data-more]");
+    if (more) more.onclick = () => { U.modal = `<h2>メニュー</h2><div class="grid2" style="grid-template-columns:repeat(2,1fr)">${U.TABS.filter(([k]) => !U.PRIMARY.includes(k)).map(([k, l]) => `<button class="${U.tab === k ? "primary" : ""}" data-goto="${k}" style="display:flex;gap:8px;align-items:center;justify-content:flex-start">${U.icon(k)} ${l}</button>`).join("")}</div><div style="margin-top:10px"><button data-close>閉じる</button></div>`; U.render(); app.querySelectorAll("[data-goto]").forEach((g) => g.onclick = () => { U.tab = g.dataset.goto; U.modal = null; U.render(); }); };
     const bg = document.getElementById("modalbg");
     if (bg) {
       bg.onclick = (e) => { if (e.target === bg && !S.human.event) { U.modal = null; U.render(); } };
@@ -181,7 +188,7 @@
   };
   U.finishRun = function (log) {
     const S = U.S;
-    U.save(); U.runLog = log; U.planSel = null;
+    U.save(); U.runLog = log; U.planSel = null; U.planWeekTab = 0;
     const seasonRep = log.find((r) => r.season);
     if (seasonRep) U.modal = U.seasonHtml(seasonRep.season);
     if (S.human.careerOver) { U.pushHof(S.human.epilogue); U.modal = `<h2>引退</h2>${U.epilogueHtml()}<button data-close>閉じる</button>`; }
