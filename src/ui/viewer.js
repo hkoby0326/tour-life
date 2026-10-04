@@ -159,7 +159,7 @@
       $("v-mom").innerHTML = Array.from({ length: 10 }, (_, k) => { const w = recent[recent.length - 10 + k]; return `<i class="${w === undefined ? "" : w === hi ? "me" : "op"}"></i>`; }).join("");
       const sit = m.done ? null : m.situation();
       let banner = "";
-      if (m.done) banner = `<b class="${m.winnerIdx === hi ? "green" : "red"}" style="font-size:15px">${m.winnerIdx === hi ? "勝利" : "敗戦"}</b> ${esc(m.result.score)}`;
+      if (m.done) banner = `<b class="${m.winnerIdx === hi ? "green" : "red"}" style="font-size:15px">${m.winnerIdx === hi ? "勝利" : "敗戦"}</b> ${esc(m.result.score)} <span class="muted small">試合時間 ${U.minutesText(m.result.minutes)}</span>`;
       else if (m.betweenSets) banner = `<b class="gold">セット間</b>（セット ${m.setsWon[hi]}-${m.setsWon[1 - hi]}）`;
       else if (sit.matchPoint >= 0) banner = `<b class="${sit.matchPoint === hi ? "green" : "red"}">マッチポイント ${sit.matchPoint === hi ? "自分" : "相手"}</b>`;
       else if (sit.setPoint >= 0) banner = `<b class="gold">セットポイント ${sit.setPoint === hi ? "自分" : "相手"}</b>`;
@@ -168,7 +168,7 @@
       $("v-banner").innerHTML = banner;
       const st = m.stats;
       const row = (l, a, b) => `<tr><td class="muted">${l}</td><td class="num"><b>${a}</b></td><td class="num">${b}</td></tr>`;
-      $("v-stats").innerHTML = `<tr><th></th><th class="num">自分</th><th class="num">相手</th></tr>${row("総ポイント", st.points[hi], st.points[1 - hi])}${row("エース", st.aces[hi], st.aces[1 - hi])}${row("ダブルフォルト", st.dfs[hi], st.dfs[1 - hi])}${row("ウィナー", st.winners[hi], st.winners[1 - hi])}${row("アンフォーストエラー", st.ues[hi], st.ues[1 - hi])}${row("ブレーク", st.breaks[hi], st.breaks[1 - hi])}${row("被BPセーブ", `${st.bpSaved[hi]}/${st.bpFaced[hi]}`, `${st.bpSaved[1 - hi]}/${st.bpFaced[1 - hi]}`)}${row("最長ラリー", st.longest + "打", "")}${row("プラン", TL.PLANS[m.plans[hi]].label, TL.PLANS[m.plans[1 - hi]].label)}`;
+      $("v-stats").innerHTML = `<tr><th></th><th class="num">自分</th><th class="num">相手</th></tr>${U.matchStatsRows(st, hi, TL.PLANS[m.plans[hi]].label, TL.PLANS[m.plans[1 - hi]].label)}`;
       $("v-plan-label").textContent = `セット ${m.setsWon[hi]}-${m.setsWon[1 - hi]}`;
       while (feedSeen < m.events.length) { const e = m.events[feedSeen++]; if (U.sfx && timer) { if (e.kind === "set") U.sfx("set"); else if (e.kind === "break" && e.who === hi) U.sfx("brk"); } feed.unshift(`<div class="${e.kind === "set" || e.kind === "end" ? "gold" : e.kind === "break" ? (e.who === hi ? "green" : "red") : e.kind === "pt" ? (e.who === hi ? "" : "muted") : "muted"}">${esc(e.text)}</div>`); }
       $("v-feed").innerHTML = feed.slice(0, 16).join("");

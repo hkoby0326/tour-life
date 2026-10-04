@@ -228,9 +228,9 @@
       return `第${s.set}セット <b class="score">${mine}-${theirs}${s.tb ? `(${Math.min(s.tb[0], s.tb[1])})` : ""}</b> ${s.who === hi ? '<span class="green">取る</span>' : '<span class="red">落とす</span>'}${bk ? ` <span class="muted">— ${bk}</span>` : ""}${pl}`;
     }).join("<br>");
     const st = m.stats;
-    const bp = st ? `BP: 自分 ${st.breaks[hi]}ブレーク / 被BP ${st.bpSaved[hi]}/${st.bpFaced[hi]} セーブ ・ 総ポイント ${st.points[hi]}-${st.points[1 - hi]}` : "";
-    return `<div class="match ${m.won ? "win" : "loss"}"><div class="row between"><span><b>${esc(m.round)}</b> vs <span data-player="${m.oppId}" class="accent">${esc(m.opp)}</span> <span class="muted">(${m.oppRank || "ランク外"})</span>${m.oppId === S.rivalId ? ' <span class="pill rival">宿敵</span>' : ""}</span><span class="score ${m.won ? "green" : "red"}">${m.won ? "WIN" : "LOSS"} ${esc(m.score)}</span></div>
-      ${m.wo ? "" : `<details><summary class="small">詳細</summary><div class="log">${lines}<br>${bp}</div></details>`}</div>`;
+    const table = st ? `<table class="small statsbox" style="margin-top:6px"><tr><th></th><th class="num">自分</th><th class="num">${esc(m.opp)}</th></tr>${U.matchStatsRows(st, hi)}</table>` : "";
+    return `<div class="match ${m.won ? "win" : "loss"}"><div class="row between"><span><b>${esc(m.round)}</b> vs <span data-player="${m.oppId}" class="accent">${esc(m.opp)}</span> <span class="muted">(${m.oppRank || "ランク外"})</span>${m.oppId === S.rivalId ? ' <span class="pill rival">宿敵</span>' : ""}</span><span class="score ${m.won ? "green" : "red"}">${m.won ? "WIN" : "LOSS"} ${esc(m.score)}${m.minutes ? ` <span class="muted small">${U.minutesText(m.minutes)}</span>` : ""}</span></div>
+      ${m.wo ? "" : `<details><summary class="small">詳細・スタッツ</summary><div class="log">${lines}</div>${table}</details>`}</div>`;
   }
   function deltaHtml(delta, limit) {
     const e = Object.entries(delta || {}).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
@@ -303,6 +303,26 @@
   };
 
   // ---------- 選手 ----------
+  // Career / season statistics panel (ATP-style: serve, return, pressure points, records)
+  U.careerStatsHtml = function (me) {
+    const S = U.S;
+    const season = window._statsSeason;
+    const v = W.csView(season ? W.statsFromHistory(S, S.year) : me.cs || W.initCs());
+    const P = (x) => (x === null || x === undefined ? "-" : x + "%");
+    const wl = (a) => `${a[0]}-${a[1]}`;
+    const rec = (a) => (a[0] + a[1] ? `${wl(a)} <span class="muted">(${Math.round((100 * a[0]) / (a[0] + a[1]))}%)</span>` : "-");
+    const r = (l, x) => `<div class="srow"><span class="muted">${l}</span><b>${x}</b></div>`;
+    const matches = season ? S.history.matches.filter((m) => m.year === S.year && !m.wo) : S.history.matches.filter((m) => !m.wo);
+    const bySurf = {}; const byCat = {};
+    for (const m of matches) { bySurf[m.surface] = bySurf[m.surface] || [0, 0]; bySurf[m.surface][m.won ? 0 : 1]++; const c = /^(GS|1000|500|250|Finals)/.test(m.cat) ? m.cat : "下部"; byCat[c] = byCat[c] || [0, 0]; byCat[c][m.won ? 0 : 1]++; }
+    return `<div class="row between" style="margin-top:12px"><h3 style="margin:0">スタッツ <span class="muted small">${v.m}試合</span></h3><div class="seg small"><button class="${season ? "" : "on"}" data-stats-season="0">通算</button><button class="${season ? "on" : ""}" data-stats-season="1">今季</button></div></div>
+      <div class="statgrid">
+        <div><h4>サーブ</h4>${r("エース / 試合", v.acesPm === null ? "-" : v.acesPm)}${r("ダブルフォルト / 試合", v.dfsPm === null ? "-" : v.dfsPm)}${r("1stサーブ率", P(v.firstIn))}${r("1stサーブ得点率", P(v.firstWon))}${r("2ndサーブ得点率", P(v.secondWon))}${r("サービスゲーム獲得率", P(v.hold))}${r("ブレークポイントセーブ", `${P(v.bpSaved)} <span class="muted">(${v.bpSavedN}/${v.bpFaced})</span>`)}</div>
+        <div><h4>リターン</h4>${r("リターンポイント獲得率", P(v.retWon))}${r("ブレークポイント変換率", `${P(v.bpConv)} <span class="muted">(${v.bpConvN}/${v.bpChances})</span>`)}${r("リターンゲーム獲得率", P(v.retGamesWon))}${r("総ポイント獲得率", P(v.totalPts))}${r("ネットポイント", `${P(v.net)} <span class="muted">(${v.netPts})</span>`)}${r("ウィナー / UE", `${v.winners} / ${v.ues}`)}</div>
+        <div><h4>勝負所</h4>${r("タイブレーク", rec(v.tb))}${r("最終セット", rec(v.dec))}${r("第1セットを落として逆転", v.cb[0])}${r("第1セットを取って逆転負け", v.cb[1])}${r("マッチポイントセーブ", v.mpSaved)}${r("最長連勝", v.bestStreak + (v.streak >= 3 ? ` <span class="green">(現在${v.streak}連勝)</span>` : ""))}</div>
+        <div><h4>戦績</h4>${r("対Top10", rec(v.top10))}${r("決勝", rec(v.finals))}${Object.entries(bySurf).map(([k, a]) => r(D.SURFACES[k], rec(a))).join("")}${Object.entries(byCat).map(([k, a]) => r(k, rec(a))).join("")}${r("平均試合時間", U.minutesText(v.avgMin))}${r("最長試合", v.longestVs ? `${U.minutesText(v.longestMin)} <span class="muted">${esc(v.longestVs)}</span>` : "-")}${r("最長ラリー", v.longest ? v.longest + "打" : "-")}</div>
+      </div>`;
+  };
   U.screens.player = function (c) {
     const S = U.S, me = human(), rv = rival();
     const ovr = TL.overall(me);
@@ -327,10 +347,12 @@
       <p class="small muted">同年代（±1歳）${peers.length + 1}人中 ${me.rank ? myPos + "番目" : "ランク外"}。成長は年齢・隠れた天井・練習の重点・コーチで決まる。</p></div>
       <div><div class="panel"><div class="row between"><h2 style="margin:0;border:0;padding:0">キャリア</h2><button class="small" data-share>キャリアカードを保存</button></div><div class="kpi" style="margin-top:10px"><div class="card"><div class="v">${me.stats.bestRank || "-"}</div><div class="l">最高ランク</div></div><div class="card"><div class="v">${me.stats.titles}</div><div class="l">タイトル</div></div><div class="card"><div class="v">${me.stats.gs}</div><div class="l">GS</div></div><div class="card"><div class="v">${me.stats.m1000}</div><div class="l">1000</div></div><div class="card"><div class="v">${me.stats.weeksNo1}</div><div class="l">No.1週</div></div><div class="card"><div class="v">${money(me.stats.prize)}</div><div class="l">生涯賞金</div></div></div>
         <p class="small">対Top10: ${top10.filter((m) => m.won).length}勝${top10.filter((m) => !m.won).length}敗 ・ 通算 ${me.stats.w}勝${me.stats.l}敗 ・ 怪我 ${(S.human.injuryLog || []).length}回</p>
+        ${U.careerStatsHtml(me)}
         <h3 style="margin-top:10px">年表</h3>${U.timelineHtml(S.history.seasons, curSeason)}
         <h3 style="margin-top:10px">トロフィーケース</h3>${U.trophyCase(titles)}</div>
       ${rv ? `<div class="panel"><h2>宿敵</h2><div class="identity" data-player="${rv.id}">${U.avatar(rv)}<div><div class="name">${esc(rv.name)}</div><div class="sub">${W.age(S, rv)}歳 ・ ${rv.retired ? "引退" : rv.rank ? rv.rank + "位" : "ランク外"} ・ 最高${rv.stats.bestRank || "-"}位 ・ タイトル${rv.stats.titles}</div></div></div><p style="margin-top:8px">対戦成績 <b>${h2h.filter((m) => m.won).length}勝${h2h.filter((m) => !m.won).length}敗</b></p>${h2h.slice(-5).reverse().map((m) => `<div class="small ${m.won ? "green" : "red"}">${cal(m.year)} ${esc(m.tour)} ${esc(m.round)} ${m.won ? "WIN" : "LOSS"} ${esc(m.score)}</div>`).join("")}</div>` : ""}</div></div>`;
     U.bindPlayerLinks(c);
+    c.querySelectorAll("[data-stats-season]").forEach((b) => b.onclick = () => { window._statsSeason = b.dataset.statsSeason === "1"; U.render(); });
     const sh = c.querySelector("[data-share]"); if (sh) sh.onclick = () => U.shareCard();
   };
 

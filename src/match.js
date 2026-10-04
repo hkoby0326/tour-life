@@ -59,7 +59,8 @@
       sets: [], setsWon: [0, 0], games: [0, 0], pts: [0, 0], tb: false, tbPts: null, tbCount: 0, server: 0, setNo: 0,
       plans: [(opts.plans && opts.plans[0]) || "balanced", (opts.plans && opts.plans[1]) || "balanced"],
       rules: [(opts.rules && opts.rules[0]) || "none", (opts.rules && opts.rules[1]) || "none"],
-      stats: { points: [0, 0], breaks: [0, 0], bpSaved: [0, 0], bpFaced: [0, 0], aces: [0, 0], dfs: [0, 0], winners: [0, 0], ues: [0, 0], mpSaved: [0, 0], longest: 0 },
+      stats: { points: [0, 0], breaks: [0, 0], bpSaved: [0, 0], bpFaced: [0, 0], aces: [0, 0], dfs: [0, 0], winners: [0, 0], ues: [0, 0], mpSaved: [0, 0], longest: 0,
+        svPts: [0, 0], svWon: [0, 0], firstIn: [0, 0], firstWon: [0, 0], secondWon: [0, 0], netPts: [0, 0], netWon: [0, 0], svGames: [0, 0], holds: [0, 0], tbW: [0, 0], tbL: [0, 0] },
       log: [], events: [], betweenSets: false, last: null,
     };
     const base = [components(pa, surface), components(pb, surface)];
@@ -96,18 +97,29 @@
       if (w === sv) {
         if (r < aceP) { kind = "ace"; rally = 1; }
         else if (r < aceP + 0.16) { kind = "serve_winner"; rally = 2; }
-        else { rally = 3 + Math.floor(-Math.log(1 - rng.next()) * (S.rally - 2.2)); kind = rng.next() < 0.5 ? "winner" : "error"; shot = SHOTS[Math.floor(rng.next() * (S.netW > 0.12 ? 5 : 4))]; }
+        else { rally = 3 + Math.floor(-Math.log(1 - rng.next()) * (S.rally - 2.2)); kind = rng.next() < 0.5 ? "winner" : "error"; shot = rng.next() < S.netW * (kind === "winner" ? 2.0 : 0.85) ? "net" : rng.next() < 0.55 ? "fh" : "bh"; }
       } else {
         if (r < dfP) { kind = "double_fault"; rally = 0; }
         else if (r < dfP + 0.14) { kind = "return_winner"; rally = 2; }
-        else { rally = 3 + Math.floor(-Math.log(1 - rng.next()) * (S.rally - 2.2)); kind = rng.next() < 0.5 ? "winner" : "error"; shot = SHOTS[Math.floor(rng.next() * (S.netW > 0.12 ? 5 : 4))]; }
+        else { rally = 3 + Math.floor(-Math.log(1 - rng.next()) * (S.rally - 2.2)); kind = rng.next() < 0.5 ? "winner" : "error"; shot = rng.next() < S.netW * (kind === "winner" ? 2.0 : 0.85) ? "net" : rng.next() < 0.55 ? "fh" : "bh"; }
       }
       if (kind === "ace") M.stats.aces[sv]++;
       if (kind === "double_fault") M.stats.dfs[sv]++;
       if (kind === "winner" || kind === "serve_winner" || kind === "return_winner") M.stats.winners[w]++;
       if (kind === "error") M.stats.ues[1 - w]++;
       if (rally > M.stats.longest) M.stats.longest = rally;
-      return { kind, rally, shot };
+      // first or second serve (cosmetic, one draw per point): tour average ~62% first serves in,
+      // ~73% of first-serve points and ~53% of second-serve points won by the server
+      const u = rng.next();
+      let first;
+      if (kind === "double_fault") first = false;
+      else if (kind === "ace") first = u < 0.9;
+      else { const b = clamp(0.58 + (A.serve - 60) * 0.002, 0.54, 0.66); first = u < (w === sv ? b + 0.1 : b - 0.08); }
+      M.stats.svPts[sv]++;
+      if (w === sv) M.stats.svWon[sv]++;
+      if (first) { M.stats.firstIn[sv]++; if (w === sv) M.stats.firstWon[sv]++; } else if (w === sv) M.stats.secondWon[sv]++;
+      if (shot === "net") { const atNet = kind === "winner" ? w : 1 - w; M.stats.netPts[atNet]++; if (atNet === w) M.stats.netWon[atNet]++; }
+      return { kind, rally, shot, first };
     }
     const SHOT_LABEL = { fh: "フォア", bh: "バック", net: "ボレー" };
     function kindText(ev, who) {
@@ -176,7 +188,11 @@
         const a = w === 0 ? s[0] : s[1], b = w === 0 ? s[1] : s[0];
         return a + "-" + b + (s[2] ? "(" + Math.min(s[2][0], s[2][1]) + ")" : "");
       }).join(" ");
-      M.result = { winnerIdx: w, sets: M.sets, score, log: M.log, stats: M.stats, names: M.names, fatigueMult: fatigueMultArr, games: M.sets.reduce((n, s) => n + s[0] + s[1], 0) };
+      const totalPts = M.stats.points[0] + M.stats.points[1];
+      // rough broadcast-style duration: ~40s per point plus changeovers and set breaks
+      const minutes = Math.round(totalPts * 0.62 + M.sets.length * 4 + 2);
+      const firstSetWinner = M.sets[0][0] > M.sets[0][1] ? 0 : 1;
+      M.result = { winnerIdx: w, sets: M.sets, score, log: M.log, stats: M.stats, names: M.names, fatigueMult: fatigueMultArr, games: M.sets.reduce((n, s) => n + s[0] + s[1], 0), minutes, deciding: M.sets.length === setsToWin * 2 - 1, comeback: firstSetWinner !== w };
       M.events.push({ kind: "end", who: w, text: `${M.names[w]} が ${score} で勝利` });
     }
     M.step = function () {
@@ -203,6 +219,7 @@
           const tbArr = M.tbPts.slice();
           M.server = 1 - M.server;
           ev.gameWon = w; ev.tiebreakWon = w;
+          M.stats.tbW[w]++; M.stats.tbL[1 - w]++;
           M.last = ev;
           endSet(M.games.slice(), tbArr);
           return ev;
@@ -225,6 +242,8 @@
       if (gameOver) {
         M.games[w]++;
         ev.gameWon = w;
+        M.stats.svGames[sv]++;
+        if (w === sv) M.stats.holds[sv]++;
         if (w !== sv) {
           M.stats.breaks[w]++;
           momentum[w] = 0.012; momentum[1 - w] = 0;

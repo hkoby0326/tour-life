@@ -5,7 +5,7 @@
     W, D, S: null, tab: "home", modal: null, planSel: null, planWeekT: -1, runLog: null, running: false, screens: {},
     SAVE_KEY: "tourlife_v1", SETTINGS_KEY: "tourlife_settings_v1", HOF_KEY: "tourlife_hof_v1",
     DEFAULT_SETTINGS: { stopTournament: true, stopMilestone: true, stopInjury: true, stopSeason: true, stopEvent: true, stopRival: true, watchEnabled: true, watchGs: true, watchFinals: true, watchRival: true, watchTop10: true, watchTitle: true, watchSpeed: 300, sound: false, volume: 0.5, reduceMotion: false, slot: 1, introSeen: false, hints: {}, hintsAlways: false },
-    VERSION: "v1.3",
+    VERSION: "v1.4",
   });
   U.ATTRL = W.ATTR_LABEL;
   U.ORIGINS = {
@@ -183,6 +183,26 @@
     <button class="primary bigbtn" data-close>キャリアを始める</button></div>`;
 
   // ---------- shared html ----------
+  // Broadcast-style match stats table rows for a finished (or live) match, from the human's side `hi`.
+  U.matchStatsRows = function (st, hi, planA, planB) {
+    const j = 1 - hi;
+    const g = (k, i) => (st[k] ? st[k][i] : null);
+    const pct = (a, b) => (b ? Math.round((100 * a) / b) + "%" : "-");
+    const row = (l, a, b) => `<tr><td class="muted">${l}</td><td class="num"><b>${a}</b></td><td class="num">${b}</td></tr>`;
+    const first = (i) => (g("svPts", i) === null ? ["-", "-", "-"] : [pct(g("firstIn", i), g("svPts", i)), pct(g("firstWon", i), g("firstIn", i)), pct(g("secondWon", i), g("svPts", i) - g("firstIn", i))]);
+    const fa = first(hi), fb = first(j);
+    let rows = row("総ポイント", st.points[hi], st.points[j]) + row("エース", st.aces[hi], st.aces[j]) + row("ダブルフォルト", st.dfs[hi], st.dfs[j]);
+    rows += row("1stサーブ率", fa[0], fb[0]) + row("1st得点率", fa[1], fb[1]) + row("2nd得点率", fa[2], fb[2]);
+    rows += row("サービスゲーム", g("svGames", hi) === null ? "-" : `${g("holds", hi)}/${g("svGames", hi)}`, g("svGames", j) === null ? "-" : `${g("holds", j)}/${g("svGames", j)}`);
+    rows += row("ブレーク/BP", `${st.breaks[hi]}/${st.bpFaced[j]}`, `${st.breaks[j]}/${st.bpFaced[hi]}`) + row("被BPセーブ", `${st.bpSaved[hi]}/${st.bpFaced[hi]}`, `${st.bpSaved[j]}/${st.bpFaced[j]}`);
+    rows += row("ウィナー", st.winners[hi], st.winners[j]) + row("アンフォーストエラー", st.ues[hi], st.ues[j]);
+    if (g("netPts", hi) !== null) rows += row("ネットポイント", `${g("netWon", hi)}/${g("netPts", hi)}`, `${g("netWon", j)}/${g("netPts", j)}`);
+    if (st.tbW) rows += row("タイブレーク", `${st.tbW[hi]}-${st.tbL[hi]}`, `${st.tbW[j]}-${st.tbL[j]}`);
+    rows += row("最長ラリー", st.longest + "打", "");
+    if (planA) rows += row("プラン", planA, planB);
+    return rows;
+  };
+  U.minutesText = (m) => (m ? `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}` : "-");
   U.playerModalHtml = function (id) {
     const S = U.S, { esc, flag, money, cal } = U, ATTRL = U.ATTRL;
     const p = W.playerInfo(S, id);
@@ -195,6 +215,7 @@
       <div class="grid2" style="margin-top:10px"><div>${U.radarSvg(p.attrs, p.isHuman ? null : U.human().attrs)}<div class="small muted" style="text-align:center;margin:-4px 0 8px"><span class="accent">■</span> ${esc(p.name)}${p.isHuman ? "" : ' <span class="red">■</span> 自分'}</div>${attrs}<h3 style="margin-top:8px">サーフェス</h3>${surf}</div>
       <div><div class="kpi"><div class="card"><div class="v">${p.titles}</div><div class="l">タイトル</div></div><div class="card"><div class="v">${p.gs}</div><div class="l">GS</div></div><div class="card"><div class="v">${p.w}-${p.l}</div><div class="l">通算</div></div><div class="card"><div class="v">${money(p.prize)}</div><div class="l">賞金</div></div></div>
         <p class="small">直近52週 ${p.tournaments52}大会 ・ 疲労 ${p.fatigue} ・ 同年代${p.peers}人中${p.peerPos ? p.peerPos + "番目" : "-"}</p>
+        ${p.cs && p.cs.m ? `<p class="small"><b>通算スタッツ（${p.cs.m}試合）:</b> エース ${p.cs.acesPm}/試合 ・ DF ${p.cs.dfsPm}/試合 ・ 1st得点率 ${p.cs.firstWon === null ? "-" : p.cs.firstWon + "%"} ・ サービスキープ ${p.cs.hold === null ? "-" : p.cs.hold + "%"} ・ BP変換 ${p.cs.bpConv === null ? "-" : p.cs.bpConv + "%"} ・ TB ${p.cs.tb[0]}-${p.cs.tb[1]} ・ 最終セット ${p.cs.dec[0]}-${p.cs.dec[1]} ・ 対Top10 ${p.cs.top10[0]}-${p.cs.top10[1]}</p>` : ""}
         ${p.isHuman ? "" : `<p class="small"><b>対戦成績:</b> ${p.h2hW}勝${p.h2hL}敗${p.h2h.length ? "<br>" + p.h2h.map((m) => `<span class="${m.won ? "green" : "red"}">${cal(m.year)} ${esc(m.tour)} ${esc(m.round)} ${m.won ? "W" : "L"} ${esc(m.score)}</span>`).join("<br>") : ""}</p>`}
         ${p.titleList.length ? `<p class="small"><b class="gold">最近のタイトル:</b> ${p.titleList.map((t) => `${cal(t.year)} ${esc(t.name)}`).join("、")}</p>` : ""}</div></div>
       <p class="small muted">${p.isHuman ? "自分の能力値は正確。伸びしろ（天井）は見えない。" : p.scout && p.scout.exact ? "アナリストが精査したレポート（正確な値）。伸びしろは分からない。" : `スカウティングによる推定値（誤差 ±${p.scout ? p.scout.amp : 6}）。対戦を重ねると精度が上がり、アナリストを雇うと正確になる。`}</p>

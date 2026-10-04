@@ -197,6 +197,12 @@ tr.flash-me td{animation:flashMe .45s} tr.flash-op td{animation:flashOp .45s}
 .tplan.on{border-color:var(--gold);background:rgba(251,191,36,.15)}
 #v-stats td,#v-stats th{padding:3px 6px;font-size:12px}
 
+/* career stats (ATP-style) */
+.statgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px 18px;margin-top:8px}
+.statgrid h4{margin:0 0 4px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--accent)}
+.srow{display:flex;justify-content:space-between;gap:8px;padding:3px 0;border-bottom:1px solid var(--line);font-size:12.5px}
+.srow b{font-variant-numeric:tabular-nums;text-align:right}
+.statsbox td,.statsbox th{padding:3px 6px}
 /* onboarding hints, intro, rivalry heat, save slots, motion preference */
 .hintcard{display:flex;gap:10px;align-items:flex-start;background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.35);border-radius:var(--r-md);padding:10px 36px 10px 12px;margin-bottom:12px;position:relative;animation:pop .2s}
 .hintcard .ic{font-size:18px;line-height:1.2}
@@ -282,6 +288,7 @@ tr.flash-me td{animation:flashMe .45s} tr.flash-op td{animation:flashOp .45s}
   .viewer .scoreboard td{padding:7px 8px;font-size:14px}
   .viewer .feed{max-height:120px}
   .tgrid{grid-template-columns:repeat(2,1fr)}
+  .statgrid{grid-template-columns:1fr}
   .tplan{padding:8px}
   /* planner: one week at a time with a week switcher */
   .wtabs{display:flex;gap:4px;background:var(--panel3);border-radius:10px;padding:3px;margin-bottom:10px}

@@ -101,6 +101,49 @@
     return clamp(ovr + hr, ovr, 97);
   }
 
+  // ---------- career statistics (broadcast-style) ----------
+  const CS_KEYS = ["m", "w", "aces", "dfs", "svPts", "svWon", "firstIn", "firstWon", "secondWon", "retPts", "retWon", "bpFaced", "bpSaved", "bpChances", "bpConv", "svGames", "holds", "retGames", "breaks", "tbW", "tbL", "decW", "decL", "cbW", "cbL", "top10W", "top10L", "finalW", "finalL", "netPts", "netWon", "winners", "ues", "mpSaved", "minutes", "streak", "bestStreak", "longest", "longestMin"];
+  function initCs() { const o = {}; for (const k of CS_KEYS) o[k] = 0; o.longestVs = null; return o; }
+  // add one finished match to a player's running totals
+  function addCs(cs, st, i, won, opp, oppRank, label, res) {
+    const j = 1 - i, g = (k) => (st[k] ? st[k][i] : 0), go = (k) => (st[k] ? st[k][j] : 0);
+    cs.m++; if (won) cs.w++;
+    cs.aces += g("aces"); cs.dfs += g("dfs");
+    cs.svPts += g("svPts"); cs.svWon += g("svWon"); cs.firstIn += g("firstIn"); cs.firstWon += g("firstWon"); cs.secondWon += g("secondWon");
+    cs.retPts += go("svPts"); cs.retWon += go("svPts") - go("svWon");
+    cs.bpFaced += g("bpFaced"); cs.bpSaved += g("bpSaved"); cs.bpChances += go("bpFaced"); cs.bpConv += g("breaks");
+    cs.svGames += g("svGames"); cs.holds += g("holds"); cs.retGames += go("svGames"); cs.breaks += g("breaks");
+    cs.tbW += g("tbW"); cs.tbL += g("tbL");
+    if (res && res.deciding) { if (won) cs.decW++; else cs.decL++; }
+    if (res && res.comeback) { if (won) cs.cbW++; else cs.cbL++; }
+    if (oppRank && oppRank <= 10) { if (won) cs.top10W++; else cs.top10L++; }
+    if (label === "決勝" || label === "優勝") { if (won) cs.finalW++; else cs.finalL++; }
+    cs.netPts += g("netPts"); cs.netWon += g("netWon"); cs.winners += g("winners"); cs.ues += g("ues"); cs.mpSaved += g("mpSaved");
+    const min = res && res.minutes ? res.minutes : 0;
+    cs.minutes += min;
+    if (min > cs.longestMin) { cs.longestMin = min; cs.longestVs = opp ? `${opp.name} ${res.score}` : null; }
+    if (st.longest > cs.longest) cs.longest = st.longest;
+    cs.streak = won ? Math.max(1, cs.streak + 1) : 0;
+    if (cs.streak > cs.bestStreak) cs.bestStreak = cs.streak;
+  }
+  // derived percentages for display; null when there is no sample
+  function csView(cs) {
+    const pct = (a, b) => (b ? Math.round((1000 * a) / b) / 10 : null);
+    return {
+      m: cs.m, w: cs.w, l: cs.m - cs.w, acesPm: cs.m ? Math.round((10 * cs.aces) / cs.m) / 10 : null, dfsPm: cs.m ? Math.round((10 * cs.dfs) / cs.m) / 10 : null,
+      firstIn: pct(cs.firstIn, cs.svPts), firstWon: pct(cs.firstWon, cs.firstIn), secondWon: pct(cs.secondWon, cs.svPts - cs.firstIn), svWon: pct(cs.svWon, cs.svPts),
+      hold: pct(cs.holds, cs.svGames), bpSaved: pct(cs.bpSaved, cs.bpFaced), bpFaced: cs.bpFaced, bpSavedN: cs.bpSaved,
+      retWon: pct(cs.retWon, cs.retPts), bpConv: pct(cs.bpConv, cs.bpChances), bpChances: cs.bpChances, bpConvN: cs.bpConv, retGamesWon: pct(cs.breaks, cs.retGames),
+      totalPts: pct(cs.svWon + cs.retWon, cs.svPts + cs.retPts), tb: [cs.tbW, cs.tbL], dec: [cs.decW, cs.decL], cb: [cs.cbW, cs.cbL], top10: [cs.top10W, cs.top10L], finals: [cs.finalW, cs.finalL],
+      net: pct(cs.netWon, cs.netPts), netPts: cs.netPts, winners: cs.winners, ues: cs.ues, mpSaved: cs.mpSaved, avgMin: cs.m ? Math.round(cs.minutes / cs.m) : null, longestMin: cs.longestMin, longestVs: cs.longestVs, longest: cs.longest, bestStreak: cs.bestStreak, streak: cs.streak,
+    };
+  }
+  // season/career aggregate for the human from match history (full stats are kept for every human match)
+  function statsFromHistory(state, year) {
+    const cs = initCs();
+    for (const m of state.history.matches) { if (m.wo || !m.stats) continue; if (year && m.year !== year) continue; addCs(cs, m.stats, m.humanIdx, m.won, { name: m.opp }, m.oppRank, m.round, { minutes: m.minutes || 0, deciding: !!m.deciding, comeback: !!m.comeback, score: m.score }); }
+    return cs;
+  }
   function newPlayer(state, spec) {
     const rng = state.rng;
     const style = spec.style || rng.pick(["all", "server", "grinder", "clay", "grass", "mental", "baseline", "big", "counter", "all", "baseline"]);
@@ -109,7 +152,7 @@
       id: state.nextId++, name: spec.name, country: spec.country, birthYear: spec.birthYear, hand: rng.chance(0.14) ? "L" : "R",
       style, attrs: built.attrs, surf: built.surf, potential: 0, growth: spec.growth || (rng.chance(0.2) ? "late" : rng.chance(0.25) ? "early" : "normal"),
       fatigue: rng.int(0, 20), injury: null, blockedUntil: -1, results: [], points: 0, rank: null, prevRank: null,
-      isHuman: !!spec.isHuman, real: !!spec.real, retired: false, consec: 0,
+      isHuman: !!spec.isHuman, real: !!spec.real, retired: false, consec: 0, cs: initCs(),
       stats: { w: 0, l: 0, titles: 0, prize: 0, gs: 0, m1000: 0, weeksNo1: 0, weeksTop10: 0, bestRank: null, seasons: [] },
     };
     const a = age(state, p);
@@ -746,6 +789,9 @@
   function afterMatch(state, w, l, res, T, label) {
     const rng = state.rng;
     w.stats.w++; l.stats.l++;
+    if (!w.cs) w.cs = initCs(); if (!l.cs) l.cs = initCs();
+    addCs(w.cs, res.stats, res.winnerIdx, true, l, l.rank, label, res);
+    addCs(l.cs, res.stats, 1 - res.winnerIdx, false, w, w.rank, label, res);
     const sets = res.sets.length;
     for (const p of [w, l]) {
       const i = p === w ? res.winnerIdx : 1 - res.winnerIdx;
@@ -767,7 +813,7 @@
     }
     if (w.isHuman || l.isHuman) {
       const h = w.isHuman ? w : l, o = w.isHuman ? l : w;
-      state.history.matches.push({ t: state.t, year: state.year, week: state.week, tour: T.name, cat: T.def.short, surface: T.surface, round: label, opp: o.name, oppRank: o.rank, oppId: o.id, won: w.isHuman, score: res.score, log: res.log, stats: res.stats, humanIdx: res.names[0] === h.name ? 0 : 1 });
+      state.history.matches.push({ t: state.t, year: state.year, week: state.week, tour: T.name, cat: T.def.short, surface: T.surface, round: label, opp: o.name, oppRank: o.rank, oppId: o.id, won: w.isHuman, score: res.score, log: res.log, stats: res.stats, humanIdx: res.names[0] === h.name ? 0 : 1, minutes: res.minutes, deciding: !!res.deciding, comeback: !!res.comeback });
       if (state.history.matches.length > 400) state.history.matches.splice(0, state.history.matches.length - 400);
     }
     if (T.def.tier >= 8 && (w.rank || 9999) > (l.rank || 9999) + 40 && (l.rank || 9999) <= 20) {
@@ -1474,7 +1520,7 @@
       attrs, surf, w: p.stats.w, l: p.stats.l, titles: p.stats.titles, gs: p.stats.gs, m1000: p.stats.m1000, prize: p.stats.prize, injury: p.injury, fatigue: Math.round(p.fatigue), retired: p.retired,
       isHuman: p.isHuman, isRival: !!p.isRival, real: p.real, h2hW: h2h.filter((m) => m.won).length, h2hL: h2h.filter((m) => !m.won).length, h2h: h2h.slice(-6).reverse(),
       titleList: titles.slice(-8).reverse(), tournaments52: new Set(seasonRes.map((r) => r.t)).size, peers: peers.length,
-      peerPos: p.rank ? peers.filter((x) => x.rank < p.rank).length + 1 : null, growth: p.growth };
+      peerPos: p.rank ? peers.filter((x) => x.rank < p.rank).length + 1 : null, growth: p.growth, cs: csView(p.cs || initCs()) };
   }
 
   // Keep in-memory numbers identical to what the save stores (2 decimals), so a reload is bit-for-bit the same.
@@ -1508,6 +1554,7 @@
     Object.assign(H, { coach: H.coach || null, physio: !!H.physio, coachOffers: H.coachOffers || [], plan: H.plan || "balanced", switchRule: H.switchRule || "none", event: H.event || null, lastEventT: H.lastEventT === undefined ? -99 : H.lastEventT, forceRest: !!H.forceRest, riskWeek: H.riskWeek === undefined ? -1 : H.riskWeek, sponsor2: H.sponsor2 || { weekly: 0, until: 0 }, pressureUntil: H.pressureUntil === undefined ? -1 : H.pressureUntil, attrHist: H.attrHist || [], seasonStartAttrs: H.seasonStartAttrs || null, exhibitionYear: H.exhibitionYear || 0 });
     s.cutoffs = s.cutoffs || {};
     if (!DIFFICULTY[s.config.difficulty]) s.config.difficulty = "normal";
+    for (const p of s.players) if (!p.cs) p.cs = p.isHuman ? statsFromHistory(s) : initCs();
     H.rivalry = H.rivalry || { heat: 25, log: [], flags: {}, lastCross: -99 };
     H.rivalry.flags = H.rivalry.flags || {};
     if (H.rivalAhead === undefined) H.rivalAhead = null;
@@ -1522,5 +1569,5 @@
     return s;
   }
 
-  TL.World = { DIFFICULTY, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
+  TL.World = { DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
 })(typeof globalThis !== "undefined" ? globalThis : window);
