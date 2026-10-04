@@ -40,6 +40,8 @@ const { chromium } = require("playwright");
   await page.click('[data-run="4"]');
   await settle();
   await page.screenshot({ path: shots + "/02_report.png", fullPage: true });
+  const bb = await page.$("[data-bracket]");
+  if (bb) { await bb.click(); await page.waitForSelector(".bracket"); await page.waitForTimeout(400); await page.screenshot({ path: shots + "/13_bracket.png", fullPage: false }); const mine = await page.$("[data-bmine]"); if (mine) { await mine.click(); await page.waitForSelector(".bracket"); } await page.click("[data-close]"); console.log("bracket opened"); }
   async function closeModals() {
     for (let i = 0; i < 5; i++) {
       const choice = await page.$("[data-choice]");

@@ -105,6 +105,7 @@ details[open] summary::before{content:"▾ "}
 .origin:hover{transform:translateY(-2px);border-color:var(--line2)}
 .origin h3{color:var(--text);text-transform:none;letter-spacing:0;font-size:15px}
 .modal-bg{position:fixed;inset:0;background:rgba(3,6,10,.72);display:flex;align-items:center;justify-content:center;z-index:50;padding:16px;animation:fade .15s}
+.modal.wide{max-width:1180px}
 .modal{background:var(--panel);border:1px solid var(--line2);border-radius:var(--r-lg);max-width:760px;width:100%;max-height:92vh;overflow:auto;padding:22px;box-shadow:var(--shadow);animation:pop .18s}
 @keyframes fade{from{opacity:0}to{opacity:1}}
 @keyframes pop{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}
@@ -173,3 +174,36 @@ tr.flash-me td{animation:flashMe .45s} tr.flash-op td{animation:flashOp .45s}
 .rivalcard{display:flex;gap:12px;align-items:center}
 .rivalcard .vs{font-size:22px;font-weight:900;color:var(--muted)}
 .bigbtn{padding:12px 20px;font-size:15px}
+/* viewer: court + tactics (UI-4) */
+.vgrid{display:grid;grid-template-columns:1.4fr 1fr;gap:12px;align-items:start}
+.court-wrap{position:relative;background:#0b1220;border:1px solid var(--line2);border-radius:var(--r-md);padding:8px}
+.court{width:100%;display:block}
+.court.hard{background:#1e3a8a}.court.clay{background:#9a3412}.court.grass{background:#166534}.court.indoor{background:#3b0764}
+.court .cline{stroke:rgba(255,255,255,.75);stroke-width:1.2}
+.court .net{stroke:#fff;stroke-width:2;stroke-dasharray:3 2}
+.court .pl.me{fill:var(--accent)}.court .pl.op{fill:var(--red)}
+.court .ball{fill:#d9f99d;filter:drop-shadow(0 0 3px #d9f99d);transition:cx .12s linear,cy .12s linear}
+.court-wrap .kind{position:absolute;left:12px;bottom:10px;font-size:13px;font-weight:700;background:rgba(0,0,0,.55);padding:3px 8px;border-radius:6px;min-height:20px}
+.court-wrap .kind.me{border-left:3px solid var(--accent)}.court-wrap .kind.op{border-left:3px solid var(--red)}
+.tactics{background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.4);border-radius:var(--r-md);padding:10px;margin:8px 0}
+.tgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.tplan{display:flex;flex-direction:column;gap:2px;align-items:flex-start;text-align:left;padding:8px 10px}
+.tplan.on{border-color:var(--gold);background:rgba(251,191,36,.15)}
+#v-stats td,#v-stats th{padding:3px 6px;font-size:12px}
+@media(max-width:800px){.vgrid{grid-template-columns:1fr}.tgrid{grid-template-columns:repeat(2,1fr)}}
+/* bracket (UI-5) */
+.bracket{display:flex;gap:18px;overflow-x:auto;padding:6px 2px 12px}
+.bround{display:flex;flex-direction:column;justify-content:space-around;flex:none;width:210px;gap:6px}
+.bround h4{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;text-align:center;margin-bottom:4px}
+.bm{background:var(--panel2);border:1px solid var(--line);border-radius:8px;font-size:12px;overflow:hidden}
+.bm .bp{display:flex;align-items:center;gap:6px;padding:4px 8px;border-bottom:1px solid var(--line)}
+.bm .bp:last-child{border-bottom:0}
+.bm .bp.w{font-weight:700}
+.bm .bp.l{color:var(--muted)}
+.bm .bp .sd{width:16px;color:var(--dim);font-size:10px;text-align:right}
+.bm .bp .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bm .bp .sc{color:var(--muted);font-size:11px;white-space:nowrap}
+.bm.mine{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.bm .bp.hum{color:var(--accent)}
+.bm .bp.riv{color:var(--red)}
+.bm.bye{opacity:.5}

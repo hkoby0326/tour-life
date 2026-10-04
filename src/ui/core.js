@@ -5,7 +5,7 @@
     W, D, S: null, tab: "home", modal: null, planSel: null, planWeekT: -1, runLog: null, running: false, screens: {},
     SAVE_KEY: "tourlife_v1", SETTINGS_KEY: "tourlife_settings_v1", HOF_KEY: "tourlife_hof_v1",
     DEFAULT_SETTINGS: { stopTournament: true, stopMilestone: true, stopInjury: true, stopSeason: true, stopEvent: true, stopRival: true, watchEnabled: true, watchGs: true, watchFinals: true, watchRival: true, watchTop10: true, watchTitle: true, watchSpeed: 300 },
-    VERSION: "v0.8",
+    VERSION: "v0.9",
   });
   U.ATTRL = W.ATTR_LABEL;
   U.ORIGINS = {
@@ -88,12 +88,13 @@
         ${rv ? `<div class="stat"><span class="l">Rival</span><span class="v small" data-player="${rv.id}" style="cursor:pointer">${esc(rv.name)}</span><span class="d">${rv.rank ? rv.rank + "位" : rv.retired ? "引退" : "ランク外"}</span></div>` : ""}
         ${inj}
       </header><div class="content" id="content"></div></div></div>
-      ${U.modal ? `<div class="modal-bg" id="modalbg"><div class="modal">${U.modal}</div></div>` : ""}`;
+      ${U.modal ? `<div class="modal-bg" id="modalbg"><div class="modal ${U.modalWide ? "wide" : ""}">${U.modal}</div></div>` : ""}`;
+    if (!U.modal) U.modalWide = false;
     app.querySelectorAll(".rail .nav").forEach((b) => b.onclick = () => { U.tab = b.dataset.tab; U.render(); });
     const bg = document.getElementById("modalbg");
     if (bg) {
       bg.onclick = (e) => { if (e.target === bg && !S.human.event) { U.modal = null; U.render(); } };
-      app.querySelectorAll("[data-close]").forEach((b) => b.onclick = () => { U.modal = null; U.render(); });
+      app.querySelectorAll("[data-close]").forEach((b) => b.onclick = () => { U.modal = null; U.modalWide = false; U.render(); });
       app.querySelectorAll("[data-confirm-new]").forEach((b) => b.onclick = U.resetGame);
       app.querySelectorAll("[data-confirm-fire]").forEach((b) => b.onclick = () => { W.fireCoach(S); U.save(); U.modal = null; U.render(); });
       app.querySelectorAll("[data-confirm-retire]").forEach((b) => b.onclick = () => { W.retireNow(S); U.save(); U.pushHof(S.human.epilogue); U.modal = `<h2>引退</h2>${U.epilogueHtml()}<button data-close>閉じる</button>`; U.tab = "plan"; U.render(); });

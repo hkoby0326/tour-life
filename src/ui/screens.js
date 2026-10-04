@@ -176,6 +176,42 @@
     const sa = c.querySelector("[data-showall]"); if (sa) sa.onclick = () => { window._showAllTours = !showAll; U.render(); };
   };
 
+  // ---------- ドロー表（UI-5） ----------
+  U.bracketHtml = function (entry, onlyMine) {
+    const S = U.S;
+    const b = entry.bracket;
+    const byId = new Map(b.slots.filter(Boolean).map((p) => [p.id, p]));
+    const humanSlot = b.slots.findIndex((p) => p && p.human);
+    // "my section": the 16-player section (first 4 rounds) that contains the human
+    const secSize = Math.min(16, b.N);
+    const secStart = humanSlot >= 0 ? Math.floor(humanSlot / secSize) * secSize : 0;
+    const T = D.CATS[entry.cat];
+    const winners = (S.history.tournaments || []).filter((t) => t.name === entry.name && t.year < entry.year).slice(-5).reverse();
+    const cols = b.rounds.map((rd, r) => {
+      const perRound = b.N / Math.pow(2, r + 1);
+      let ms = rd.matches.map((mm, i) => ({ mm, i }));
+      if (onlyMine && r < Math.log2(secSize)) { const from = secStart / Math.pow(2, r + 1), cnt = secSize / Math.pow(2, r + 1); ms = ms.slice(from, from + cnt); }
+      const cells = ms.map(({ mm }) => {
+        if (!mm) return `<div class="bm bye"><div class="bp muted">—</div></div>`;
+        const pa = byId.get(mm.a), pb = byId.get(mm.b);
+        const side = (p, isW) => p ? `<div class="bp ${isW ? "w" : "l"} ${p.human ? "hum" : ""} ${p.rival ? "riv" : ""}"><span class="sd">${p.seed || ""}</span><span class="nm" data-player="${p.id}">${flag(p.country)} ${esc(p.name)}</span><span class="sc">${isW ? esc(mm.score === "bye" ? "bye" : mm.score) : ""}</span></div>` : `<div class="bp l"><span class="sd"></span><span class="nm muted">bye</span></div>`;
+        const mine = (pa && pa.human) || (pb && pb.human);
+        return `<div class="bm ${mine ? "mine" : ""} ${mm.score === "bye" ? "bye" : ""}">${side(pa, mm.w === mm.a)}${side(pb, mm.w === mm.b)}</div>`;
+      }).join("");
+      return `<div class="bround"><h4>${esc(rd.label)}</h4>${cells}</div>`;
+    }).join("");
+    return `<div class="row between"><div><div class="small muted" style="text-transform:uppercase;letter-spacing:.08em">Draw ・ ${cal(entry.year)}年 第${entry.week}週</div><div style="font-size:18px;font-weight:800">${flag(entry.country)} ${esc(entry.name)} <span class="pill tier${T.tier}">${T.short}</span> <span class="pill ${entry.surface}">${D.SURFACES[entry.surface]}</span></div><div class="small muted">${b.N}ドロー ・ ${b.seeds}シード ・ 優勝 ${T.points[0]}pt / ${money(T.prize[0])}${winners.length ? ` ・ 過去の優勝: ${winners.map((w) => `${cal(w.year)} ${esc(w.winner)}`).join("、")}` : ""}</div></div>
+      <div class="row"><button class="small ${onlyMine ? "primary" : ""}" data-bmine="${onlyMine ? 0 : 1}">${onlyMine ? "全体を表示" : "自分の山だけ"}</button><button class="small" data-close>閉じる</button></div></div>
+      <div class="bracket" style="margin-top:10px">${cols}</div>`;
+  };
+  U.openBracket = function (entry, onlyMine) {
+    U.modal = U.bracketHtml(entry, onlyMine);
+    U.modalWide = true;
+    U.render();
+    const btn = document.querySelector("[data-bmine]");
+    if (btn) btn.onclick = () => U.openBracket(entry, btn.dataset.bmine === "1");
+  };
+
   // ---------- 結果 ----------
   function matchHtml(m) {
     const S = U.S;
@@ -200,7 +236,7 @@
   function weekCard(rep, open) {
     const r = rep.human;
     let body = "";
-    if (r) body += `<div class="row between"><b>${flag(r.T.country)} ${esc(r.T.name)}</b> ${catPill(r.T)} <span class="${r.humanRound === "優勝" ? "gold" : ""}"><b>${esc(r.humanRound || "")}</b> ${r.humanPts ? `+${r.humanPts}pt` : ""} ${r.humanPrize ? money(r.humanPrize) : ""}</span></div>${r.qualified ? '<p class="small green">予選を突破して本戦へ</p>' : ""}${r.humanMatches.map(matchHtml).join("")}${r.isFinals ? `<p class="small">グループA: ${r.groups[0].join(" / ")}<br>グループB: ${r.groups[1].join(" / ")}</p>` : ""}<p class="small muted">優勝: <span data-player="${r.winner.id}">${esc(r.winner.name)}</span>${r.finalist ? ` d. <span data-player="${r.finalist.id}">${esc(r.finalist.name)}</span> ${esc(r.finalScore)}` : ""}</p>`;
+    if (r) body += `<div class="row between"><b>${flag(r.T.country)} ${esc(r.T.name)}</b> ${catPill(r.T)} <span class="${r.humanRound === "優勝" ? "gold" : ""}"><b>${esc(r.humanRound || "")}</b> ${r.humanPts ? `+${r.humanPts}pt` : ""} ${r.humanPrize ? money(r.humanPrize) : ""}</span></div>${r.qualified ? '<p class="small green">予選を突破して本戦へ</p>' : ""}${r.humanMatches.map(matchHtml).join("")}${r.isFinals ? `<p class="small">グループA: ${r.groups[0].join(" / ")}<br>グループB: ${r.groups[1].join(" / ")}</p>` : ""}<p class="small muted">優勝: <span data-player="${r.winner.id}">${esc(r.winner.name)}</span>${r.finalist ? ` d. <span data-player="${r.finalist.id}">${esc(r.finalist.name)}</span> ${esc(r.finalScore)}` : ""}${r.bracket ? ` <button class="small" data-bracket="${rep.year}:${rep.week}:${esc(r.T.name)}">ドロー表</button>` : ""}</p>`;
     for (const it of rep.items) body += `<p class="small ${it.type === "milestone" ? "gold" : it.type === "rejected" ? "red" : ""}">${esc(it.text)}</p>`;
     body += `<p class="small"><b>成長:</b> ${deltaHtml(rep.attrDelta, 6)}${Object.keys(rep.surfDelta || {}).length ? ` ・ ${deltaHtml(rep.surfDelta, 2)}` : ""}</p>`;
     const others = rep.tournaments.filter((t) => !t.humanPlayed && t.T.def.tier >= 7);
@@ -229,6 +265,7 @@
     c.innerHTML = html;
     c.querySelector("[data-go]").onclick = () => { U.tab = "plan"; U.render(); };
     U.bindPlayerLinks(c);
+    c.querySelectorAll("[data-bracket]").forEach((b) => b.onclick = () => { const [y, w, name] = b.dataset.bracket.split(":"); const e = (S.history.brackets || []).find((x) => x.year === parseInt(y, 10) && x.week === parseInt(w, 10)) || (S.history.brackets || []).find((x) => x.name === name); if (e) U.openBracket(e, e.bracket.N > 32); });
     const sb = c.querySelector("[data-season]"); if (sb) sb.onclick = () => { U.modal = U.seasonHtml(last.season); U.render(); };
     const eb = c.querySelector("[data-ev]"); if (eb) eb.onclick = () => { if (S.human.event) { U.modal = U.eventHtml(S.human.event); U.render(); } };
   };
@@ -301,7 +338,7 @@
     c.innerHTML = `<div class="grid2"><div><div class="panel"><h2>コーチ</h2>${H.coach ? coachCard(H.coach) : '<p class="muted">コーチなし。契約は1〜3年で、途中解除は残り期間の半額が違約金。相性は雇って8週で分かり、練習効果に ±20% 前後効く。満了時に更新交渉。</p>'}
       <h3 style="margin-top:12px">候補（シーズンごとに入れ替わる）</h3>${H.coachOffers.length ? H.coachOffers.map(coachCard).join("") : '<p class="muted small">候補なし</p>'}</div>
       <div class="panel"><h2>サポートスタッフ <span class="muted small">最高ランキングで枠が増える ・ 週 ${money(W.staffCost(S))}</span></h2>${Object.entries(W.ROLES).map(([k, r]) => { const on = !!W.staffOf(S)[k]; const ok = W.roleUnlocked(S, k); return `<div class="card" style="${ok ? "" : "opacity:.55"}"><div class="row between"><div><b>${r.label}</b> <span class="muted small">${money(r.cost)}/週</span><div class="small muted">${r.desc}</div>${ok ? "" : `<div class="small gold">解放条件: 最高ランキング ${r.unlock}位以内（現在 ${human().stats.bestRank || "-"}位）</div>`}</div><label><input type="checkbox" data-staff="${k}" ${on ? "checked" : ""} ${ok ? "" : "disabled"}> 雇う</label></div></div>`; }).join("")}
-      <p class="small muted">トップ選手の帯同チームは5〜6人が普通。全部雇うと週 ${money(Object.values(W.ROLES).reduce((s, r) => s + r.cost, 0))} ＋コーチ。</p></div></div>
+      <p class="small muted">帯同人数 <b>${W.partySize(S)}人</b>（移動費は人数倍）。エージェントとアナリストは帯同しない。全部雇うと週 ${money(Object.values(W.ROLES).reduce((s, r) => s + r.cost, 0))} ＋コーチ。</p></div></div>
       <div><div class="panel"><h2>試合プラン</h2><p class="small muted">試合前に決める方針。全試合に適用され、セット間の切替ルールで試合中に変わる。</p>
         <table><tr><th>プラン</th><th>効果</th></tr><tr><td>バランス</td><td class="small">標準</td></tr><tr><td>攻撃的</td><td class="small">サーブ ＋2.5、ラリー ＋1、リターン −2。タイブレーク勝負になりやすい</td></tr><tr><td>守備的</td><td class="small">リターン ＋2.5、ラリー ＋0.5、サーブ −2。試合が長くなり疲労 ×1.1</td></tr><tr><td>体力温存</td><td class="small">全体 −1.5、疲労 ×0.7。格下相手や連戦向け</td></tr></table>
         <div class="row" style="margin-top:8px"><label class="small">現在: <select data-plan>${Object.entries(TL.PLANS).map(([k, p]) => `<option value="${k}" ${H.plan === k ? "selected" : ""}>${p.label}</option>`).join("")}</select></label>
@@ -328,8 +365,8 @@
     const seasonsHist = S.history.seasons.filter((z) => z.finance);
     c.innerHTML = `<div class="kpi"><div class="card"><div class="v ${H.money < 0 ? "red" : ""}">${money(H.money)}</div><div class="l">残高</div></div><div class="card"><div class="v">${money(sum(season, "net"))}</div><div class="l">今季の純増減</div></div><div class="card"><div class="v ${weekly < 0 ? "red" : "green"}">${(weekly >= 0 ? "+" : "") + money(weekly)}</div><div class="l">大会に出ない週の収支</div></div><div class="card"><div class="v">${money(me.stats.prize)}</div><div class="l">生涯賞金</div></div></div>
       <div class="grid2"><div class="panel"><h2>今季の内訳 <span class="muted small">${cal()}年 ${season.length}週</span></h2><table>${rows(season)}</table>
-        <p class="small muted" style="margin-top:8px">固定収入: ${H.sponsorUntil > S.t ? `支援 ${money(H.sponsorWeekly)}/週（残り${H.sponsorUntil - S.t}週）` : "支援なし"}${H.sponsor2 && H.sponsor2.until > S.t ? ` ・ 契約 ${money(H.sponsor2.weekly)}/週（残り${H.sponsor2.until - S.t}週）` : ""} ・ ランキング連動 ${last ? money(last.rankSponsor) : "-"}/週<br>固定支出: 基本 $0.5k/週${H.coach ? ` ・ コーチ ${money(H.coach.cost)}/週` : ""}${W.staffCost(S) ? ` ・ スタッフ ${money(W.staffCost(S))}/週` : ""}<br>移動費: 同地域 $0.6k、地域外 $2.5k（1000以上は＋$0.5k）。残高が負だと地域外へ移動できない</p></div>
-      <div class="panel"><h2>残高の推移 <span class="muted small">直近${led.length}週</span></h2>${sparkline(led.map((e) => e.balance), "var(--green)")}<h3 style="margin-top:12px">直近12週</h3><table><tr><th>週</th><th class="num">賞金</th><th class="num">スポンサー</th><th class="num">経費</th><th class="num">移動</th><th class="num">純増減</th><th class="num">残高</th></tr>${led.slice(-12).reverse().map((e) => `<tr><td>${cal(e.year)} W${e.week}</td><td class="num">${e.prize ? money(e.prize) : "-"}</td><td class="num">${money(e.support + e.rankSponsor + e.extra)}</td><td class="num">${money(e.base + e.team)}</td><td class="num">${e.travel ? money(e.travel) : "-"}</td><td class="num ${e.net < 0 ? "red" : "green"}">${money(e.net)}</td><td class="num">${money(e.balance)}</td></tr>`).join("")}</table></div></div>
+        <p class="small muted" style="margin-top:8px">固定収入: ${H.sponsorUntil > S.t ? `支援 ${money(H.sponsorWeekly)}/週（残り${H.sponsorUntil - S.t}週）` : "支援なし"}${H.sponsor2 && H.sponsor2.until > S.t ? ` ・ 契約 ${money(H.sponsor2.weekly)}/週（残り${H.sponsor2.until - S.t}週）` : ""} ・ ランキング連動 ${last ? money(last.rankSponsor) : "-"}/週<br>固定支出: 基本 $0.5k/週${H.coach ? ` ・ コーチ ${money(H.coach.cost)}/週` : ""}${W.staffCost(S) ? ` ・ スタッフ ${money(W.staffCost(S))}/週` : ""}<br>移動費: 拠点（${D.COUNTRIES[me.country].name}。連戦中は前の大会地）からの距離で決まり、1人あたり $0.75k ＋ $0.25k/1,000km（2週大会は＋$0.4k）。帯同は現在 <b>${W.partySize(S)}人</b>（本人＋コーチ＋帯同スタッフ）なので人数倍。残高が負だと2,500km超の移動ができない</p></div>
+      <div class="panel"><h2>残高の推移 <span class="muted small">直近${led.length}週</span></h2>${sparkline(led.map((e) => e.balance), "var(--green)")}<h3 style="margin-top:12px">直近12週</h3><table><tr><th>週</th><th class="num">賞金</th><th class="num">スポンサー</th><th class="num">経費</th><th class="num">移動</th><th class="num">純増減</th><th class="num">残高</th></tr>${led.slice(-12).reverse().map((e) => `<tr><td>${cal(e.year)} W${e.week}</td><td class="num">${e.prize ? money(e.prize) : "-"}</td><td class="num">${money(e.support + e.rankSponsor + e.extra)}</td><td class="num">${money(e.base + e.team)}</td><td class="num" title="${e.travelInfo ? `${D.COUNTRIES[e.travelInfo.from].name}→${D.COUNTRIES[e.travelInfo.to].name} ${e.travelInfo.dist}km ×${e.travelInfo.party}人` : ""}">${e.travel ? money(e.travel) + (e.travelInfo ? `<span class="tiny muted"> ${e.travelInfo.dist}km×${e.travelInfo.party}</span>` : "") : "-"}</td><td class="num ${e.net < 0 ? "red" : "green"}">${money(e.net)}</td><td class="num">${money(e.balance)}</td></tr>`).join("")}</table></div></div>
       ${seasonsHist.length ? `<div class="panel"><h2>シーズン別</h2><table><tr><th>年</th><th class="num">賞金</th><th class="num">支援・スポンサー</th><th class="num">チーム</th><th class="num">移動</th><th class="num">年末残高</th></tr>${seasonsHist.slice().reverse().map((z) => `<tr><td>${z.calendarYear}</td><td class="num">${money(z.finance.prize)}</td><td class="num">${money(z.finance.support + z.finance.rankSponsor + z.finance.extra)}</td><td class="num">${money(z.finance.team)}</td><td class="num">${money(z.finance.travel)}</td><td class="num ${z.money < 0 ? "red" : ""}">${money(z.money)}</td></tr>`).join("")}</table></div>` : ""}`;
   };
 
@@ -340,8 +377,10 @@
     const matches = S.history.matches.slice().reverse().slice(0, 60);
     c.innerHTML = `<div class="panel"><h2>シーズン履歴</h2>${seasons.length ? `<table><tr><th>年</th><th class="num">年齢</th><th class="num">年末</th><th class="num">成績</th><th class="num">勝</th><th class="num">賞金</th><th>優勝</th></tr>${seasons.map((z) => `<tr><td>${z.calendarYear}</td><td class="num">${z.age}</td><td class="num">${z.rank || "-"}</td><td class="num">${z.w}-${z.l}</td><td class="num">${z.titles.length}</td><td class="num">${money(z.prize)}</td><td class="small">${z.titles.map(esc).join("、")}</td></tr>`).join("")}</table>` : '<div class="empty">まだシーズンを終えていない。</div>'}</div>
       <div class="panel"><h2>最近の試合</h2>${matches.map((m) => `<div class="match ${m.won ? "win" : "loss"} small"><span class="muted">${cal(m.year)} W${m.week}</span> ${esc(m.tour)} <span class="pill">${esc(m.cat)}</span> ${esc(m.round)} vs <span data-player="${m.oppId}" class="accent">${esc(m.opp)}</span>(${m.oppRank || "-"}) <span class="score ${m.won ? "green" : "red"}">${m.won ? "W" : "L"} ${esc(m.score)}</span></div>`).join("") || '<div class="empty">まだ試合がない。</div>'}</div>
+      ${(S.history.brackets || []).length ? `<div class="panel"><h2>最近のドロー</h2><div class="row">${S.history.brackets.slice().reverse().map((e, i) => `<button class="small" data-br="${S.history.brackets.length - 1 - i}">${flag(e.country)} ${esc(e.name)} ${cal(e.year)}</button>`).join("")}</div></div>` : ""}
       <div class="panel"><h2>ニュース</h2><ul class="news small">${S.history.news.slice().reverse().slice(0, 40).map((n) => `<li><span class="muted">${cal(n.year)} W${n.week}</span> ${esc(n.text)}</li>`).join("")}</ul></div>`;
     U.bindPlayerLinks(c);
+    c.querySelectorAll("[data-br]").forEach((b) => b.onclick = () => { const e = S.history.brackets[parseInt(b.dataset.br, 10)]; U.openBracket(e, e.bracket.N > 32); });
   };
 
   // ---------- 設定 ----------

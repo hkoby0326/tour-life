@@ -201,11 +201,11 @@
   };
   // Support staff unlocks as the career progresses (best ranking so far).
   const ROLES = {
-    physio: { label: "フィジオ", unlock: 400, cost: 0.5, desc: "怪我確率 ×0.7、疲労回復 ＋5/週" },
-    fitness: { label: "フィジカルトレーナー", unlock: 150, cost: 0.8, desc: "身体系の練習効果 ×1.3、疲労回復 ＋4/週、怪我確率 ×0.85" },
-    hitting: { label: "ヒッティングパートナー", unlock: 100, cost: 0.6, desc: "練習効果 ＋15%、試合経験値 ＋10%" },
-    agent: { label: "エージェント", unlock: 80, cost: 1.5, desc: "スポンサー収入 ×1.3、ATP250/500のアピアランスフィー（トップ50以上）、ホームWC確率 ↑" },
-    analyst: { label: "アナリスト", unlock: 40, cost: 1.2, desc: "格上との対戦でサーブ・リターン ＋1（対戦データ分析）" },
+    physio: { label: "フィジオ", unlock: 400, cost: 0.8, travels: true, desc: "怪我確率 ×0.7、疲労回復 ＋5/週。帯同（移動費がかかる）" },
+    fitness: { label: "フィジカルトレーナー", unlock: 150, cost: 1.2, travels: true, desc: "身体系の練習効果 ×1.3、疲労回復 ＋4/週、怪我確率 ×0.85。帯同" },
+    hitting: { label: "ヒッティングパートナー", unlock: 100, cost: 0.8, travels: true, desc: "練習効果 ＋15%、試合経験値 ＋10%。帯同" },
+    agent: { label: "エージェント", unlock: 80, cost: 1.5, travels: false, desc: "スポンサー収入 ×1.3、ATP250/500のアピアランスフィー（トップ50以上）、ホームWC確率 ↑。帯同しない" },
+    analyst: { label: "アナリスト", unlock: 40, cost: 1.5, travels: false, desc: "格上との対戦でサーブ・リターン ＋1（対戦データ分析）。帯同しない" },
   };
   function staffOf(state) {
     const H = state.human;
@@ -247,7 +247,9 @@
       const years = rng.chance(0.3) ? 1 : rng.chance(0.6) ? 2 : 3;
       // compatibility is hidden until 8 weeks into the contract; it scales every training gain
       const compat = clamp(Math.round(rng.gauss(0.05, 0.12) * 100) / 100, -0.2, 0.3);
-      offers.push({ name: randomName(rng, c), country: c, type, quality, cost: Math.round((0.4 + 0.5 * quality) * 10) / 10, years, compat, age: rng.int(32, 58) });
+      // weekly salary: journeyman ~$0.9k, established ~$2.5k, elite ~$6.5k (top coaches earn $300-500k a year)
+      const baseCost = { 1: 0.9, 2: 2.5, 3: 6.5 }[quality];
+      offers.push({ name: randomName(rng, c), country: c, type, quality, cost: Math.round(baseCost * (0.85 + rng.next() * 0.35) * 10) / 10, years, compat, age: rng.int(32, 58) });
     }
     return offers;
   }
@@ -489,7 +491,7 @@
     const home = T.country === h.country;
     const D0 = directCut(T);
     if (T.cat === "FINALS") return { code: r <= 8 ? "direct" : "none", label: r <= 8 ? "出場権あり" : "上位8名のみ" };
-    if (state.human.money < 0 && T.region !== state.human.lastRegion && state.human.lastRegion) return { code: "money", label: "資金不足（地域外へ移動できない）" };
+    if (state.human.money < 0 && distKm(state.human.loc || h.country, T.country) > 2500) return { code: "money", label: "資金不足（長距離の移動ができない）" };
     if (T.def.tier <= 5) {
       const c = lowerCut(T);
       if (r <= 50) return { code: "none", label: "トップ50はツアー大会のみ（出場しない）" };
@@ -615,16 +617,20 @@
     const placements = new Map();
     const hadBye = new Set();
     const matches = [];
+    const capture = !opts.qualifying && entrants.some((p) => p.isHuman);
+    const bracket = capture ? { N, seeds: seedsN, slots: slots.map((p) => (p ? { id: p.id, name: p.name, rank: p.rank, country: p.country, seed: entrants.indexOf(p) < seedsN ? entrants.indexOf(p) + 1 : 0, human: !!p.isHuman, rival: !!p.isRival } : null)), rounds: [] } : null;
     let cur = slots;
     let r = 0;
     const totalRounds = Math.log2(N);
     while (cur.length > 1) {
       const next = [];
       const label = opts.qualifying ? (r === totalRounds - 1 ? "予選最終ラウンド" : `予選${r + 1}回戦`) : roundLabel(cur.length);
+      const roundRec = bracket ? [] : null;
+      if (bracket) bracket.rounds.push({ label, matches: roundRec });
       for (let i = 0; i < cur.length; i += 2) {
         const a = cur[i], b = cur[i + 1];
-        if (a === null && b === null) { next.push(null); continue; }
-        if (a === null || b === null) { const w = a || b; hadBye.add(w.id); next.push(w); continue; }
+        if (a === null && b === null) { next.push(null); if (roundRec) roundRec.push(null); continue; }
+        if (a === null || b === null) { const w = a || b; hadBye.add(w.id); next.push(w); if (roundRec) roundRec.push({ a: a ? a.id : null, b: b ? b.id : null, w: w.id, score: "bye" }); continue; }
         // injured during this event -> withdraws (walkover)
         const wo = a.injury && a.injuredAt === state.t ? a : b.injury && b.injuredAt === state.t ? b : null;
         if (wo) {
@@ -633,11 +639,13 @@
           matches.push({ round: label, roundIdx: r, a, b, w, res: { winnerIdx: w === a ? 0 : 1, sets: [], score: "W/O（" + wo.name + " 棄権）", log: [], stats: null, names: [a.name, b.name] }, wo: true });
           if (wo.isHuman || w.isHuman) state.history.matches.push({ t: state.t, year: state.year, week: state.week, tour: T.name, cat: T.def.short, surface: T.surface, round: label, opp: (wo.isHuman ? w : wo).name, oppRank: (wo.isHuman ? w : wo).rank, oppId: (wo.isHuman ? w : wo).id, won: w.isHuman, score: wo.isHuman ? "棄権" : "W/O", log: [], stats: null, humanIdx: a.isHuman ? 0 : 1, wo: true });
           if (T.def.tier >= 8 || wo.isHuman || wo.isRival) news(state, `${T.name} ${label}: ${wo.name} が ${wo.injury.label} で棄権`);
+          if (roundRec) roundRec.push({ a: a.id, b: b.id, w: w.id, score: "W/O" });
           next.push(w);
           continue;
         }
         const res = yield* playOne(state, T, a, b, label, !!opts.qualifying);
         const w = res.winnerIdx === 0 ? a : b, l = res.winnerIdx === 0 ? b : a;
+        if (roundRec) roundRec.push({ a: a.id, b: b.id, w: w.id, score: res.score });
         afterMatch(state, w, l, res, T, label);
         placements.set(l.id, { roundIdx: r, bye: hadBye.has(l.id), won: false, firstMatch: !placements.has(l.id) });
         matches.push({ round: label, roundIdx: r, a, b, w, res });
@@ -648,7 +656,7 @@
     }
     const winner = cur[0];
     placements.set(winner.id, { roundIdx: r, bye: hadBye.has(winner.id), won: true });
-    return { placements, winner, matches, rounds: r, N };
+    return { placements, winner, matches, rounds: r, N, bracket };
   }
 
   function matchOpts(state, a, b) {
@@ -794,6 +802,12 @@
     }
     for (const p of qualEntrants) if (!qualifiers.includes(p)) p.consec++;
     report.winner = res.winner;
+    if (res.bracket) {
+      report.bracket = res.bracket;
+      state.history.brackets = state.history.brackets || [];
+      state.history.brackets.push({ year: state.year, week: state.week, name: T.name, cat: T.cat, surface: T.surface, country: T.country, bracket: res.bracket });
+      if (state.history.brackets.length > 8) state.history.brackets.shift();
+    }
     const finalMatch = res.matches[res.matches.length - 1];
     report.finalist = finalMatch ? (finalMatch.w === finalMatch.a ? finalMatch.b : finalMatch.a) : null;
     report.finalScore = finalMatch ? finalMatch.res.score : "";
@@ -1011,7 +1025,7 @@
     }
 
     // --- play tournaments ---
-    let travel = 0, fee = 0;
+    let travel = 0, fee = 0, travelInfo = null;
     for (const run of runs) {
       let rep;
       if (run.finals) rep = yield* runFinals(state, run.T, run.field);
@@ -1023,8 +1037,11 @@
         report.human = rep;
         report.stops.push("tournament");
         if (rep.humanMatches.some((m) => m.oppId === state.rivalId)) report.stops.push("rival");
-        travel = travelCost(state, run.T);
+        const tq = travelQuote(state, run.T);
+        travel = tq.cost;
+        travelInfo = tq;
         state.human.lastRegion = run.T.region;
+        state.human.loc = run.T.country;
         state.human.money -= travel;
         if (staffOf(state).agent && !run.finals && (run.T.def.tier === 6 || run.T.def.tier === 7) && h.rank && h.rank <= 50) {
           const r0 = h.rank;
@@ -1044,6 +1061,7 @@
       aiOffWeek(state, p);
     }
     if (!humanAccepted) {
+      if (act.type !== "blocked") state.human.loc = h.country; // back to the home base
       if (act.type === "train" || act.type === "camp") {
         const focus = act.focus || state.human.focus;
         state.human.focus = focus;
@@ -1088,7 +1106,7 @@
     const prize = (report.human ? report.human.humanPrize || 0 : 0) + (report.human && report.human.doubles ? report.human.doubles.prize : 0);
     const income = support + extra + rankSponsor, expense = base + team;
     state.human.money += income - expense;
-    const entry = { t: state.t, year: state.year, week: state.week, prize, support, rankSponsor, extra: extra + fee, fee, base, team, travel, net: Math.round((prize + fee + income - expense - travel) * 100) / 100, balance: Math.round(state.human.money * 10) / 10 };
+    const entry = { t: state.t, year: state.year, week: state.week, prize, support, rankSponsor, extra: extra + fee, fee, base, team, travel, travelInfo, net: Math.round((prize + fee + income - expense - travel) * 100) / 100, balance: Math.round(state.human.money * 10) / 10 };
     state.human.ledger = state.human.ledger || [];
     state.human.ledger.push(entry);
     if (state.human.ledger.length > 160) state.human.ledger.shift();
@@ -1141,9 +1159,33 @@
     return report;
   }
 
+  function distKm(c1, c2) {
+    const a = D.COUNTRIES[c1] && D.COUNTRIES[c1].ll, b = D.COUNTRIES[c2] && D.COUNTRIES[c2].ll;
+    if (!a || !b) return 3000;
+    const R = 6371, toR = Math.PI / 180;
+    const dLat = (b[0] - a[0]) * toR, dLon = (b[1] - a[1]) * toR;
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(a[0] * toR) * Math.cos(b[0] * toR) * Math.sin(dLon / 2) ** 2;
+    return Math.round(2 * R * Math.asin(Math.sqrt(h)));
+  }
+  // Travelling party: the player, the coach and the staff who travel.
+  function partySize(state) {
+    const st = staffOf(state);
+    let n = 1 + (state.human.coach ? 1 : 0);
+    for (const k of Object.keys(ROLES)) if (st[k] && ROLES[k].travels) n++;
+    return n;
+  }
+  // Travel is priced from where the player is (home, or the last event when playing back-to-back weeks)
+  // to the event, per travelling person: flights by distance plus lodging; two-week events cost an extra week of lodging.
+  function travelQuote(state, T) {
+    const home = human(state).country;
+    const from = state.human.loc || home;
+    const dist = distKm(from, T.country);
+    const party = partySize(state);
+    const perHead = 0.35 + 0.25 * (dist / 1000) + 0.4 + (T.def.weeks === 2 ? 0.4 : 0);
+    return { from, to: T.country, dist, party, cost: Math.round(perHead * party * 10) / 10 };
+  }
   function travelCost(state, T) {
-    const same = state.human.lastRegion === T.region || !state.human.lastRegion;
-    return (same ? 0.6 : 2.5) + (T.def.tier >= 8 ? 0.5 : 0);
+    return travelQuote(state, T).cost;
   }
 
   // Weeks of tournament play in the last n weeks (two-week events count double).
@@ -1376,11 +1418,12 @@
     s.cutoffs = s.cutoffs || {};
     H.ledger = H.ledger || [];
     H.rankHist = H.rankHist || [];
+    s.history.brackets = s.history.brackets || [];
     if (!H.staff) H.staff = { physio: !!H.physio, fitness: false, hitting: false, agent: false, analyst: false };
     if (!H.coachOffers.length) H.coachOffers = genCoachOffers(s);
     s.lastReport = null;
     return s;
   }
 
-  TL.World = { likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
+  TL.World = { travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
 })(typeof globalThis !== "undefined" ? globalThis : window);

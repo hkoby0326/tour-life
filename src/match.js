@@ -6,10 +6,10 @@
   const clamp = TL.clamp;
 
   const SURF = {
-    hard: { base: 0.63, k1: 0.0013, k2: 0.0010, netW: 0.10 },
-    clay: { base: 0.60, k1: 0.0010, k2: 0.0013, netW: 0.05 },
-    grass: { base: 0.66, k1: 0.0016, k2: 0.0008, netW: 0.18 },
-    indoor: { base: 0.65, k1: 0.0015, k2: 0.0009, netW: 0.12 },
+    hard: { base: 0.63, k1: 0.0013, k2: 0.0010, netW: 0.10, rally: 4.5, ace: 1.0 },
+    clay: { base: 0.60, k1: 0.0010, k2: 0.0013, netW: 0.05, rally: 6.0, ace: 0.7 },
+    grass: { base: 0.66, k1: 0.0016, k2: 0.0008, netW: 0.18, rally: 3.5, ace: 1.35 },
+    indoor: { base: 0.65, k1: 0.0015, k2: 0.0009, netW: 0.12, rally: 4.0, ace: 1.15 },
   };
   TL.MATCH_SURF = SURF;
 
@@ -59,7 +59,7 @@
       sets: [], setsWon: [0, 0], games: [0, 0], pts: [0, 0], tb: false, tbPts: null, tbCount: 0, server: 0, setNo: 0,
       plans: [(opts.plans && opts.plans[0]) || "balanced", (opts.plans && opts.plans[1]) || "balanced"],
       rules: [(opts.rules && opts.rules[0]) || "none", (opts.rules && opts.rules[1]) || "none"],
-      stats: { points: [0, 0], breaks: [0, 0], bpSaved: [0, 0], bpFaced: [0, 0], aces: [0, 0], mpSaved: [0, 0] },
+      stats: { points: [0, 0], breaks: [0, 0], bpSaved: [0, 0], bpFaced: [0, 0], aces: [0, 0], dfs: [0, 0], winners: [0, 0], ues: [0, 0], mpSaved: [0, 0], longest: 0 },
       log: [], events: [], betweenSets: false, last: null,
     };
     const base = [components(pa, surface), components(pb, surface)];
@@ -81,6 +81,44 @@
       if (ctx.big) p += (A.clutch - B.clutch) * 0.0006;
       return clamp(p, 0.25, 0.92);
     }
+    // Cosmetic point classification (how the point was won) sampled after the winner is known.
+    // Drawn for every point so headless and watched matches consume the RNG identically.
+    const SHOTS = ["fh", "bh", "fh", "bh", "net"];
+    function pointKind(sv, rt, w) {
+      const A = comp[sv];
+      const aceP = clamp((0.045 + (A.serve - 60) * 0.0025) * S.ace, 0.02, 0.2);
+      const dfP = clamp(0.035 - (A.serve - 60) * 0.0006, 0.015, 0.06);
+      const r = rng.next();
+      let kind, rally, shot = null;
+      if (w === sv) {
+        if (r < aceP) { kind = "ace"; rally = 1; }
+        else if (r < aceP + 0.16) { kind = "serve_winner"; rally = 2; }
+        else { rally = 3 + Math.floor(-Math.log(1 - rng.next()) * (S.rally - 2.2)); kind = rng.next() < 0.5 ? "winner" : "error"; shot = SHOTS[Math.floor(rng.next() * (S.netW > 0.12 ? 5 : 4))]; }
+      } else {
+        if (r < dfP) { kind = "double_fault"; rally = 0; }
+        else if (r < dfP + 0.14) { kind = "return_winner"; rally = 2; }
+        else { rally = 3 + Math.floor(-Math.log(1 - rng.next()) * (S.rally - 2.2)); kind = rng.next() < 0.5 ? "winner" : "error"; shot = SHOTS[Math.floor(rng.next() * (S.netW > 0.12 ? 5 : 4))]; }
+      }
+      if (kind === "ace") M.stats.aces[sv]++;
+      if (kind === "double_fault") M.stats.dfs[sv]++;
+      if (kind === "winner" || kind === "serve_winner" || kind === "return_winner") M.stats.winners[w]++;
+      if (kind === "error") M.stats.ues[1 - w]++;
+      if (rally > M.stats.longest) M.stats.longest = rally;
+      return { kind, rally, shot };
+    }
+    const SHOT_LABEL = { fh: "フォア", bh: "バック", net: "ボレー" };
+    function kindText(ev, who) {
+      const n = M.names[who];
+      switch (ev.kind) {
+        case "ace": return `${n} エース！`;
+        case "double_fault": return `${M.names[1 - who]} ダブルフォルト`;
+        case "serve_winner": return `${n} サービスウィナー`;
+        case "return_winner": return `${n} リターンウィナー`;
+        case "winner": return `${n} ${SHOT_LABEL[ev.shot] || ""}のウィナー（${ev.rally}打）`;
+        default: return `${M.names[1 - who]} ${SHOT_LABEL[ev.shot] || ""}のミス（${ev.rally}打）`;
+      }
+    }
+    M.kindText = kindText;
     M.setPlan = function (i, plan) {
       if (!PLANS[plan]) return;
       M.plans[i] = plan;
@@ -150,11 +188,13 @@
         if (sit.bp) M.stats.bpFaced[sv] += 0;
         const p = pPoint(sv, rt, { bp: sit.bp, big: sit.big });
         const w = rng.next() < p ? sv : rt;
+        Object.assign(ev, pointKind(sv, rt, w));
         if (sit.matchPoint === rt && w === sv) M.stats.mpSaved[sv]++;
         M.tbPts[w]++;
         M.stats.points[w]++;
         M.tbCount++;
         ev.winner = w;
+        if (doLog && (ev.kind === "ace" || ev.kind === "double_fault" || ev.rally >= 12 || sit.big)) M.events.push({ kind: "pt", who: w, text: kindText(ev, w) });
         if (M.tbPts[w] >= target && M.tbPts[w] - M.tbPts[1 - w] >= 2) {
           M.games[w]++;
           const tbArr = M.tbPts.slice();
@@ -171,11 +211,13 @@
       if (sit.bp) M.stats.bpFaced[sv]++;
       const p = pPoint(sv, rt, { bp: sit.bp });
       const w = rng.next() < p ? sv : rt;
+      Object.assign(ev, pointKind(sv, rt, w));
       M.pts[w]++;
       M.stats.points[w]++;
       if (sit.bp && w === sv) { M.stats.bpSaved[sv]++; ev.bpSaved = true; }
       if (sit.matchPoint === rt && w === sv) M.stats.mpSaved[sv]++;
       ev.winner = w;
+      if (doLog && (ev.kind === "ace" || ev.kind === "double_fault" || ev.rally >= 12 || sit.bp || sit.setPoint >= 0)) M.events.push({ kind: "pt", who: w, text: kindText(ev, w) });
       const gameOver = M.pts[w] >= 4 && M.pts[w] - M.pts[1 - w] >= 2;
       if (gameOver) {
         M.games[w]++;
