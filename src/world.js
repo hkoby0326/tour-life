@@ -566,10 +566,11 @@
   }
 
   // Is this human match worth watching live? (settings come from the UI via action.watch)
-  function isImportant(state, T, label, a, b) {
+  function isImportant(state, T, label, a, b, qualifying) {
     const w = state._watch;
     if (!w || !w.enabled) return false;
     const o = a.isHuman ? b : a;
+    if (qualifying) return (o.isRival && w.rival) || (o.rank && o.rank <= 10 && w.top10);
     if (T.cat === "FINALS" && w.finals) return true;
     if (T.def.tier === 9 && w.gs) return true;
     if (o.isRival && w.rival) return true;
@@ -579,11 +580,12 @@
     return false;
   }
   // Plays one match; yields an interactive match object when the human should watch it.
-  function* playOne(state, T, a, b, label) {
+  function* playOne(state, T, a, b, label, qualifying) {
     const rng = state.rng;
     const hum = a.isHuman || b.isHuman;
-    const mo = Object.assign({ rng, surface: T.surface, bo5: T.def.bo5, log: hum }, hum ? matchOpts(state, a, b) : {});
-    if (hum && isImportant(state, T, label, a, b)) {
+    // Grand Slam qualifying is best-of-three; only the main draw is best-of-five.
+    const mo = Object.assign({ rng, surface: T.surface, bo5: T.def.bo5 && !qualifying, log: hum }, hum ? matchOpts(state, a, b) : {});
+    if (hum && isImportant(state, T, label, a, b, qualifying)) {
       const m = TL.Match.create(a, b, mo);
       yield { type: "match", match: m, T, round: label, a, b };
       return m.result || m.finish();
@@ -615,9 +617,10 @@
     const matches = [];
     let cur = slots;
     let r = 0;
+    const totalRounds = Math.log2(N);
     while (cur.length > 1) {
       const next = [];
-      const label = roundLabel(cur.length);
+      const label = opts.qualifying ? (r === totalRounds - 1 ? "予選最終ラウンド" : `予選${r + 1}回戦`) : roundLabel(cur.length);
       for (let i = 0; i < cur.length; i += 2) {
         const a = cur[i], b = cur[i + 1];
         if (a === null && b === null) { next.push(null); continue; }
@@ -633,7 +636,7 @@
           next.push(w);
           continue;
         }
-        const res = yield* playOne(state, T, a, b, label);
+        const res = yield* playOne(state, T, a, b, label, !!opts.qualifying);
         const w = res.winnerIdx === 0 ? a : b, l = res.winnerIdx === 0 ? b : a;
         afterMatch(state, w, l, res, T, label);
         placements.set(l.id, { roundIdx: r, bye: hadBye.has(l.id), won: false, firstMatch: !placements.has(l.id) });
@@ -757,8 +760,9 @@
       const buckets = Array.from({ length: need }, () => []);
       qualEntrants.forEach((p, i) => buckets[i % need].push(p));
       for (const bucket of buckets) {
-        const res = yield* playKnockout(state, T, bucket, { drawSize: 0 });
+        const res = yield* playKnockout(state, T, bucket, { drawSize: 0, qualifying: true });
         qualifiers.push(res.winner);
+        report.humanMatches.push(...res.matches.filter((m) => m.a.isHuman || m.b.isHuman).map(describeMatch));
         for (const p of bucket) {
           if (p === res.winner) { addResult(state, p, T, def.qPts, def.qPrize || 0, "予選通過"); if (p.isHuman) report.qualified = true; continue; }
           const pl = res.placements.get(p.id);
@@ -793,7 +797,7 @@
     const finalMatch = res.matches[res.matches.length - 1];
     report.finalist = finalMatch ? (finalMatch.w === finalMatch.a ? finalMatch.b : finalMatch.a) : null;
     report.finalScore = finalMatch ? finalMatch.res.score : "";
-    report.humanMatches = res.matches.filter((m) => m.a.isHuman || m.b.isHuman).map(describeMatch);
+    report.humanMatches = report.humanMatches.concat(res.matches.filter((m) => m.a.isHuman || m.b.isHuman).map(describeMatch));
     report.semis = res.matches.filter((m) => m.round === "準決勝").map((m) => `${m.w.name} d. ${(m.w === m.a ? m.b : m.a).name} ${m.res.score}`);
     if (def.tier >= 6 || report.humanPlayed) state.history.tournaments.push({ year: state.year, week: state.week, name: T.name, cat: T.cat, short: def.short, surface: T.surface, winner: res.winner.name, winnerId: res.winner.id, finalist: report.finalist ? report.finalist.name : "", score: report.finalScore, tier: def.tier });
     if (def.tier >= 8) news(state, `${T.name}: ${res.winner.name} が優勝（決勝 ${report.finalist ? report.finalist.name : ""} に ${report.finalScore}）`);

@@ -5,7 +5,7 @@
     W, D, S: null, tab: "plan", modal: null, planSel: null, planWeekT: -1, runLog: null, running: false, screens: {},
     SAVE_KEY: "tourlife_v1", SETTINGS_KEY: "tourlife_settings_v1", HOF_KEY: "tourlife_hof_v1",
     DEFAULT_SETTINGS: { stopTournament: true, stopMilestone: true, stopInjury: true, stopSeason: true, stopEvent: true, stopRival: true, watchEnabled: true, watchGs: true, watchFinals: true, watchRival: true, watchTop10: true, watchTitle: true, watchSpeed: 300 },
-    VERSION: "v0.7",
+    VERSION: "v0.7.1",
   });
   U.ATTRL = W.ATTR_LABEL;
   U.ORIGINS = {
