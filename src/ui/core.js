@@ -5,7 +5,7 @@
     W, D, S: null, tab: "home", modal: null, planSel: null, planWeekT: -1, runLog: null, running: false, screens: {},
     SAVE_KEY: "tourlife_v1", SETTINGS_KEY: "tourlife_settings_v1", HOF_KEY: "tourlife_hof_v1",
     DEFAULT_SETTINGS: { stopTournament: true, stopMilestone: true, stopInjury: true, stopSeason: true, stopEvent: true, stopRival: true, watchEnabled: true, watchGs: true, watchFinals: true, watchRival: true, watchTop10: true, watchTitle: true, watchSpeed: 300, sound: false, volume: 0.5, reduceMotion: false, slot: 1, introSeen: false, hints: {}, hintsAlways: false },
-    VERSION: "v1.2",
+    VERSION: "v1.3",
   });
   U.ATTRL = W.ATTR_LABEL;
   U.ORIGINS = {
@@ -281,9 +281,11 @@
       <div class="panel"><h2>選手</h2><div class="row" style="gap:16px">
           <label>名前 <input id="name" value="${esc(window._name || "")}" placeholder="例: 佐藤 大和" style="width:180px"></label>
           <label>所属国 <select id="country">${D.PLAYABLE_COUNTRIES.map((c) => `<option value="${c}" ${(window._country || "JPN") === c ? "selected" : ""}>${flag(c)} ${D.COUNTRIES[c].name}</option>`).join("")}</select></label>
+          <label>難易度 <select id="diff">${Object.entries(W.DIFFICULTY).map(([k, d]) => `<option value="${k}" ${(window._diff || "normal") === k ? "selected" : ""}>${d.label}</option>`).join("")}</select></label>
           <label>怪我 <select id="inj"><option value="standard">標準</option><option value="low">低頻度</option></select></label>
           <label>シード <input id="seed" placeholder="空欄でランダム" style="width:120px"></label></div>
-        <p class="small muted" style="margin-top:8px">所属国はホーム大会のワイルドカード確率・デビスカップ・スポンサーに影響。ホームATP大会がない国は実質ハードモード。</p></div>
+        <p class="small muted" style="margin-top:8px">所属国はホーム大会のワイルドカード確率・デビスカップ・スポンサーに影響。ホームATP大会がない国は実質ハードモード。</p>
+        <p class="small muted" id="diffdesc">${Object.entries(W.DIFFICULTY).map(([k, d]) => `<b>${d.label}</b>: ${d.desc}`).join(" ／ ")}</p></div>
       <div class="panel"><h2>出自を選ぶ</h2>
       <div class="grid3">${Object.entries(U.ORIGINS).map(([k, o]) => `<div class="card origin ${sel === k ? "sel" : ""}" data-o="${k}"><div style="font-size:26px">${o.icon}</div><h3>${o.name} <span class="muted small">${o.age}歳スタート</span></h3><p class="small">${o.desc}</p><p class="small muted">難易度: ${o.diff}</p></div>`).join("")}</div>
       <p class="small muted">ポテンシャル（能力の天井）はプレイヤーには見えません。コーチのコメントと同年代との比較から推測してください。約10%で「世代の才能」を引きます。</p>
@@ -291,11 +293,11 @@
       ${[1, 2, 3].some((n) => U.slotInfo(n)) ? `<div class="panel"><h2>セーブデータ</h2>${U.slotsHtml(true)}</div>` : ""}
       ${hof.length ? `<div class="panel"><h2>殿堂ギャラリー</h2>${hof.map((e) => `<div class="card"><div class="row between"><div><b>${flag(e.country)} ${esc(e.name)}</b> <span class="muted small">${U.ORIGINS[e.origin] ? U.ORIGINS[e.origin].name : ""} ・ ${e.seasons || "-"}シーズン ・ ${e.date || ""}</span><div class="${e.hof ? "gold" : "muted"}" style="font-weight:700">「${esc(e.tag)}」${e.hof ? " 🏛 殿堂入り" : ""}</div></div><div class="small muted" style="text-align:right">最高${e.bestRank || "-"}位 ・ ${e.titles}勝（GS${e.gs}）<br>No.1 ${e.weeksNo1}週 ・ ${e.w}-${e.l} ・ ${U.money(e.prize || 0)}</div></div>${e.timeline && e.timeline.length ? `<div class="timeline" style="margin-top:8px">${e.timeline.map((z) => `<div class="yr"><div class="muted">${z.y}<br><span class="tiny">${z.age}歳</span></div><div class="r ${z.rank && z.rank <= 10 ? "top10" : z.rank && z.rank <= 50 ? "top50" : ""}">${z.rank || "-"}</div><div>${z.w}-${z.l}</div>${z.titles ? `<div class="t">🏆×${z.titles}</div>` : ""}</div>`).join("")}</div>` : ""}</div>`).join("")}</div>` : ""}
     </div>`;
-    app.querySelectorAll(".origin").forEach((el) => el.onclick = () => { window._origin = el.dataset.o; window._name = document.getElementById("name").value; window._country = document.getElementById("country").value; U.renderSetup(); });
+    app.querySelectorAll(".origin").forEach((el) => el.onclick = () => { window._origin = el.dataset.o; window._name = document.getElementById("name").value; window._country = document.getElementById("country").value; window._diff = document.getElementById("diff").value; U.renderSetup(); });
     document.getElementById("start").onclick = () => {
       const name = document.getElementById("name").value.trim() || "名無しの選手";
       const seedStr = document.getElementById("seed").value.trim();
-      U.S = W.create({ name, country: document.getElementById("country").value, origin: sel, injuryRealism: document.getElementById("inj").value, seed: seedStr ? (parseInt(seedStr, 10) || TL.RNG.hash(seedStr)) : undefined });
+      U.S = W.create({ name, country: document.getElementById("country").value, origin: sel, difficulty: document.getElementById("diff").value, injuryRealism: document.getElementById("inj").value, seed: seedStr ? (parseInt(seedStr, 10) || TL.RNG.hash(seedStr)) : undefined });
       U.save(); U.tab = "home"; U.runLog = null; U.planSel = null; U.render();
       if (!U.settings.introSeen) { U.settings.introSeen = true; U.saveSettings(); U.openModal(U.introHtml()); }
     };

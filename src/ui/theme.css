@@ -183,7 +183,12 @@ tr.flash-me td{animation:flashMe .45s} tr.flash-op td{animation:flashOp .45s}
 .court .cline{stroke:rgba(255,255,255,.75);stroke-width:1.2}
 .court .net{stroke:#fff;stroke-width:2;stroke-dasharray:3 2}
 .court .pl.me{fill:var(--accent)}.court .pl.op{fill:var(--red)}
-.court .ball{fill:#d9f99d;filter:drop-shadow(0 0 3px #d9f99d);transition:cx .12s linear,cy .12s linear}
+.court .ball{fill:#d9f99d;filter:drop-shadow(0 0 3px #d9f99d)}
+.court .ball.dead{fill:#fca5a5;filter:drop-shadow(0 0 3px #f87171)}
+.court .shadow{fill:rgba(0,0,0,.35)}
+.court .hit{fill:none;stroke:#fff;stroke-width:1.2;opacity:0}
+.court .hit.on{animation:hitring .35s ease-out}
+@keyframes hitring{0%{opacity:.9;r:5}100%{opacity:0;r:11}}
 .court-wrap .kind{position:absolute;left:12px;bottom:10px;font-size:13px;font-weight:700;background:rgba(0,0,0,.55);padding:3px 8px;border-radius:6px;min-height:20px}
 .court-wrap .kind.me{border-left:3px solid var(--accent)}.court-wrap .kind.op{border-left:3px solid var(--red)}
 .tactics{background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.4);border-radius:var(--r-md);padding:10px;margin:8px 0}

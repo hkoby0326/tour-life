@@ -34,11 +34,20 @@
   function growthAge(state, p) {
     return age(state, p) + (p.growth === "late" ? -2 : p.growth === "early" ? 2 : 0);
   }
+  // Difficulty: scales growth, the AI pool's youth development, off-court income and injury risk.
+  const DIFFICULTY = {
+    easy: { label: "やさしい", grow: 1.2, aiGrow: 0.8, income: 1.3, injury: 0.8, pot: 3, desc: "成長が速く、収入が多く、AIの若手は伸びにくい" },
+    normal: { label: "標準", grow: 1, aiGrow: 1, income: 1, injury: 1, pot: 0, desc: "100位から30位は普通に狙える。No.1は天井と運次第" },
+    hard: { label: "難しい", grow: 0.85, aiGrow: 1.2, income: 0.8, injury: 1.15, pot: -4, desc: "成長が遅く、天井が低め。AIの若手が速く伸び、収入も少ない" },
+  };
+  function diff(state) { return DIFFICULTY[state.config.difficulty] || DIFFICULTY.normal; }
+  // Age curve of development. Flatter than a pure "prodigy" curve: a player keeps developing
+  // through 22-25 (real tour peaks are 25-28), so the climb from 100 to 30 is spread over seasons.
   function ageMult(a) {
-    if (a <= 17) return 1.4;
-    if (a <= 19) return 1.3;
-    if (a <= 21) return 1.1;
-    if (a <= 23) return 0.9;
+    if (a <= 17) return 0.9;
+    if (a <= 19) return 0.9;
+    if (a <= 21) return 0.85;
+    if (a <= 23) return 0.75;
     if (a <= 25) return 0.6;
     if (a <= 27) return 0.4;
     if (a <= 29) return 0.25;
@@ -127,7 +136,7 @@
     const seed = cfg.seed || Math.floor(Math.random() * 4294967295);
     const state = {
       version: 1, seed, year: 1, week: 1, t: 0, nextId: 1, players: [], humanId: null, rivalId: null,
-      config: { name: cfg.name || "選手", country: cfg.country || "JPN", origin: cfg.origin || "grinder", injuryRealism: cfg.injuryRealism || "standard" },
+      config: { name: cfg.name || "選手", country: cfg.country || "JPN", origin: cfg.origin || "grinder", injuryRealism: cfg.injuryRealism || "standard", difficulty: DIFFICULTY[cfg.difficulty] ? cfg.difficulty : "normal" },
       rankSnaps: [], history: { tournaments: [], seasons: [], matches: [], news: [] }, lastReport: null,
       human: { money: 0, sponsorWeekly: 0, sponsorUntil: 0, wcBoostUntil: 0, lastRegion: null, focus: ["serve", "fh"], careerOver: false, epilogue: null, milestones: {},
         coach: null, physio: false, coachOffers: [], plan: "balanced", switchRule: "none", event: null, lastEventT: -99, forceRest: false, riskWeek: -1, sponsor2: { weekly: 0, until: 0 }, pressureUntil: -1, attrHist: [], seasonStartAttrs: null, exhibitionYear: 0, rivalry: { heat: 25, log: [], flags: {}, lastCross: -99 }, rivalAhead: null, focusBoostUntil: -1 },
@@ -162,6 +171,7 @@
     else spec = { overall: 54, birthYear: START_YEAR - 18, potential: 72 + rng.int(0, 16), money: 12, sponsor: 0.5, sponsorWeeks: 156, pts: 0, wcBoost: 0, style: "grinder" };
     const generational = rng.chance(0.10);
     if (generational) spec.potential = Math.max(spec.potential, 90 + rng.int(0, 6));
+    spec.potential = clamp(spec.potential + diff(state).pot, 60, 97);
     const h = newPlayer(state, { name: state.config.name, country: state.config.country, birthYear: spec.birthYear, overall: spec.overall, potential: spec.potential, style: spec.style, growth: spec.growth, isHuman: true });
     if (o === "grinder") { h.attrs.durability = clamp(h.attrs.durability + 8, 25, 99); h.attrs.clutch += 5; h.attrs.stamina += 5; }
     h.surf.hard += state.config.country === "JPN" ? 4 : 0;
@@ -750,6 +760,7 @@
         if ((ct === "clay" && T.surface === "clay") || (ct === "grass" && (T.surface === "grass" || T.surface === "indoor"))) mult *= 1.3;
       }
       if (p.isHuman && staffOf(state).hitting) mult *= 1.1;
+      mult *= p.isHuman ? diff(state).grow : diff(state).aiGrow;
       for (const k of ["serve", "return", "fh", "bh", "speed", "clutch"]) p.attrs[k] = clamp(p.attrs[k] + 0.03 * mult * (0.6 + rng.next()), 25, 99);
       p.surf[T.surface] = clamp(p.surf[T.surface] + 0.25 * (p.isHuman ? 1 : 0.6), 20, 85);
       rollInjury(state, p, T);
@@ -770,7 +781,7 @@
     const a = age(state, p);
     if (a >= 33) f *= 1.8; else if (a >= 30) f *= 1.4;
     if (p.fragile) f *= 1.3;
-    if (p.isHuman) { const st = staffOf(state); if (st.physio) f *= 0.7; if (st.fitness) f *= 0.85; if (state.human.riskWeek === state.t) f *= 2; }
+    if (p.isHuman) { f *= diff(state).injury; const st = staffOf(state); if (st.physio) f *= 0.7; if (st.fitness) f *= 0.85; if (state.human.riskWeek === state.t) f *= 2; }
     return f * (1 + Math.max(0, p.fatigue - 45) / 20) * (1.7 - p.attrs.durability / 100);
   }
   // Target (calibrated with tools/injury_stats.js): ~1 injury per player-season, ~4 weeks lost, ~11% chance of a 10+ week layoff.
@@ -950,6 +961,7 @@
         if (st.hitting) f *= 1.15;
         if (coach) f *= 1 + (coach.compat || 0);
         if (state.human.focusBoostUntil > state.t) f *= 1.25;
+        f *= diff(state).grow;
       }
       p.attrs[k] = clamp(p.attrs[k] + f * mult * (0.7 + 0.6 * rng.next()), 25, 99);
     }
@@ -964,7 +976,8 @@
     // AI trains toward its weakest skills
     const weakest = ATTRS.slice().sort((a, b) => p.attrs[a] - p.attrs[b]).slice(0, 3);
     for (const k of ATTRS) {
-      const f = weakest.includes(k) ? 0.16 : 0.04;
+      // AI youngsters develop at a pace comparable to the human's, so the climb is contested
+      const f = (weakest.includes(k) ? 0.34 : 0.08) * diff(state).aiGrow;
       p.attrs[k] = clamp(p.attrs[k] + f * mult * (0.7 + 0.6 * rng.next()), 25, 99);
     }
     p.fatigue = clamp(p.fatigue - 25, 0, 100);
@@ -1167,7 +1180,7 @@
     const team = (state.human.coach ? state.human.coach.cost : 0) + staffCost(state);
     const base = 0.5;
     const prize = (report.human ? report.human.humanPrize || 0 : 0) + (report.human && report.human.doubles ? report.human.doubles.prize : 0);
-    const income = support + extra + rankSponsor, expense = base + team;
+    const income = (support + extra + rankSponsor) * diff(state).income, expense = base + team;
     state.human.money += income - expense;
     const entry = { t: state.t, year: state.year, week: state.week, prize, support, rankSponsor, extra: extra + fee, fee, base, team, travel, travelInfo, net: Math.round((prize + fee + income - expense - travel) * 100) / 100, balance: Math.round(state.human.money * 10) / 10 };
     state.human.ledger = state.human.ledger || [];
@@ -1494,6 +1507,7 @@
     const H = s.human;
     Object.assign(H, { coach: H.coach || null, physio: !!H.physio, coachOffers: H.coachOffers || [], plan: H.plan || "balanced", switchRule: H.switchRule || "none", event: H.event || null, lastEventT: H.lastEventT === undefined ? -99 : H.lastEventT, forceRest: !!H.forceRest, riskWeek: H.riskWeek === undefined ? -1 : H.riskWeek, sponsor2: H.sponsor2 || { weekly: 0, until: 0 }, pressureUntil: H.pressureUntil === undefined ? -1 : H.pressureUntil, attrHist: H.attrHist || [], seasonStartAttrs: H.seasonStartAttrs || null, exhibitionYear: H.exhibitionYear || 0 });
     s.cutoffs = s.cutoffs || {};
+    if (!DIFFICULTY[s.config.difficulty]) s.config.difficulty = "normal";
     H.rivalry = H.rivalry || { heat: 25, log: [], flags: {}, lastCross: -99 };
     H.rivalry.flags = H.rivalry.flags || {};
     if (H.rivalAhead === undefined) H.rivalAhead = null;
@@ -1508,5 +1522,5 @@
     return s;
   }
 
-  TL.World = { rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
+  TL.World = { DIFFICULTY, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
 })(typeof globalThis !== "undefined" ? globalThis : window);

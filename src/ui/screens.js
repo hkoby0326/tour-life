@@ -396,7 +396,7 @@
     const S = U.S;
     c.innerHTML = `<div class="panel"><h2>セーブ</h2><p class="small muted">毎回自動保存（このブラウザのlocalStorage）。乱数はシード固定で、リロードしてやり直しても同じ結果になる。</p>
       <div class="row"><button data-export>エクスポート（JSON）</button><label>インポート <input type="file" id="imp" accept=".json"></label></div>
-      <p class="small muted" style="margin-top:8px">シード: ${S.seed} ・ 出自: ${U.ORIGINS[S.config.origin].name} ・ 怪我: ${S.config.injuryRealism === "low" ? "低頻度" : "標準"}</p></div>
+      <p class="small muted" style="margin-top:8px">シード: ${S.seed} ・ 出自: ${U.ORIGINS[S.config.origin].name} ・ 難易度: ${(W.DIFFICULTY[S.config.difficulty] || W.DIFFICULTY.normal).label} ・ 怪我: ${S.config.injuryRealism === "low" ? "低頻度" : "標準"}</p></div>
       ${S.human.careerOver ? "" : `<div class="panel"><h2>引退</h2><p class="small muted">現役を退く。キャリアの総括と殿堂判定が行われ、殿堂ギャラリーに記録される。36歳のシーズン終了時には自動的に引退。</p><button class="danger" id="retire">引退する</button></div>`}
       <div class="panel"><h2>セーブスロット</h2><p class="small muted">3つのキャリアを並行して持てる。殿堂ギャラリーは共通。</p>${U.slotsHtml(false)}</div>
       <div class="panel"><h2>表示とサウンド</h2>
