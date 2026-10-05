@@ -421,6 +421,7 @@
         ${U.careerStatsHtml(me)}
         <h3 style="margin-top:10px">年表</h3>${U.timelineHtml(S.history.seasons, curSeason)}
         <h3 style="margin-top:10px">トロフィーケース</h3>${U.trophyCase(titles)}</div>
+        <div class="panel"><h2>グランドスラム・マスターズ成績 <span class="muted small">年ごと</span></h2>${U.bigTimelineHtml(me)}</div>
       ${rv ? `<div class="panel"><h2>宿敵</h2><div class="identity" data-player="${rv.id}">${U.avatar(rv)}<div><div class="name">${esc(rv.name)}</div><div class="sub">${W.age(S, rv)}歳 ・ ${rv.retired ? "引退" : rv.rank ? rv.rank + "位" : "ランク外"} ・ 最高${rv.stats.bestRank || "-"}位 ・ タイトル${rv.stats.titles}</div></div></div><p style="margin-top:8px">対戦成績 <b>${h2h.filter((m) => m.won).length}勝${h2h.filter((m) => !m.won).length}敗</b></p>${h2h.slice(-5).reverse().map((m) => `<div class="small ${m.won ? "green" : "red"}">${cal(m.year)} ${esc(m.tour)} ${esc(m.round)} ${m.won ? "WIN" : "LOSS"} ${esc(m.score)}</div>`).join("")}</div>` : ""}</div></div>`;
     U.bindPlayerLinks(c);
     U.bindDevPanel(c);

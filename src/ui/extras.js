@@ -95,4 +95,39 @@
     }, "image/png");
     U.toast("キャリアカードを画像で保存しました", "green");
   };
+  // Grand Slam / Masters / Finals performance timeline (v2.5), Wikipedia-style.
+  U.bigTimelineHtml = function (p, opts) {
+    const S = U.S;
+    const tl = W.bigTimeline(S, p);
+    if (!tl) return `<p class="small muted">まだグランドスラム・マスターズの出場記録がない${p.isHuman ? "" : "（記録は v2.5 以降）"}。</p>`;
+    let years = tl.years;
+    if (p.isHuman) { const all = []; for (let y = Math.min(years[0], S.year); y <= S.year; y++) all.push(y); years = all; }
+    if (opts && opts.last) years = years.slice(-opts.last);
+    const drawN = (cat) => Math.pow(2, Math.ceil(Math.log2(D.CATS[cat].draw)));
+    // convert "R64" etc. into the round number for that event's draw size
+    const label = (code, cat) => {
+      if (!code) return "";
+      if (code === "W" || code === "F" || code === "SF" || code === "QF" || code === "RR") return code;
+      if (code === "Q") return "Q";
+      const n = parseInt(code.slice(1), 10);
+      return Math.round(Math.log2(drawN(cat)) - Math.log2(n) + 1) + "R";
+    };
+    const cls = (code) => (code === "W" ? "w" : code === "F" ? "f" : code === "SF" ? "sf" : code === "QF" ? "qf" : code === "Q" ? "q" : code === "RR" ? "rr" : code ? "e" : "a");
+    const groups = [["GS", "グランドスラム"], ["M1000", "マスターズ1000"], ["FINALS", "ATPファイナルズ"]];
+    const head = `<tr><th class="sticky">大会</th>${years.map((y) => `<th class="num">${U.cal(y)}</th>`).join("")}<th class="num">最高</th><th class="num">優勝</th></tr>`;
+    let body = "";
+    for (const [g, gl] of groups) {
+      const rows = tl.rows.filter((r) => (g === "M1000" ? r.cat.startsWith("M1000") : r.cat === g));
+      if (opts && opts.compact && !rows.some((r) => r.played)) continue;
+      body += `<tr class="grp"><td class="sticky">${gl}</td><td colspan="${years.length + 2}"></td></tr>`;
+      for (const r of rows) {
+        if (opts && opts.compact && !r.played) continue;
+        body += `<tr><td class="sticky"><span class="sdot2 ${r.surface}"></span>${esc(r.name)}</td>${years.map((y) => { const c = r.cells[y]; const future = y === S.year && r.week >= S.week; return `<td class="cell ${cls(c)}">${c ? label(c, r.cat) : p.isHuman && !future ? "A" : ""}</td>`; }).join("")}<td class="num small">${r.best ? label(r.best, r.cat) : "-"}</td><td class="num small ${r.titles ? "gold" : "muted"}">${r.titles || "-"}</td></tr>`;
+      }
+    }
+    body += `<tr class="sum"><td class="sticky">GS 勝敗</td>${years.map((y) => { const x = tl.gsWL[y]; return `<td class="num small">${x && x[0] + x[1] ? `${x[0]}-${x[1]}` : ""}</td>`; }).join("")}<td></td><td></td></tr>`;
+    if (p.isHuman) body += `<tr class="sum"><td class="sticky">年末順位</td>${years.map((y) => `<td class="num small">${tl.yearEnd[y] || (y === S.year ? (p.rank || "-") + "*" : "")}</td>`).join("")}<td></td><td></td></tr>`;
+    return `<div class="tscroll"><table class="ptl">${head}${body}</table></div>
+      <p class="tiny muted" style="margin-top:4px">W 優勝 ・ F 準優勝 ・ SF ベスト4 ・ QF ベスト8 ・ 1R〜4R 敗退ラウンド ・ RR ラウンドロビン敗退 ・ Q 予選敗退${p.isHuman ? " ・ A 不出場 ・ * 現在" : ""}</p>`;
+  };
 })();

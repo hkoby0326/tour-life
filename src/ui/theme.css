@@ -197,6 +197,26 @@ tr.flash-me td{animation:flashMe .45s} tr.flash-op td{animation:flashOp .45s}
 .tplan.on{border-color:var(--gold);background:rgba(251,191,36,.15)}
 #v-stats td,#v-stats th{padding:3px 6px;font-size:12px}
 
+/* GS / Masters performance timeline (v2.5) */
+.tscroll{overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%}
+.grid2>*,.panel{min-width:0}
+.ptl{border-collapse:separate;border-spacing:0;font-size:12px;min-width:100%}
+.ptl th,.ptl td{padding:4px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
+.ptl .sticky{position:sticky;left:0;background:var(--panel);z-index:1;max-width:140px;overflow:hidden;text-overflow:ellipsis}
+.ptl tr.grp td{font-size:11px;letter-spacing:.06em;color:var(--accent);background:var(--panel2);padding-top:6px}
+.ptl tr.grp td.sticky{background:var(--panel2)}
+.ptl tr.sum td{color:var(--muted);border-bottom:0}
+.ptl td.cell{text-align:center;font-weight:700;font-variant-numeric:tabular-nums;min-width:34px}
+.ptl td.w{background:rgba(250,204,21,.28);color:#fde68a}
+.ptl td.f{background:rgba(203,213,225,.22);color:#e2e8f0}
+.ptl td.sf{background:rgba(251,146,60,.2);color:#fdba74}
+.ptl td.qf{background:rgba(34,211,238,.16);color:#a5f3fc}
+.ptl td.e{color:var(--text)}
+.ptl td.rr{color:var(--text)}
+.ptl td.q{color:var(--dim);font-weight:400}
+.ptl td.a{color:var(--dim);font-weight:400}
+.sdot2{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;vertical-align:middle;background:var(--muted)}
+.sdot2.hard{background:var(--hard)}.sdot2.clay{background:var(--clay)}.sdot2.grass{background:var(--grass)}.sdot2.indoor{background:var(--indoor)}
 /* training allocation + traits (v2.0) */
 .alloc{display:flex;flex-direction:column;gap:6px}
 .alloc .arow{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center;padding:6px 8px;background:var(--panel2);border:1px solid var(--line);border-radius:8px}

@@ -994,6 +994,83 @@
     if (state.history.news.length > 300) state.history.news.splice(0, state.history.news.length - 300);
   }
 
+  // ---------- big-event record (v2.5): Grand Slams, Masters 1000 and the Finals, per year ----------
+  // p.big[year] = one character per event in calendar order (14 events), "." = not played.
+  // Characters: W F S(emi) Q(uarter) 6(R16) 3(R32) 4(R64) 8(R128) R(round robin) q(lost in qualifying)
+  const BIG_KEEP_YEARS = 25;
+  const BIG_EVENTS = D.ATP_CALENDAR.filter((c) => D.CATS[c.cat] && D.CATS[c.cat].tier >= 8).map((c) => c.id);
+  const BIG_ENC = { W: "W", F: "F", SF: "S", QF: "Q", R16: "6", R32: "3", R64: "4", R128: "8", RR: "R", Q: "q" };
+  const BIG_DEC = Object.fromEntries(Object.entries(BIG_ENC).map(([k, v]) => [v, k]));
+  function bigGet(p, y, tid) { const row = p.big && p.big[y]; const i = BIG_EVENTS.indexOf(tid); return row && i >= 0 && row[i] !== "." ? BIG_DEC[row[i]] : null; }
+  function bigSet(p, y, tid, code) {
+    const i = BIG_EVENTS.indexOf(tid); if (i < 0 || !BIG_ENC[code]) return;
+    p.big = p.big || {};
+    const row = (p.big[y] || ".".repeat(BIG_EVENTS.length)).split("");
+    row[i] = BIG_ENC[code]; p.big[y] = row.join("");
+  }
+  function recordBig(state, p, T, code, onlyIfEmpty) {
+    if (!T || !T.def || T.def.tier < 8) return;
+    if (!p.isHuman && code === "Q") return; // qualifying losses only for the human (save size)
+    const y = state.year;
+    if (onlyIfEmpty && bigGet(p, y, T.tid)) return;
+    bigSet(p, y, T.tid, code);
+    const keep = p.isHuman ? BIG_KEEP_YEARS : 15;
+    for (const k of Object.keys(p.big)) if (+k < y - keep) delete p.big[k];
+  }
+  function bigCodeFor(remaining) { return remaining === 2 ? "F" : remaining === 4 ? "SF" : remaining === 8 ? "QF" : "R" + remaining; }
+  // the human's record before v2.5, rebuilt from the match history
+  function backfillBig(state) {
+    const h = human(state);
+    if (state.human.bigBackfilled) return;
+    state.human.bigBackfilled = true;
+    const byName = {};
+    for (const c of D.ATP_CALENDAR) byName[c.name] = c;
+    const groups = {};
+    for (const m of state.history.matches) {
+      const c = byName[m.tour];
+      if (!c || !D.CATS[c.cat] || D.CATS[c.cat].tier < 8) continue;
+      const key = m.year + "|" + c.id;
+      (groups[key] = groups[key] || []).push(m);
+    }
+    for (const [key, ms] of Object.entries(groups)) {
+      const [y, tid] = key.split("|");
+      const last = ms[ms.length - 1];
+      let code;
+      if (/予選/.test(last.round) && !last.won) code = "Q";
+      else if (last.round === "決勝") code = last.won ? "W" : "F";
+      else if (last.round === "ラウンドロビン") code = "RR";
+      else if (!last.won) code = last.round === "準決勝" ? "SF" : last.round === "準々決勝" ? "QF" : last.round;
+      else continue; // record cut off mid-event
+      if (!bigGet(h, y, tid)) bigSet(h, y, tid, code);
+    }
+  }
+  // timeline for the UI: rows in calendar order, one column per season
+  function bigTimeline(state, p) {
+    const big = p.big || {};
+    const years = Object.keys(big).map(Number).sort((a, b) => a - b);
+    if (!years.length) return null;
+    const ev = D.ATP_CALENDAR.filter((c) => D.CATS[c.cat] && D.CATS[c.cat].tier >= 8);
+    const rank = { W: 0, F: 1, SF: 2, QF: 3, R16: 4, R32: 5, RR: 5, R64: 6, R128: 7, Q: 8 };
+    const rows = ev.map((c) => {
+      const cells = {}; let best = null, titles = 0, played = 0;
+      for (const y of years) { const v = bigGet(p, y, c.id); if (v) { cells[y] = v; played++; if (v === "W") titles++; if (best === null || (rank[v] ?? 9) < (rank[best] ?? 9)) best = v; } }
+      return { tid: c.id, name: c.name, cat: c.cat, surface: c.surface, week: c.week, cells, best, titles, played };
+    });
+    // Grand Slam match record per year (main draw: 128 → wins = 7 − log2(remaining))
+    const gsWL = {};
+    for (const y of years) {
+      let w = 0, l = 0;
+      for (const c of ev.filter((x) => x.cat === "GS")) {
+        const v = bigGet(p, y, c.id); if (!v || v === "Q") continue;
+        const rem = v === "W" ? 1 : v === "F" ? 2 : v === "SF" ? 4 : v === "QF" ? 8 : parseInt(v.slice(1), 10) || 128;
+        w += 7 - Math.round(Math.log2(rem)); if (v !== "W") l++;
+      }
+      gsWL[y] = [w, l];
+    }
+    const yearEnd = {};
+    if (p.isHuman) for (const z of state.history.seasons) yearEnd[z.year] = z.rank;
+    return { years, rows, gsWL, yearEnd };
+  }
   function addResult(state, p, T, pts, prize, round, extra) {
     // AI players keep a compact record (save size); the human keeps full detail.
     if (p.isHuman) p.results.push({ t: state.t, tid: T.tid, name: T.name, cat: T.cat, pts, prize, round, year: state.year, week: state.week, surface: T.surface });
@@ -1022,6 +1099,7 @@
           const pl = res.placements.get(p.id);
           const finalLoser = pl && pl.roundIdx === res.rounds - 1;
           addResult(state, p, T, finalLoser ? Math.round(def.qPts / 2) : 0, (def.qPrize || 0) * (finalLoser ? 0.5 : 0.25), "予選敗退");
+          recordBig(state, p, T, "Q", true);
           if (p.isHuman) { report.humanPlayed = true; report.qualLost = true; report.humanRound = "予選敗退"; }
         }
       }
@@ -1041,6 +1119,7 @@
       const prize = (def.prize && def.prize[idx]) || 0;
       const round = pl.won ? "優勝" : pl.roundIdx === res.rounds - 1 ? "準優勝" : roundLabel(res.N / Math.pow(2, pl.roundIdx)) + "敗退";
       addResult(state, p, T, pts, prize, round);
+      recordBig(state, p, T, pl.won ? "W" : bigCodeFor(res.N / Math.pow(2, pl.roundIdx)));
       if (pl.won) { p.stats.titles++; if (def.tier === 9) p.stats.gs++; if (def.tier === 8) p.stats.m1000++; if (p.isHuman) { sponsorTitleBonus(state, T, report); awardGP(state, def.tier >= 6 ? GP_AWARD.title[def.tier] || 2 : GP_AWARD.lowerTitle, `${T.name} 優勝`, report); } }
       if (p.isHuman) { report.humanPlayed = true; report.humanRound = round; report.humanPts = pts; report.humanPrize = prize; }
       p.consec++;
@@ -1107,6 +1186,7 @@
     if (champ.isHuman) awardGP(state, 6, "ATPファイナルズ優勝", report);
     for (const e of pts.values()) {
       addResult(state, e.p, T, e.pts, e.prize, e.p === champ ? "優勝" : e.p === runner ? "準優勝" : sf.includes(e.p) ? "準決勝敗退" : "ラウンドロビン");
+      recordBig(state, e.p, T, e.p === champ ? "W" : e.p === runner ? "F" : sf.includes(e.p) ? "SF" : "RR");
       if (e.p.isHuman) { report.humanPlayed = true; report.humanRound = e.p === champ ? "優勝" : e.p === runner ? "準優勝" : "敗退"; report.humanPts = e.pts; report.humanPrize = e.prize; }
       e.p.consec++;
     }
@@ -2009,7 +2089,7 @@
       else if (a >= 29 && r > 320 && rng.chance(0.5)) retire = true;
       if (!retire && a >= 27 && !p.rank && rng.chance(0.5)) retire = true;
       if (!retire && a >= 25 && r > 280 && rng.chance(0.35)) retire = true; // journeymen leave the lower tiers, making room for juniors
-      if (retire) { p.retired = true; p.retiredYear = yr; p.rank = null; p.points = 0; p.results = []; retired.push(p); }
+      if (retire) { p.retired = true; p.retiredYear = yr; p.rank = null; p.points = 0; p.results = []; if (!(p.stats.bestRank && p.stats.bestRank <= 30) && !p.isRival) delete p.big; retired.push(p); }
     }
     summary.retired = retired.filter((p) => p.real || p.isRival || (p.stats.bestRank && p.stats.bestRank <= 30)).map((p) => `${p.name}（最高${p.stats.bestRank || "-"}位、${p.stats.titles}勝）`);
     if (rv && rv.retired) news(state, `宿敵 ${rv.name} が現役引退を表明`);
@@ -2171,6 +2251,7 @@
     H.dev = H.dev || { style: null, intensity: "normal", auto: false, established: false };
     H.actLog = H.actLog || [];
     cashOf(s); H.cash.jobCooldown = H.cash.jobCooldown || {};
+    backfillBig(s);
     allocOf(s);
     // v2.4: the old default (serve 5 / strokes 5) built lopsided players; move untouched defaults to the balanced one
     if (!H.allocV2) { const a = H.alloc; if (a.serve === 5 && a.stroke === 5 && !a.ret && !a.physical && !a.mental && !a.match) H.alloc = { serve: 3, stroke: 3, ret: 3, physical: 1, mental: 0, match: 0 }; H.allocV2 = true; }
@@ -2195,5 +2276,5 @@
     return s;
   }
 
-  TL.World = { strengthOf, cashOf, fundingOptions, useFunding, setBudget, JOBS, forcedRetire, TRAIN_SLOTS, TRAIN_CATS, allocOf, allocShare, autoAlloc, allocSummary, TRAITS, hasTrait, traitReqOk, learnTrait, DEV_STYLES, INTENSITY, devOf, styleGap, autoFocus, trainRate, STRATEGIES, sharpBonus, sharpLabel, confLabel, sponsorsOf, brandOf, sponsorOffer, sponsorUnlocked, activeContracts, signSponsor, releaseSponsor, sponsorTerminationFee, sponsorPerks, sponsorWeekly, ASSETS, TAX, AGENT_CUT, assetsOf, assetUnlocked, buyAsset, assetsWeekly, DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
+  TL.World = { bigTimeline, strengthOf, cashOf, fundingOptions, useFunding, setBudget, JOBS, forcedRetire, TRAIN_SLOTS, TRAIN_CATS, allocOf, allocShare, autoAlloc, allocSummary, TRAITS, hasTrait, traitReqOk, learnTrait, DEV_STYLES, INTENSITY, devOf, styleGap, autoFocus, trainRate, STRATEGIES, sharpBonus, sharpLabel, confLabel, sponsorsOf, brandOf, sponsorOffer, sponsorUnlocked, activeContracts, signSponsor, releaseSponsor, sponsorTerminationFee, sponsorPerks, sponsorWeekly, ASSETS, TAX, AGENT_CUT, assetsOf, assetUnlocked, buyAsset, assetsWeekly, DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
 })(typeof globalThis !== "undefined" ? globalThis : window);

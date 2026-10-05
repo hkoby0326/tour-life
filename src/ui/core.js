@@ -5,7 +5,7 @@
     W, D, S: null, tab: "home", modal: null, planSel: null, planWeekT: -1, runLog: null, running: false, screens: {},
     SAVE_KEY: "tourlife_v1", SETTINGS_KEY: "tourlife_settings_v1", HOF_KEY: "tourlife_hof_v1",
     DEFAULT_SETTINGS: { stopTournament: true, stopMilestone: true, stopInjury: true, stopSeason: true, stopEvent: true, stopRival: true, watchEnabled: true, watchGs: true, watchFinals: true, watchRival: true, watchTop10: true, watchTitle: true, watchSpeed: 300, sound: false, volume: 0.5, reduceMotion: false, slot: 1, introSeen: false, hints: {}, hintsAlways: false },
-    VERSION: "v2.4",
+    VERSION: "v2.5",
   });
   U.ATTRL = W.ATTR_LABEL;
   U.ORIGINS = {
@@ -130,7 +130,10 @@
     // same screen re-rendered (e.g. a plan pick): keep the reader's place instead of jumping to the top
     window.scrollTo(0, sameTab ? scrollY : 0);
     U.renderModal();
+    U.scrollTimelines(app);
   };
+  // performance timelines open on the most recent seasons
+  U.scrollTimelines = (root) => root.querySelectorAll(".tscroll").forEach((el) => { if (el.querySelector(".ptl")) el.scrollLeft = el.scrollWidth; });
   // The modal lives in its own layer so opening/closing one never rebuilds the screen behind it.
   U.renderModal = function () {
     let layer = document.getElementById("modal-layer");
@@ -157,6 +160,7 @@
     }
     U.bindPlayerLinks(layer);
     if (U.bindWrapped) U.bindWrapped(layer);
+    if (U.scrollTimelines) U.scrollTimelines(layer);
   };
   U.openModal = (html, wide, keepDirty) => { U.modal = html; U.modalWide = !!wide; if (!keepDirty) U.modalDirty = false; U.renderModal(); };
   // closing re-renders the screen only when the modal changed game state (an event choice)
@@ -226,6 +230,7 @@
         ${p.cs && p.cs.m ? `<p class="small"><b>通算スタッツ（${p.cs.m}試合）:</b> エース ${p.cs.acesPm}/試合 ・ DF ${p.cs.dfsPm}/試合 ・ 1st得点率 ${p.cs.firstWon === null ? "-" : p.cs.firstWon + "%"} ・ サービスキープ ${p.cs.hold === null ? "-" : p.cs.hold + "%"} ・ BP変換 ${p.cs.bpConv === null ? "-" : p.cs.bpConv + "%"} ・ TB ${p.cs.tb[0]}-${p.cs.tb[1]} ・ 最終セット ${p.cs.dec[0]}-${p.cs.dec[1]} ・ 対Top10 ${p.cs.top10[0]}-${p.cs.top10[1]}</p>` : ""}
         ${p.isHuman ? "" : `<p class="small"><b>対戦成績:</b> ${p.h2hW}勝${p.h2hL}敗${p.h2h.length ? "<br>" + p.h2h.map((m) => `<span class="${m.won ? "green" : "red"}">${cal(m.year)} ${esc(m.tour)} ${esc(m.round)} ${m.won ? "W" : "L"} ${esc(m.score)}</span>`).join("<br>") : ""}</p>`}
         ${p.titleList.length ? `<p class="small"><b class="gold">最近のタイトル:</b> ${p.titleList.map((t) => `${cal(t.year)} ${esc(t.name)}`).join("、")}</p>` : ""}</div></div>
+      <h3 style="margin-top:10px">グランドスラム・マスターズ成績</h3>${U.bigTimelineHtml(W.human(U.S).id === p.id ? W.human(U.S) : U.S.players.find((x) => x.id === p.id), { compact: true, last: 8 })}
       <p class="small muted">${p.isHuman ? "自分の能力値は正確。伸びしろ（天井）は見えない。" : p.scout && p.scout.exact ? "アナリストが精査したレポート（正確な値）。伸びしろは分からない。" : `スカウティングによる推定値（誤差 ±${p.scout ? p.scout.amp : 6}）。対戦を重ねると精度が上がり、アナリストを雇うと正確になる。`}</p>
       <button class="primary" data-close>閉じる</button>`;
   };
