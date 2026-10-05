@@ -144,6 +144,25 @@
     for (const m of state.history.matches) { if (m.wo || !m.stats) continue; if (year && m.year !== year) continue; addCs(cs, m.stats, m.humanIdx, m.won, { name: m.opp }, m.oppRank, m.round, { minutes: m.minutes || 0, deciding: !!m.deciding, comeback: !!m.comeback, score: m.score }); }
     return cs;
   }
+  // ---------- match sharpness and confidence (v1.8) ----------
+  // sharp 0-100: how match-tight a player is. Rises with matches, decays in idle weeks and
+  // fastest while injured. Below 60 it costs serve/return/rally; a player back from a long
+  // layoff starts around 20-30 and needs two or three events to look like themselves again.
+  // conf -10..10: recent results; feeds the clutch component (big points only).
+  function sharpBonus(p) { const s = p.sharp === undefined ? 65 : p.sharp; if (s >= 55) return 0; if (s >= 40) return -0.5 * (55 - s) / 15; return -0.5 - 2.0 * (40 - s) / 40; }
+  function sharpLabel(s) { return s >= 75 ? "絶好調" : s >= 60 ? "万全" : s >= 40 ? "やや鈍い" : s >= 25 ? "試合勘なし" : "長期離脱明け"; }
+  function confLabel(c) { return c >= 5 ? "自信あり" : c >= 2 ? "上向き" : c > -2 ? "普通" : c > -5 ? "下向き" : "自信喪失"; }
+  function sharpWeekly(state, p, played) {
+    if (p.sharp === undefined) p.sharp = 65;
+    if (p.conf === undefined) p.conf = 0;
+    const m = p.mw || 0;
+    if (m > 0) p.sharp = clamp(p.sharp + Math.min(20, 8 * m), 0, 100);
+    else if (p.injury) p.sharp = clamp(p.sharp - 10, 10, 100);
+    else if (played === "rest") p.sharp = clamp(p.sharp - 6, 10, 100);
+    else p.sharp = clamp(p.sharp - 4, 10, 100);
+    p.conf = Math.round(p.conf * 0.8 * 100) / 100;
+    p.mw = 0;
+  }
   function newPlayer(state, spec) {
     const rng = state.rng;
     const style = spec.style || rng.pick(["all", "server", "grinder", "clay", "grass", "mental", "baseline", "big", "counter", "all", "baseline"]);
@@ -152,7 +171,7 @@
       id: state.nextId++, name: spec.name, country: spec.country, birthYear: spec.birthYear, hand: rng.chance(0.14) ? "L" : "R",
       style, attrs: built.attrs, surf: built.surf, potential: 0, growth: spec.growth || (rng.chance(0.2) ? "late" : rng.chance(0.25) ? "early" : "normal"),
       fatigue: rng.int(0, 20), injury: null, blockedUntil: -1, results: [], points: 0, rank: null, prevRank: null,
-      isHuman: !!spec.isHuman, real: !!spec.real, retired: false, consec: 0, cs: initCs(),
+      isHuman: !!spec.isHuman, real: !!spec.real, retired: false, consec: 0, cs: initCs(), sharp: 65, conf: 0, mw: 0,
       stats: { w: 0, l: 0, titles: 0, prize: 0, gs: 0, m1000: 0, weeksNo1: 0, weeksTop10: 0, bestRank: null, seasons: [] },
     };
     const a = age(state, p);
@@ -182,7 +201,7 @@
       config: { name: cfg.name || "選手", country: cfg.country || "JPN", origin: cfg.origin || "grinder", injuryRealism: cfg.injuryRealism || "standard", difficulty: DIFFICULTY[cfg.difficulty] ? cfg.difficulty : "normal" },
       rankSnaps: [], history: { tournaments: [], seasons: [], matches: [], news: [] }, lastReport: null,
       human: { money: 0, sponsorWeekly: 0, sponsorUntil: 0, wcBoostUntil: 0, lastRegion: null, focus: ["serve", "fh"], careerOver: false, epilogue: null, milestones: {},
-        coach: null, physio: false, coachOffers: [], plan: "balanced", switchRule: "none", event: null, lastEventT: -99, forceRest: false, riskWeek: -1, sponsor2: { weekly: 0, until: 0 }, pressureUntil: -1, attrHist: [], seasonStartAttrs: null, exhibitionYear: 0, rivalry: { heat: 25, log: [], flags: {}, lastCross: -99 }, rivalAhead: null, focusBoostUntil: -1, assets: { jet: false, medical: false, base: false, academy: false }, investment: null, pendingPurchase: 0, sponsors: { racket: null, apparel: null, shoes: null, other: [] }, sponsorsInit: true, pendingSigning: 0, pendingBonus: 0 },
+        coach: null, physio: false, coachOffers: [], plan: "balanced", switchRule: "none", event: null, lastEventT: -99, forceRest: false, riskWeek: -1, sponsor2: { weekly: 0, until: 0 }, pressureUntil: -1, attrHist: [], seasonStartAttrs: null, exhibitionYear: 0, rivalry: { heat: 25, log: [], flags: {}, lastCross: -99 }, rivalAhead: null, focusBoostUntil: -1, assets: { jet: false, medical: false, base: false, academy: false }, investment: null, pendingPurchase: 0, sponsors: { racket: null, apparel: null, shoes: null, other: [] }, sponsorsInit: true, pendingSigning: 0, pendingBonus: 0, strategy: "big" },
       cutoffs: {},
     };
     state.rng = new TL.RNG(seed);
@@ -704,6 +723,9 @@
     const hum = a.isHuman || b.isHuman;
     // Grand Slam qualifying is best-of-three; only the main draw is best-of-five.
     const mo = Object.assign({ rng, surface: T.surface, bo5: T.def.bo5 && !qualifying, log: hum }, hum ? matchOpts(state, a, b) : {});
+    const sb = [sharpBonus(a), sharpBonus(b)];
+    mo.bonus = [0, 1].map((i) => { const b = (mo.bonus && mo.bonus[i]) || {}; return { serve: (b.serve || 0) + sb[i], ret: (b.ret || 0) + sb[i], rally: (b.rally || 0) + sb[i] }; });
+    mo.clutch = [0, 1].map((i) => ((mo.clutch && mo.clutch[i]) || 0) + ([a, b][i].conf || 0) * 0.2);
     if (hum && isImportant(state, T, label, a, b, qualifying)) {
       const m = TL.Match.create(a, b, mo);
       yield { type: "match", match: m, T, round: label, a, b };
@@ -799,6 +821,10 @@
     const rng = state.rng;
     w.stats.w++; l.stats.l++;
     if (!w.cs) w.cs = initCs(); if (!l.cs) l.cs = initCs();
+    w.mw = (w.mw || 0) + 1; l.mw = (l.mw || 0) + 1;
+    const wr = w.rank || 9999, lr = l.rank || 9999;
+    w.conf = clamp((w.conf || 0) + (lr < wr ? 2 : 1), -10, 10);
+    l.conf = clamp((l.conf || 0) - (wr > lr + 30 ? 2 : 1), -10, 10);
     addCs(w.cs, res.stats, res.winnerIdx, true, l, l.rank, label, res);
     addCs(l.cs, res.stats, 1 - res.winnerIdx, false, w, w.rank, label, res);
     const sets = res.sets.length;
@@ -1222,9 +1248,12 @@
       let rec = 10;
       if (p.isHuman) { const st = staffOf(state); if (state.human.coach && state.human.coach.type === "physical") rec += 6; if (st.physio) rec += 5; if (st.fitness) rec += 4; rec += sponsorPerks(state).recovery; }
       p.fatigue = clamp(p.fatigue - rec, 0, 100);
+      const hadSharp = p.sharp;
+      sharpWeekly(state, p, p.isHuman && act && act.type === "rest" ? "rest" : "other");
+      if (p.isHuman && p.injury === null && hadSharp !== undefined && p.sharp < 45 && (p.mw || 0) === 0 && act && act.type !== "enter" && state.t % 4 === 0) report.items.push({ type: "sharp", text: `試合勘が落ちている（${Math.round(p.sharp)}）。試合に出て取り戻す必要がある` });
       if (p.injury && p.injuredAt !== state.t) {
         p.injury.weeks--;
-        if (p.injury.weeks <= 0) { if (p.isHuman) report.items.push({ type: "healed", text: `${p.injury.label} から復帰。試合に戻れる` }); p.injury = null; p.consec = 0; }
+        if (p.injury.weeks <= 0) { if (p.isHuman) report.items.push({ type: "healed", text: `${p.injury.label} から復帰。試合に戻れる。試合勘は ${Math.round(p.sharp)}（${sharpLabel(p.sharp)}）。復帰後2〜3大会は本来の力が出ない` }); p.injury = null; p.consec = 0; }
       }
     }
     if (h.injury && h.injuredAt === state.t) report.stops.push("injury");
@@ -1493,13 +1522,22 @@
     }
     return load;
   }
+  const STRATEGIES = {
+    big: { label: "ビッグイベント優先", desc: "GS・マスターズ・自国大会を最優先し、前週は休んで万全で臨む。年15〜22大会" },
+    points: { label: "ポイント重視", desc: "出られる週はほぼ毎週出る。負荷上限 +1、休養は疲労55から。ランキングは伸びやすいが怪我と疲労のリスク" },
+    develop: { label: "育成重視", desc: "大会を絞って練習週を増やす。本戦ダイレクトインのATP大会と優先イベントだけ。成長が速い" },
+    regional: { label: "移動最小", desc: "今いる地域の大会を優先し、8,000km超の移動は優先イベント以外しない。移動費と時差疲労を抑える" },
+  };
   function autoAction(state, tours) {
     const h = human(state);
     if (tours.length === 0) return { type: "camp", focus: state.human.focus, reason: "オフシーズン。合宿で集中的に鍛える" };
     const r = rank6(state, h);
+    const strat = STRATEGIES[state.human.strategy] ? state.human.strategy : "big";
     // Real-world pacing: top players ~15-22 events/year, top-50 ~22-26, lower tiers ~26-30.
     const load8 = recentLoad(state, h, 8);
-    const maxLoad = r <= 20 ? 4 : r <= 100 ? 5 : 6;
+    const maxLoad = strat === "develop" ? (r <= 20 ? 3 : 4) : (r <= 20 ? 4 : r <= 100 ? 5 : 6) + (strat === "points" ? 1 : 0);
+    const restAt = strat === "points" ? 55 : strat === "develop" ? 35 : 45;
+    const from = state.human.loc || h.country;
     const lastWeek = h.results.find((x) => x.t === state.t - 1 && x.cat !== "PREV");
     const bigLast = lastWeek && D.CATS[lastWeek.cat] && D.CATS[lastWeek.cat].tier >= 9;
     const ranked = tours.filter((T) => T.cat !== "FINALS").map((T) => ({ T, st: humanStatus(state, T) }));
@@ -1518,21 +1556,26 @@
     let nextWeek = state.week + 1, nextYear = state.year;
     if (nextWeek > 52) { nextWeek = 1; nextYear++; }
     const nextBig = weekTournaments(state, nextWeek, nextYear).filter((T) => T.def.tier >= 8).map((T) => ({ T, st: humanStatus(state, T) })).find(enterable);
-    if (nextBig && (h.fatigue > 25 || load8 >= maxLoad - 1 || (h.consec || 0) >= 2)) return { type: h.fatigue > 20 ? "rest" : "train", focus: state.human.focus, reason: `来週の${nextBig.T.name}に備えて${h.fatigue > 20 ? "休養" : "調整練習"}` };
-    if (h.fatigue > 45) return { type: "rest", reason: `疲労が${Math.round(h.fatigue)}で高い。休養して回復` };
+    if (nextBig && strat !== "points" && (h.fatigue > 25 || load8 >= maxLoad - 1 || (h.consec || 0) >= 2)) return { type: h.fatigue > 20 ? "rest" : "train", focus: state.human.focus, reason: `来週の${nextBig.T.name}に備えて${h.fatigue > 20 ? "休養" : "調整練習"}` };
+    if (h.fatigue > restAt) return { type: "rest", reason: `疲労が${Math.round(h.fatigue)}で高い。休養して回復` };
     if (bigLast && h.fatigue > 25) return { type: "rest", reason: "グランドスラムの翌週は休養" };
     if (load8 >= maxLoad) return { type: h.fatigue > 30 ? "rest" : "train", focus: state.human.focus, reason: `直近8週の負荷が上限（${load8}/${maxLoad}）。出場数の目安を守る` };
-    if ((h.consec || 0) >= 3) return { type: "train", focus: state.human.focus, reason: "3週連戦のあとは練習週にする" };
+    if ((h.consec || 0) >= 3 && strat !== "points") return { type: "train", focus: state.human.focus, reason: "3週連戦のあとは練習週にする" };
     if (state.human.money < 20 && state.human.lastRegion) ranked.sort((a, b) => b.T.def.tier - a.T.def.tier || (b.T.region === state.human.lastRegion) - (a.T.region === state.human.lastRegion));
-    const pick = (codes, pred) => ranked.find((x) => codes.includes(x.st.code) && (!pred || pred(x.T)));
+    if (strat === "regional") ranked.sort((a, b) => { const da = distKm(from, a.T.country), db = distKm(from, b.T.country); const za = da > 8000 ? 2 : da > 3000 ? 1 : 0, zb = db > 8000 ? 2 : db > 3000 ? 1 : 0; return za - zb || b.T.def.tier - a.T.def.tier; });
+    const pick = (codes, pred) => ranked.find((x) => codes.includes(x.st.code) && (!pred || pred(x.T)) && (strat !== "regional" || distKm(from, x.T.country) <= 8000));
     const atpOnly = (T) => T.def.tier >= 6;
     // top-20 players skip most 250s unless at home or under-played
-    const skip250 = (T) => !(r <= 20 && T.def.tier === 6 && T.country !== h.country && load8 >= 2);
-    let c = pick(["direct"], (T) => atpOnly(T) && skip250(T)) || pick(["bubble"], atpOnly) || pick(["qual"], (T) => T.def.tier >= 6 && r <= 250) || pick(["wc"], (T) => T.country === h.country && T.def.tier >= 6);
-    if (!c && r > 50) c = pick(["direct"], (T) => T.def.tier >= 4 || r > 100) || pick(["bubble"]) || pick(["wc"], (T) => T.def.tier <= 2);
+    const skip250 = (T) => !(r <= 20 && T.def.tier === 6 && T.country !== h.country && load8 >= 2 && strat !== "points");
+    // rusty: take any direct entry to get matches
+    if ((h.sharp || 65) < 45 && !h.injury) { const any = pick(["direct"]); if (any) return { type: "enter", tid: any.T.id, auto: true, reason: `試合勘が落ちている（${Math.round(h.sharp)}）。試合数を取り戻す` }; }
+    let c;
+    if (strat === "develop") c = pick(["direct"], (T) => atpOnly(T) && skip250(T)) || (r > 100 ? pick(["direct"]) : null);
+    else c = pick(["direct"], (T) => atpOnly(T) && skip250(T)) || pick(["bubble"], atpOnly) || pick(["qual"], (T) => T.def.tier >= 6 && r <= 250) || pick(["wc"], (T) => T.country === h.country && T.def.tier >= 6);
+    if (!c && strat !== "develop" && (r > 50 || strat === "points")) c = pick(["direct"], (T) => T.def.tier >= 4 || r > 100) || pick(["bubble"]) || pick(["wc"], (T) => T.def.tier <= 2);
     if (!c && r <= 100 && h.fatigue > 35) return { type: "rest", reason: "出られるツアー大会がない週。疲労もあるので休養" };
-    if (c) return { type: "enter", tid: c.T.id, auto: true, reason: c.st.code === "direct" ? "出られる最上位の大会（本戦ダイレクトイン見込み）" : c.st.code === "bubble" ? "当落線上だが最上位の大会に挑む" : c.st.code === "qual" ? "予選から上のカテゴリーに挑戦" : "ワイルドカードに期待してエントリー" };
-    return { type: "train", focus: state.human.focus, reason: "出られる大会がないので練習週" };
+    if (c) return { type: "enter", tid: c.T.id, auto: true, reason: (strat === "regional" ? "移動を抑えつつ、" : strat === "points" ? "ポイントを稼ぐため、" : "") + (c.st.code === "direct" ? "出られる最上位の大会（本戦ダイレクトイン見込み）" : c.st.code === "bubble" ? "当落線上だが最上位の大会に挑む" : c.st.code === "qual" ? "予選から上のカテゴリーに挑戦" : "ワイルドカードに期待してエントリー") };
+    return { type: "train", focus: state.human.focus, reason: strat === "develop" ? "育成重視: 大会を絞って練習週にする" : "出られる大会がないので練習週" };
   }
 
   // ---------- season end ----------
@@ -1710,7 +1753,7 @@
     const peers = state.players.filter((x) => !x.retired && x.rank && Math.abs(x.birthYear - p.birthYear) <= 1);
     return { id: p.id, name: p.name, country: p.country, age: age(state, p), hand: p.hand, style: p.style, rank: p.rank, points: p.points, bestRank: p.stats.bestRank, overall: ovrEst, scout: { exact, amp, seen: h2h.length },
       attrs, surf, w: p.stats.w, l: p.stats.l, titles: p.stats.titles, gs: p.stats.gs, m1000: p.stats.m1000, prize: p.stats.prize, injury: p.injury, fatigue: Math.round(p.fatigue), retired: p.retired,
-      isHuman: p.isHuman, isRival: !!p.isRival, real: p.real, h2hW: h2h.filter((m) => m.won).length, h2hL: h2h.filter((m) => !m.won).length, h2h: h2h.slice(-6).reverse(),
+      isHuman: p.isHuman, isRival: !!p.isRival, real: p.real, sharp: Math.round(p.sharp === undefined ? 65 : p.sharp), sharpLabel: sharpLabel(p.sharp === undefined ? 65 : p.sharp), conf: Math.round(p.conf || 0), confLabel: confLabel(p.conf || 0), h2hW: h2h.filter((m) => m.won).length, h2hL: h2h.filter((m) => !m.won).length, h2h: h2h.slice(-6).reverse(),
       titleList: titles.slice(-8).reverse(), tournaments52: new Set(seasonRes.map((r) => r.t)).size, peers: peers.length,
       peerPos: p.rank ? peers.filter((x) => x.rank < p.rank).length + 1 : null, growth: p.growth, cs: csView(p.cs || initCs()) };
   }
@@ -1723,6 +1766,7 @@
       for (const k of ATTRS) p.attrs[k] = r2(p.attrs[k]);
       for (const k of Object.keys(p.surf)) p.surf[k] = r2(p.surf[k]);
       p.fatigue = r2(p.fatigue);
+      p.sharp = r2(p.sharp === undefined ? 65 : p.sharp); p.conf = r2(p.conf || 0);
       p.potential = r2(p.potential);
       p.stats.prize = r2(p.stats.prize);
     }
@@ -1747,6 +1791,8 @@
     s.cutoffs = s.cutoffs || {};
     if (!DIFFICULTY[s.config.difficulty]) s.config.difficulty = "normal";
     for (const p of s.players) if (!p.cs) p.cs = p.isHuman ? statsFromHistory(s) : initCs();
+    for (const p of s.players) { if (p.sharp === undefined) p.sharp = p.injury ? 30 : 65; if (p.conf === undefined) p.conf = 0; if (p.mw === undefined) p.mw = 0; }
+    if (!H.strategy) H.strategy = "big";
     H.rivalry = H.rivalry || { heat: 25, log: [], flags: {}, lastCross: -99 };
     H.rivalry.flags = H.rivalry.flags || {};
     if (H.rivalAhead === undefined) H.rivalAhead = null;
@@ -1767,5 +1813,5 @@
     return s;
   }
 
-  TL.World = { sponsorsOf, brandOf, sponsorOffer, sponsorUnlocked, activeContracts, signSponsor, releaseSponsor, sponsorTerminationFee, sponsorPerks, sponsorWeekly, ASSETS, TAX, AGENT_CUT, assetsOf, assetUnlocked, buyAsset, assetsWeekly, DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
+  TL.World = { STRATEGIES, sharpBonus, sharpLabel, confLabel, sponsorsOf, brandOf, sponsorOffer, sponsorUnlocked, activeContracts, signSponsor, releaseSponsor, sponsorTerminationFee, sponsorPerks, sponsorWeekly, ASSETS, TAX, AGENT_CUT, assetsOf, assetUnlocked, buyAsset, assetsWeekly, DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
 })(typeof globalThis !== "undefined" ? globalThis : window);

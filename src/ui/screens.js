@@ -74,17 +74,21 @@
       ${S.human.rivalry && S.human.rivalry.log.length ? `<div class="small muted" style="margin-top:6px">${S.human.rivalry.log.slice(-3).reverse().map((l) => `<div>${cal(l.year)} W${l.week} ・ ${esc(l.text)}</div>`).join("")}</div>` : ""}</div>` : "";
     c.innerHTML = `<div class="grid2" style="grid-template-columns:1.25fr .75fr">
       <div>
-        <div class="card hero" style="padding:16px 18px"><h3>今週の決断 ・ ${cal()}年 第${S.week}週</h3><div style="font-size:22px;font-weight:800;margin:4px 0 6px">${label}</div><p class="small muted" style="margin:0 0 10px">${esc(auto0.reason || "")}</p>
+        <div class="card hero" style="padding:16px 18px"><h3>今週の決断 ・ ${cal()}年 第${S.week}週</h3><div style="font-size:22px;font-weight:800;margin:4px 0 6px">${label}</div><p class="small muted" style="margin:0 0 6px">${esc(auto0.reason || "")}</p>
+          <label class="small" style="display:block;margin:0 0 10px">方針 <select data-strategy-home>${Object.entries(W.STRATEGIES).map(([k, v]) => `<option value="${k}" ${(S.human.strategy || "big") === k ? "selected" : ""}>${v.label}</option>`).join("")}</select></label>
           <div class="row actions"><button class="primary bigbtn" data-go-auto>この判断で1週進める</button><button data-go="plan">4週プランを組む</button><button data-auto>自動進行（停止条件まで）</button></div></div>
         ${nextCard}
         <div class="panel"><h2>シーズン ・ ${cal()}年</h2>${seasonStrip(me)}<div class="row between small muted"><span>今季 ${seasonT}大会（目安 ${guide}）</span><span class="loadmeter">直近8週の負荷 <span class="bar"><div style="width:${Math.min(100, (load8 / maxLoad) * 100)}%;background:${load8 >= maxLoad ? "var(--red)" : load8 >= maxLoad - 1 ? "var(--gold)" : "var(--green)"}"></div></span> ${load8}/${maxLoad}</span></div></div>
         <div class="grid2"><div class="panel"><h2>順位の推移</h2><div class="small muted" style="margin:-6px 0 6px">直近${rh.length}週${best ? ` ・ 最高${best}位` : ""}</div>${rankSpark}</div>
         <div class="panel"><h2>コンディション</h2><div class="attr" style="grid-template-columns:70px 1fr 40px"><span>疲労</span><div class="bar"><div style="width:${me.fatigue}%;background:${me.fatigue > 60 ? "var(--red)" : me.fatigue > 40 ? "var(--gold)" : "var(--green)"}"></div></div><span class="num">${Math.round(me.fatigue)}</span></div>
           <div class="small muted">${me.injury ? `<span class="red">${esc(me.injury.label)} 残り${me.injury.weeks}週</span>` : "怪我なし"} ・ 資金 <b class="${S.human.money < 0 ? "red" : ""}">${money(S.human.money)}</b></div>
-          <div class="small muted" style="margin-top:6px">試合プラン: ${TL.PLANS[S.human.plan].label} ・ 重点: ${ATTRL[S.human.focus[0]]}・${ATTRL[S.human.focus[1]]}</div></div></div>
+          <div class="attr" style="grid-template-columns:70px 1fr 40px;margin-top:4px"><span>試合勘</span><div class="bar"><div style="width:${Math.round(me.sharp || 0)}%;background:${(me.sharp || 0) >= 55 ? "var(--green)" : (me.sharp || 0) >= 40 ? "var(--gold)" : "var(--red)"}"></div></div><span class="num">${Math.round(me.sharp || 0)}</span></div>
+          <div class="small muted">${W.sharpLabel(me.sharp || 0)} ・ 自信: ${W.confLabel(me.conf || 0)}${(me.sharp || 0) < 55 ? ' <span class="gold">（試合に出ると戻る）</span>' : ""}</div>
+          <div class="small muted" style="margin-top:6px">試合プラン: ${TL.PLANS[S.human.plan].label} ・ 重点: ${ATTRL[S.human.focus[0]]}・${ATTRL[S.human.focus[1]]} ・ 方針: ${W.STRATEGIES[S.human.strategy || "big"].label}</div></div></div>
       </div>
       <div>${rivalCard}<div class="panel"><h2>受信箱</h2><div class="inbox">${items.join("")}</div></div></div></div>`;
     c.querySelector("[data-go-auto]").onclick = () => U.runWeeks([auto0.type === "blocked" ? { type: "blocked" } : { type: "auto" }]);
+    const sh = c.querySelector("[data-strategy-home]"); if (sh) sh.onchange = () => { S.human.strategy = sh.value; U.save(); U.render(); };
     c.querySelector("[data-go]").onclick = () => { U.tab = "plan"; U.render(); };
     c.querySelector("[data-auto]").onclick = () => U.autoRun(60);
     const eb = c.querySelector("[data-ev]"); if (eb) eb.onclick = () => U.openModal(U.eventHtml(S.human.event));
@@ -128,7 +132,9 @@
       <div class="row" style="gap:16px;margin-top:10px">
       <label class="small">重点スキル ${[0, 1].map((i) => `<select data-focus="${i}">${W.ATTRS.map((k) => `<option value="${k}" ${S.human.focus[i] === k ? "selected" : ""}>${ATTRL[k]}</option>`).join("")}</select>`).join(" ")}</label>
       <label class="small">試合プラン <select data-plan>${Object.entries(TL.PLANS).map(([k, p]) => `<option value="${k}" ${S.human.plan === k ? "selected" : ""}>${p.label}</option>`).join("")}</select></label>
-      <label class="small">セット間 <select data-rule><option value="none" ${S.human.switchRule === "none" ? "selected" : ""}>切り替えない</option><option value="behind" ${S.human.switchRule === "behind" ? "selected" : ""}>セットを落としたら攻撃的に</option></select></label></div></div>`;
+      <label class="small">自動の方針 <select data-strategy>${Object.entries(W.STRATEGIES).map(([k, v]) => `<option value="${k}" ${(S.human.strategy || "big") === k ? "selected" : ""}>${v.label}</option>`).join("")}</select></label>
+      <label class="small">セット間 <select data-rule><option value="none" ${S.human.switchRule === "none" ? "selected" : ""}>切り替えない</option><option value="behind" ${S.human.switchRule === "behind" ? "selected" : ""}>セットを落としたら攻撃的に</option></select></label></div>
+      <p class="small muted" style="margin:8px 0 0">${esc(W.STRATEGIES[S.human.strategy || "big"].desc)}</p></div>`;
     // columns (phones show one week at a time via .wtabs)
     let cols = "";
     const activeW = U.planWeekTab || 0;
@@ -169,6 +175,7 @@
     <div class="panel"><h2>観戦モード</h2><p class="small muted">重要試合はポイント単位で観戦し、セット間にプランを変えられる。</p>
       ${[["watchEnabled", "観戦モードを使う"], ["watchGs", "グランドスラム"], ["watchFinals", "ATPファイナルズ"], ["watchTitle", "決勝と1000の準決勝"], ["watchRival", "宿敵戦"], ["watchTop10", "トップ10戦"]].map(([k, l]) => `<label class="small" style="display:inline-block;margin-right:14px"><input type="checkbox" data-set="${k}" ${settings[k] ? "checked" : ""}> ${l}</label>`).join("")}</div></div>`;
     c.innerHTML = html;
+    const stSel = c.querySelector("[data-strategy]"); if (stSel) stSel.onchange = () => { S.human.strategy = stSel.value; U.save(); U.render(); };
     c.querySelectorAll("[data-focus]").forEach((s) => s.onchange = () => { const f = [...c.querySelectorAll("[data-focus]")].map((x) => x.value); if (f[0] === f[1]) f[1] = W.ATTRS.find((k) => k !== f[0]); S.human.focus = f; U.save(); U.render(); });
     c.querySelector("[data-plan]").onchange = (e) => { S.human.plan = e.target.value; U.save(); };
     c.querySelector("[data-rule]").onchange = (e) => { S.human.switchRule = e.target.value; U.save(); };
@@ -346,6 +353,7 @@
       <h3 style="margin-top:12px">総合の推移（直近${Math.min(hist.length, 120)}週）</h3>${sparkline(hist.map((x) => x.ovr))}
       <p class="small muted">同年代（±1歳）${peers.length + 1}人中 ${me.rank ? myPos + "番目" : "ランク外"}。成長は年齢・隠れた天井・練習の重点・コーチで決まる。</p></div>
       <div><div class="panel"><div class="row between"><h2 style="margin:0;border:0;padding:0">キャリア</h2><button class="small" data-share>キャリアカードを保存</button></div><div class="kpi" style="margin-top:10px"><div class="card"><div class="v">${me.stats.bestRank || "-"}</div><div class="l">最高ランク</div></div><div class="card"><div class="v">${me.stats.titles}</div><div class="l">タイトル</div></div><div class="card"><div class="v">${me.stats.gs}</div><div class="l">GS</div></div><div class="card"><div class="v">${me.stats.m1000}</div><div class="l">1000</div></div><div class="card"><div class="v">${me.stats.weeksNo1}</div><div class="l">No.1週</div></div><div class="card"><div class="v">${money(me.stats.prize)}</div><div class="l">生涯賞金</div></div></div>
+        <p class="small">試合勘 <b>${Math.round(me.sharp || 0)}</b>（${W.sharpLabel(me.sharp || 0)}） ・ 自信 <b>${(me.conf || 0) >= 0 ? "+" : ""}${Math.round(me.conf || 0)}</b>（${W.confLabel(me.conf || 0)}）</p>
         <p class="small">対Top10: ${top10.filter((m) => m.won).length}勝${top10.filter((m) => !m.won).length}敗 ・ 通算 ${me.stats.w}勝${me.stats.l}敗 ・ 怪我 ${(S.human.injuryLog || []).length}回</p>
         ${U.careerStatsHtml(me)}
         <h3 style="margin-top:10px">年表</h3>${U.timelineHtml(S.history.seasons, curSeason)}
