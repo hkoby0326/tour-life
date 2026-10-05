@@ -201,7 +201,7 @@
       config: { name: cfg.name || "選手", country: cfg.country || "JPN", origin: cfg.origin || "grinder", injuryRealism: cfg.injuryRealism || "standard", difficulty: DIFFICULTY[cfg.difficulty] ? cfg.difficulty : "normal" },
       rankSnaps: [], history: { tournaments: [], seasons: [], matches: [], news: [] }, lastReport: null,
       human: { money: 0, sponsorWeekly: 0, sponsorUntil: 0, wcBoostUntil: 0, lastRegion: null, focus: ["serve", "fh"], careerOver: false, epilogue: null, milestones: {},
-        coach: null, physio: false, coachOffers: [], plan: "balanced", switchRule: "none", event: null, lastEventT: -99, forceRest: false, riskWeek: -1, sponsor2: { weekly: 0, until: 0 }, pressureUntil: -1, attrHist: [], seasonStartAttrs: null, exhibitionYear: 0, rivalry: { heat: 25, log: [], flags: {}, lastCross: -99 }, rivalAhead: null, focusBoostUntil: -1, assets: { jet: false, medical: false, base: false, academy: false }, investment: null, pendingPurchase: 0, sponsors: { racket: null, apparel: null, shoes: null, other: [] }, sponsorsInit: true, pendingSigning: 0, pendingBonus: 0, strategy: "big" },
+        coach: null, physio: false, coachOffers: [], plan: "balanced", switchRule: "none", event: null, lastEventT: -99, forceRest: false, riskWeek: -1, sponsor2: { weekly: 0, until: 0 }, pressureUntil: -1, attrHist: [], seasonStartAttrs: null, exhibitionYear: 0, rivalry: { heat: 25, log: [], flags: {}, lastCross: -99 }, rivalAhead: null, focusBoostUntil: -1, assets: { jet: false, medical: false, base: false, academy: false }, investment: null, pendingPurchase: 0, sponsors: { racket: null, apparel: null, shoes: null, other: [] }, sponsorsInit: true, pendingSigning: 0, pendingBonus: 0, strategy: "big", dev: { style: null, intensity: "normal", auto: false, established: false }, actLog: [] },
       cutoffs: {},
     };
     state.rng = new TL.RNG(seed);
@@ -722,7 +722,7 @@
     const rng = state.rng;
     const hum = a.isHuman || b.isHuman;
     // Grand Slam qualifying is best-of-three; only the main draw is best-of-five.
-    const mo = Object.assign({ rng, surface: T.surface, bo5: T.def.bo5 && !qualifying, log: hum }, hum ? matchOpts(state, a, b) : {});
+    const mo = Object.assign({ rng, surface: T.surface, bo5: T.def.bo5 && !qualifying, log: hum }, hum ? matchOpts(state, a, b, T) : {});
     const sb = [sharpBonus(a), sharpBonus(b)];
     mo.bonus = [0, 1].map((i) => { const b = (mo.bonus && mo.bonus[i]) || {}; return { serve: (b.serve || 0) + sb[i], ret: (b.ret || 0) + sb[i], rally: (b.rally || 0) + sb[i] }; });
     mo.clutch = [0, 1].map((i) => ((mo.clutch && mo.clutch[i]) || 0) + ([a, b][i].conf || 0) * 0.2);
@@ -798,7 +798,7 @@
     return { placements, winner, matches, rounds: r, N, bracket };
   }
 
-  function matchOpts(state, a, b) {
+  function matchOpts(state, a, b, T) {
     const H = state.human;
     const idx = a.isHuman ? 0 : 1;
     const plans = ["balanced", "balanced"], rules = ["none", "none"], clutch = [0, 0];
@@ -812,6 +812,12 @@
     if (staffOf(state).analyst && (opp.rank || 9999) < (me.rank || 9999)) edge[idx] = 1;
     const sp = sponsorPerks(state);
     const bonus = [null, null]; bonus[idx] = { serve: sp.serve, ret: sp.ret, rally: sp.rally };
+    const dev = devOf(state);
+    if (dev.style && dev.established) {
+      const sb = DEV_STYLES[dev.style].bonus;
+      bonus[idx].serve += sb.serve || 0; bonus[idx].ret += sb.ret || 0; bonus[idx].rally += (sb.rally || 0) + (sb.clay && T && T.surface === "clay" ? sb.clay : 0);
+      clutch[idx] += sb.clutch || 0;
+    }
     // charged rivalry: big points swing more for both (clutch difference matters more)
     if (opp.isRival && H.rivalry && H.rivalry.heat >= 60) { const k = (H.rivalry.heat - 60) / 40; clutch[idx] += (me.attrs.clutch - opp.attrs.clutch) * 0.15 * k; }
     return { plans, rules, clutch, edge, bonus };
@@ -1026,10 +1032,88 @@
 
   // ---------- growth off-court ----------
   const PHYS = ["speed", "stamina", "power", "durability"];
-  function trainPlayer(state, p, focus, intensity) {
+  // ---------- development plan (v1.9) ----------
+  // A target style names the 3-4 attributes that define the player. Key attributes train 15%
+  // faster; once they stand 5 points above the rest the style is "established" and pays off in
+  // matches. Training intensity trades growth for fatigue and injury risk on training weeks.
+  const DEV_STYLES = {
+    server: { label: "ビッグサーバー", keys: ["serve", "power", "fh"], bonus: { serve: 1.0 }, desc: "サーブとフォアの一撃で主導権を握る。確立するとサーブ +1.0" },
+    baseline: { label: "アグレッシブベースライナー", keys: ["fh", "bh", "speed"], bonus: { rally: 1.0 }, desc: "ストロークで押し込む。確立するとラリー +1.0" },
+    counter: { label: "カウンターパンチャー", keys: ["return", "speed", "bh"], bonus: { ret: 1.0 }, desc: "拾って粘って崩す。確立するとリターン +1.0" },
+    all: { label: "オールコート", keys: ["serve", "return", "fh", "bh"], bonus: { serve: 0.4, ret: 0.4, rally: 0.4 }, desc: "穴のない万能型。確立すると全体 +0.4" },
+    clay: { label: "クレー巧者", keys: ["speed", "bh", "stamina"], bonus: { clay: 2.0 }, desc: "赤土の長期戦に強い。確立するとクレーでラリー +2.0、練習でクレー適性も伸びる" },
+    mental: { label: "勝負師", keys: ["clutch", "return", "fh"], bonus: { clutch: 4 }, desc: "大事なポイントで強い。確立すると勝負所 +4" },
+  };
+  const INTENSITY = {
+    light: { label: "軽め", mult: 0.75, fat: -6, inj: 0.7, desc: "練習効果 ×0.75、疲労がさらに 6 抜ける、練習中の怪我 ×0.7" },
+    normal: { label: "標準", mult: 1, fat: 0, inj: 1, desc: "標準の練習量" },
+    hard: { label: "ハード", mult: 1.3, fat: 8, inj: 2.5, desc: "練習効果 ×1.3、疲労 +8、練習中の怪我 ×2.5" },
+  };
+  function devOf(state) { return state.human.dev || (state.human.dev = { style: null, intensity: "normal", auto: false, established: false }); }
+  function styleGap(p, key) {
+    const st = DEV_STYLES[key]; if (!st) return 0;
+    const ka = st.keys.reduce((a, k) => a + p.attrs[k], 0) / st.keys.length;
+    const others = ATTRS.filter((k) => !st.keys.includes(k) && k !== "durability");
+    const oa = others.reduce((a, k) => a + p.attrs[k], 0) / others.length;
+    return Math.round((ka - oa) * 10) / 10;
+  }
+  // coach-chosen focus: the two weakest key attributes of the target style (or the two weakest overall)
+  function autoFocus(state, p) {
+    const dev = devOf(state);
+    // once the style clearly stands out (gap 7+), the coach rounds out the weakest other skills
+    const keys = dev.style ? DEV_STYLES[dev.style].keys : null;
+    if (keys && styleGap(p, dev.style) < 7) return keys.slice().sort((a, b) => p.attrs[a] - p.attrs[b]).slice(0, 2);
+    // otherwise pick by match value: how much the attribute counts × how far it lags the player's average
+    const OVW = { serve: 0.18, return: 0.14, fh: 0.15, bh: 0.13, net: 0.06, speed: 0.12, stamina: 0.08, power: 0.08, clutch: 0.06, focus: 0.05 };
+    const avg = ATTRS.reduce((a, k) => a + p.attrs[k], 0) / ATTRS.length;
+    const pool = Object.keys(OVW).filter((k) => !keys || !keys.includes(k));
+    const val = (k) => OVW[k] * (p.attrs[k] > p.potential + 6 ? 0.4 : 1) * (1 + (avg - p.attrs[k]) / 40);
+    pool.sort((a, b) => val(b) - val(a));
+    return pool.slice(0, 2);
+  }
+  // Expected gain of one attribute for one week of training (no randomness). trainPlayer uses the
+  // same numbers, so what the development panel promises is what the engine does.
+  function trainRate(state, p, k, focus, intensity, opts) {
+    const mult = ageMult(growthAge(state, p)) * headroomMult(p);
+    const coach = p.isHuman ? state.human.coach : null;
+    let f = focus && focus.includes(k) ? 0.28 * intensity : 0.035 * intensity;
+    if (coach) {
+      if (coach.type === "tech" && focus && focus.includes(k)) f *= 1 + 0.25 * coach.quality;
+      if (coach.type === "physical" && PHYS.includes(k)) f *= 1.5;
+      if (coach.type === "mental" && (k === "clutch" || k === "focus")) f *= 1.6;
+    }
+    if (p.isHuman) {
+      const st = staffOf(state);
+      if (st.fitness && PHYS.includes(k)) f *= 1.3;
+      if (st.hitting) f *= 1.15;
+      if (coach) f *= 1 + (coach.compat || 0);
+      if (state.human.focusBoostUntil > state.t) f *= 1.25;
+      if (assetsOf(state).base) f *= 1.1;
+      f *= diff(state).grow;
+      const dev = devOf(state);
+      if (opts && opts.session) {
+        f *= INTENSITY[dev.intensity] ? INTENSITY[dev.intensity].mult : 1;
+        if (state.human.strategy === "develop") f *= 1.2;
+      }
+      if (dev.style && DEV_STYLES[dev.style].keys.includes(k)) f *= 1.15;
+      // specialising has diminishing returns: an attribute well above the player's ceiling grows slowly
+      if (p.attrs[k] > p.potential + 6) f *= 0.4;
+    }
+    return f * mult;
+  }
+  function trainPlayer(state, p, focus, intensity, opts) {
     const rng = state.rng;
     const mult = ageMult(growthAge(state, p)) * headroomMult(p);
     const coach = p.isHuman ? state.human.coach : null;
+    if (p.isHuman) {
+      for (const k of ATTRS) p.attrs[k] = clamp(p.attrs[k] + trainRate(state, p, k, focus, intensity, opts) * (0.7 + 0.6 * rng.next()), 25, 99);
+      if (coach && intensity > 0.6) {
+        if (coach.type === "clay") p.surf.clay = clamp(p.surf.clay + 0.25, 20, 85);
+        if (coach.type === "grass") { p.surf.grass = clamp(p.surf.grass + 0.2, 20, 85); p.surf.indoor = clamp(p.surf.indoor + 0.2, 20, 85); }
+      }
+      if (opts && opts.session && devOf(state).style === "clay") p.surf.clay = clamp(p.surf.clay + 0.1, 20, 85);
+      return;
+    }
     for (const k of ATTRS) {
       let f = focus && focus.includes(k) ? 0.28 * intensity : 0.035 * intensity;
       if (coach) {
@@ -1223,11 +1307,12 @@
     if (!humanAccepted) {
       if (act.type !== "blocked") state.human.loc = h.country; // back to the home base
       if (act.type === "train" || act.type === "camp") {
-        const focus = act.focus || state.human.focus;
+        const dev = devOf(state);
+        const focus = dev.auto ? autoFocus(state, h) : act.focus || state.human.focus;
         state.human.focus = focus;
-        trainPlayer(state, h, focus, act.type === "camp" ? (state.human.campBonus ? 1.7 : 1.4) : 1);
+        trainPlayer(state, h, focus, act.type === "camp" ? (state.human.campBonus ? 1.7 : 1.4) : 1, { session: true });
         if (act.type === "camp") state.human.campBonus = false;
-        h.fatigue = clamp(h.fatigue - (act.type === "camp" ? 18 : 12), 0, 100);
+        h.fatigue = clamp(h.fatigue - (act.type === "camp" ? 18 : 12) + (INTENSITY[dev.intensity] ? INTENSITY[dev.intensity].fat : 0), 0, 100);
         h.consec = 0;
         report.items.push({ type: "train", text: `練習ブロック: ${focus.map((k) => ATTR_LABEL[k]).join("・")} を重点強化${act.fallback ? "（大会に入れなかったため）" : ""}` });
       } else if (act.type === "rest") {
@@ -1244,7 +1329,8 @@
     // --- weekly recovery, injuries countdown, training strains ---
     for (const p of state.players) {
       if (p.retired) continue;
-      if (!p.injury && !assigned.has(p.id) && !blocked(p)) rollInjury(state, p, null, 0.006);
+      const trainWk = p.isHuman && act && (act.type === "train" || act.type === "camp");
+      if (!p.injury && !assigned.has(p.id) && !blocked(p)) rollInjury(state, p, null, 0.006 * (trainWk && INTENSITY[devOf(state).intensity] ? INTENSITY[devOf(state).intensity].inj : 1));
       let rec = 10;
       if (p.isHuman) { const st = staffOf(state); if (state.human.coach && state.human.coach.type === "physical") rec += 6; if (st.physio) rec += 5; if (st.fitness) rec += 4; rec += sponsorPerks(state).recovery; }
       p.fatigue = clamp(p.fatigue - rec, 0, 100);
@@ -1339,6 +1425,17 @@
     const surfDelta = {};
     for (const k of Object.keys(h.surf)) { const d = h.surf[k] - surfBefore[k]; if (Math.abs(d) >= 0.05) surfDelta[k] = Math.round(d * 100) / 100; }
     report.attrDelta = attrDelta;
+    {
+      const dev = devOf(state);
+      state.human.actLog = state.human.actLog || [];
+      state.human.actLog.push(act ? act.type : "rest");
+      if (state.human.actLog.length > 12) state.human.actLog.shift();
+      if (dev.style) {
+        const gap = styleGap(h, dev.style);
+        if (!dev.established && gap >= 5) { dev.established = true; h.style = dev.style; news(state, `${h.name} のプレースタイルが「${DEV_STYLES[dev.style].label}」として確立`); report.items.push({ type: "milestone", text: `スタイル確立: ${DEV_STYLES[dev.style].label}（${DEV_STYLES[dev.style].desc.split("。")[1] || ""}）` }); report.stops.push("milestone"); }
+        else if (dev.established && gap < 3) { dev.established = false; report.items.push({ type: "sharp", text: `${DEV_STYLES[dev.style].label}の特徴が薄れた（キー能力の差 ${gap}）` }); }
+      }
+    }
     report.surfDelta = surfDelta;
     pushAttrHist(state);
     state.human.rankHist = state.human.rankHist || [];
@@ -1525,7 +1622,7 @@
   const STRATEGIES = {
     big: { label: "ビッグイベント優先", desc: "GS・マスターズ・自国大会を最優先し、前週は休んで万全で臨む。年15〜22大会" },
     points: { label: "ポイント重視", desc: "出られる週はほぼ毎週出る。負荷上限 +1、休養は疲労55から。ランキングは伸びやすいが怪我と疲労のリスク" },
-    develop: { label: "育成重視", desc: "大会を絞って練習週を増やす。本戦ダイレクトインのATP大会と優先イベントだけ。成長が速い" },
+    develop: { label: "育成重視", desc: "大会を絞って練習週を増やし、練習効果 ×1.2。本戦ダイレクトインのATP大会と優先イベントだけ。試合勘は落ちやすい" },
     regional: { label: "移動最小", desc: "今いる地域の大会を優先し、8,000km超の移動は優先イベント以外しない。移動費と時差疲労を抑える" },
   };
   function autoAction(state, tours) {
@@ -1793,6 +1890,8 @@
     for (const p of s.players) if (!p.cs) p.cs = p.isHuman ? statsFromHistory(s) : initCs();
     for (const p of s.players) { if (p.sharp === undefined) p.sharp = p.injury ? 30 : 65; if (p.conf === undefined) p.conf = 0; if (p.mw === undefined) p.mw = 0; }
     if (!H.strategy) H.strategy = "big";
+    H.dev = H.dev || { style: null, intensity: "normal", auto: false, established: false };
+    H.actLog = H.actLog || [];
     H.rivalry = H.rivalry || { heat: 25, log: [], flags: {}, lastCross: -99 };
     H.rivalry.flags = H.rivalry.flags || {};
     if (H.rivalAhead === undefined) H.rivalAhead = null;
@@ -1813,5 +1912,5 @@
     return s;
   }
 
-  TL.World = { STRATEGIES, sharpBonus, sharpLabel, confLabel, sponsorsOf, brandOf, sponsorOffer, sponsorUnlocked, activeContracts, signSponsor, releaseSponsor, sponsorTerminationFee, sponsorPerks, sponsorWeekly, ASSETS, TAX, AGENT_CUT, assetsOf, assetUnlocked, buyAsset, assetsWeekly, DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
+  TL.World = { DEV_STYLES, INTENSITY, devOf, styleGap, autoFocus, trainRate, STRATEGIES, sharpBonus, sharpLabel, confLabel, sponsorsOf, brandOf, sponsorOffer, sponsorUnlocked, activeContracts, signSponsor, releaseSponsor, sponsorTerminationFee, sponsorPerks, sponsorWeekly, ASSETS, TAX, AGENT_CUT, assetsOf, assetUnlocked, buyAsset, assetsWeekly, DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
 })(typeof globalThis !== "undefined" ? globalThis : window);

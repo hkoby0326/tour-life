@@ -5,7 +5,7 @@
     W, D, S: null, tab: "home", modal: null, planSel: null, planWeekT: -1, runLog: null, running: false, screens: {},
     SAVE_KEY: "tourlife_v1", SETTINGS_KEY: "tourlife_settings_v1", HOF_KEY: "tourlife_hof_v1",
     DEFAULT_SETTINGS: { stopTournament: true, stopMilestone: true, stopInjury: true, stopSeason: true, stopEvent: true, stopRival: true, watchEnabled: true, watchGs: true, watchFinals: true, watchRival: true, watchTop10: true, watchTitle: true, watchSpeed: 300, sound: false, volume: 0.5, reduceMotion: false, slot: 1, introSeen: false, hints: {}, hintsAlways: false },
-    VERSION: "v1.8",
+    VERSION: "v1.9",
   });
   U.ATTRL = W.ATTR_LABEL;
   U.ORIGINS = {
@@ -168,7 +168,7 @@
     sponsor: ["スポンサー契約", "ラケット・ウエア・シューズは各1社、その他は2社まで。ブランドはランキングで解放され、週給は契約時のランキングで決まって期間中固定。用具には試合やコンディションへの効果、優勝ボーナス条項もある。"],
     team: ["チームの作り方", "コーチは契約年数と相性つき。相性は数ヶ月かけて判明する。スタッフ枠はランキングが上がると解禁され、同行させる人数ぶん移動費も増える。"],
     finance: ["お金の流れ", "収入は賞金・スポンサー・支援。支出はチーム給与と移動費（ホームからの距離 × 同行人数）。資金がマイナスだとコーチが雇えない。"],
-    player: ["成長の見方", "能力の天井（ポテンシャル）は見えない。コーチのコメントと同年代比較から推測する。重点スキルは4週プランで変えられる。"],
+    player: ["育成の組み立て", "上の「育成計画」で目標スタイルと練習強度を決める。キー能力の練習効果が上がり、確立すると試合で効く。表の「練習1週」は実際に伸びる期待値。能力の天井（ポテンシャル）は見えない。"],
     ranking: ["ランキングの仕組み", "直近52週のベスト19大会（＋ファイナルズ）の合計。昨年の同じ週のポイントは消える（防衛）。他の選手名を押すとスカウティングレポート。"],
   };
   U.applyHints = (c) => {
