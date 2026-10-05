@@ -205,7 +205,7 @@
       config: { name: cfg.name || "選手", country: cfg.country || "JPN", origin: cfg.origin || "grinder", injuryRealism: cfg.injuryRealism || "standard", difficulty: DIFFICULTY[cfg.difficulty] ? cfg.difficulty : "normal" },
       rankSnaps: [], history: { tournaments: [], seasons: [], matches: [], news: [] }, lastReport: null,
       human: { money: 0, sponsorWeekly: 0, sponsorUntil: 0, wcBoostUntil: 0, lastRegion: null, focus: ["serve", "fh"], careerOver: false, epilogue: null, milestones: {},
-        coach: null, physio: false, coachOffers: [], plan: "balanced", switchRule: "none", event: null, lastEventT: -99, forceRest: false, riskWeek: -1, sponsor2: { weekly: 0, until: 0 }, pressureUntil: -1, attrHist: [], seasonStartAttrs: null, exhibitionYear: 0, rivalry: { heat: 25, log: [], flags: {}, lastCross: -99 }, rivalAhead: null, focusBoostUntil: -1, assets: { jet: false, medical: false, base: false, academy: false }, investment: null, pendingPurchase: 0, sponsors: { racket: null, apparel: null, shoes: null, other: [] }, sponsorsInit: true, pendingSigning: 0, pendingBonus: 0, strategy: "big", dev: { style: null, intensity: "normal", auto: false, established: false }, actLog: [], alloc: { serve: 5, stroke: 5, ret: 0, physical: 0, mental: 0, match: 0 }, gp: 0, gpLog: [], traits: [] },
+        coach: null, physio: false, coachOffers: [], plan: "balanced", switchRule: "none", event: null, lastEventT: -99, forceRest: false, riskWeek: -1, sponsor2: { weekly: 0, until: 0 }, pressureUntil: -1, attrHist: [], seasonStartAttrs: null, exhibitionYear: 0, rivalry: { heat: 25, log: [], flags: {}, lastCross: -99 }, rivalAhead: null, focusBoostUntil: -1, assets: { jet: false, medical: false, base: false, academy: false }, investment: null, pendingPurchase: 0, sponsors: { racket: null, apparel: null, shoes: null, other: [] }, sponsorsInit: true, pendingSigning: 0, pendingBonus: 0, strategy: "big", dev: { style: null, intensity: "normal", auto: false, established: false }, actLog: [], alloc: { serve: 5, stroke: 5, ret: 0, physical: 0, mental: 0, match: 0 }, gp: 0, gpLog: [], traits: [], cash: { budget: false, loan: 0, loanRate: 0, unpaid: 0, family: false, crowd: false, fedYear: 0, job: null, jobUntil: 0, jobCooldown: {}, crisisYear: 0, lowYear: 0 } },
       cutoffs: {},
     };
     state.rng = new TL.RNG(seed);
@@ -298,7 +298,7 @@
   }
   function setStaff(state, role, on) {
     const st = staffOf(state);
-    if (on && !roleUnlocked(state, role)) return false;
+    if (on && (!roleUnlocked(state, role) || state.human.money < 0)) return false;
     st[role] = !!on;
     if (role === "physio") state.human.physio = !!on;
     return true;
@@ -332,7 +332,7 @@
   }
   function hireCoach(state, idx) {
     const o = state.human.coachOffers[idx];
-    if (!o) return;
+    if (!o || state.human.money < 0) return false;
     o.since = state.t;
     o.until = state.t + 52 * (o.years || 1);
     o.rankAtHire = human(state).rank || 9999;
@@ -458,7 +458,33 @@
       H.event = ev; H.lastEventT = state.t; report.event = ev; report.stops.push("event");
       return;
     }
+    {
+      const C = cashOf(state);
+      if (H.money < -150 && C.crisisYear !== state.year) {
+        C.crisisYear = state.year;
+        const ev = { id: "crisis", title: "キャリアの危機", text: `借金が $${Math.round(-H.money)}k に膨らんだ。このままでは遠征もチームの維持もできない。`, choices: [
+          { key: "bank", label: "銀行から借りる", desc: "$100k。年約8%の利息、賞金とスポンサー収入の25%で返済" },
+          ...(C.family ? [] : [{ key: "family", label: "家族に頼る", desc: "$40k。無利子" }]),
+          { key: "budget", label: "節約モードで立て直す", desc: "単独遠征で移動費4割減。大会中はスタッフの効果なし" },
+          { key: "retire", label: "引退する", desc: "ここでキャリアを終える" }] };
+        H.event = ev; H.lastEventT = state.t; report.event = ev; report.stops.push("event");
+        return;
+      }
+    }
     if (state.t - H.lastEventT < 5) return;
+    {
+      const C = cashOf(state);
+      if (H.money < 10 && !C.budget && C.lowYear !== state.year && state.t > 4 && !(C.job && C.jobUntil > state.t)) {
+        C.lowYear = state.year;
+        const ev = { id: "lowcash", title: "資金が尽きかけている", text: `残高は $${Math.round(H.money)}k。このペースでは数週間で遠征費が払えなくなる。マイナスになると2,500km超の遠征ができず、$50k の赤字が2週続くとチームが離れる。`, choices: [
+          { key: "budget", label: "節約モードに切り替える", desc: "単独遠征で移動費4割減。大会中はスタッフの効果なし、疲労と時差が増える" },
+          { key: "club", label: "欧州クラブリーグに出る", desc: JOBS.club.desc },
+          { key: "lesson", label: "レッスンのアルバイト", desc: JOBS.lesson.desc },
+          { key: "none", label: "このまま続ける", desc: "財務タブからいつでも資金繰りできる" }] };
+        H.event = ev; H.lastEventT = state.t; report.event = ev; report.stops.push("event");
+        return;
+      }
+    }
     {
       const a = age(state, h);
       if (a >= 32 && H.retireThinkYear !== state.year && !H.retireYear && !H.retireAtSeasonEnd && !h.injury) {
@@ -547,6 +573,13 @@
       case "successor:ignore": text = "受け流した。"; break;
       case "contract:renew": H.coach.cost = ev.terms.cost; H.coach.years = ev.terms.years; H.coach.until = state.t + 52 * ev.terms.years; H.coach.rankAtHire = h.rank || 9999; text = "契約を更新した。"; break;
       case "contract:release": text = `${H.coach.name} と別れた。`; H.coach = null; break;
+      case "lowcash:budget": case "crisis:budget": setBudget(state, true); text = "節約モードに切り替えた。しばらくは一人で回る。"; break;
+      case "lowcash:club": text = useFunding(state, "club") || "今は引き受けられない。"; break;
+      case "lowcash:lesson": text = useFunding(state, "lesson") || "今は引き受けられない。"; break;
+      case "lowcash:none": text = "このまま続ける。"; break;
+      case "crisis:bank": text = useFunding(state, "bank") || "これ以上は借りられない。"; break;
+      case "crisis:family": text = useFunding(state, "family") || "家族にはもう頼れない。"; break;
+      case "crisis:retire": H.event = null; retireNow(state); text = "ラケットを置くことにした。"; break;
       case "retirethink:continue": h.conf = clamp((h.conf || 0) + 3, -10, 10); text = "まだ終われない。もう一度コートに戻る。"; break;
       case "retirethink:farewell": H.retireYear = state.year + 1; news(state, `${h.name} が来季限りでの引退を表明`); text = "来季を最後のシーズンにすると発表した。"; break;
       case "limit:continue": h.fragile = true; text = "リハビリに入る。身体と相談しながら続ける。"; break;
@@ -828,7 +861,7 @@
     const plans = ["balanced", "balanced"], rules = ["none", "none"], clutch = [0, 0];
     plans[idx] = H.plan || "balanced";
     rules[idx] = H.switchRule || "none";
-    if (H.coach && H.coach.type === "mental") clutch[idx] += 2;
+    if (H.coach && H.coach.type === "mental" && !cashOf(state).budget) clutch[idx] += 2; // a coach who stays home cannot help on court
     if (H.pressureUntil > state.t) clutch[idx] -= 3;
     if (H.retireYear && state.year === H.retireYear) clutch[idx] += 2; // farewell season
     clutch[idx] -= sponsorPerks(state).focus * 3; // media obligations: slightly worse on big points
@@ -893,19 +926,19 @@
   }
 
   // Injury risk factors shared by match and off-court rolls.
-  function injuryFactor(state, p) {
+  function injuryFactor(state, p, onTour) {
     let f = state.config.injuryRealism === "low" ? 0.5 : 1;
     const a = age(state, p);
     if (a >= 33) f *= 1.8; else if (a >= 30) f *= 1.4;
     if (p.fragile) f *= 1.3;
-    if (p.isHuman) { f *= diff(state).injury * sponsorPerks(state).injury * (hasTrait(state, "ironbody") ? 0.8 : 1); if (assetsOf(state).medical) f *= 0.7; const st = staffOf(state); if (st.physio) f *= 0.7; if (st.fitness) f *= 0.85; if (state.human.riskWeek === state.t) f *= 2; }
+    if (p.isHuman) { f *= diff(state).injury * sponsorPerks(state).injury * (hasTrait(state, "ironbody") ? 0.8 : 1); if (assetsOf(state).medical) f *= 0.7; const st = staffOf(state); const away = onTour && cashOf(state).budget; if (st.physio && !away) f *= 0.7; if (st.fitness && !away) f *= 0.85; if (state.human.riskWeek === state.t) f *= 2; }
     return f * (1 + Math.max(0, p.fatigue - 45) / 20) * (1.7 - p.attrs.durability / 100);
   }
   // Target (calibrated with tools/injury_stats.js): ~1 injury per player-season, ~4 weeks lost, ~11% chance of a 10+ week layoff.
   function rollInjury(state, p, T, base) {
     if (p.injury) return;
     const rng = state.rng;
-    const prob = (base || 0.014) * injuryFactor(state, p);
+    const prob = (base || 0.014) * injuryFactor(state, p, !!T);
     if (!rng.chance(prob)) return;
     const r = rng.next();
     let inj;
@@ -1193,6 +1226,8 @@
       const dev = devOf(state);
       if (opts && opts.session) {
         f *= INTENSITY[dev.intensity] ? INTENSITY[dev.intensity].mult : 1;
+        const C = cashOf(state);
+        if (C.job && C.jobUntil > state.t) f *= C.job === "club" ? 0.8 : 0.6;
         if (state.human.strategy === "develop") f *= 1.2;
       }
       if (dev.style && DEV_STYLES[dev.style].keys.includes(k)) f *= 1.15;
@@ -1439,7 +1474,7 @@
       const trainWk = p.isHuman && act && (act.type === "train" || act.type === "camp");
       if (!p.injury && !assigned.has(p.id) && !blocked(p)) rollInjury(state, p, null, 0.006 * (trainWk && INTENSITY[devOf(state).intensity] ? INTENSITY[devOf(state).intensity].inj : 1));
       let rec = 10;
-      if (p.isHuman) { const st = staffOf(state); if (state.human.coach && state.human.coach.type === "physical") rec += 6; if (st.physio) rec += 5; if (st.fitness) rec += 4; rec += sponsorPerks(state).recovery + (hasTrait(state, "recovery") ? 4 : 0); }
+      if (p.isHuman) { const st = staffOf(state); const away = cashOf(state).budget && assigned.has(p.id); if (state.human.coach && state.human.coach.type === "physical" && !away) rec += 6; if (st.physio && !away) rec += 5; if (st.fitness && !away) rec += 4; rec += sponsorPerks(state).recovery + (hasTrait(state, "recovery") ? 4 : 0); }
       p.fatigue = clamp(p.fatigue - rec, 0, 100);
       const hadSharp = p.sharp;
       sharpWeekly(state, p, p.isHuman && act && act.type === "rest" ? "rest" : "other");
@@ -1468,18 +1503,54 @@
     const team = (state.human.coach ? state.human.coach.cost : 0) + staffCost(state);
     const base = 0.5;
     const prize = (report.human ? report.human.humanPrize || 0 : 0) + (report.human && report.human.doubles ? report.human.doubles.prize : 0);
-    const income = (support + extra + rankSponsor + contracts) * diff(state).income, expense = base + team;
+    // side jobs while short of money
+    const C = cashOf(state);
+    let jobIncome = 0;
+    if (C.job && C.jobUntil > state.t) {
+      jobIncome = jobPay(state, C.job);
+      if (C.job === "club") { h.fatigue = clamp(h.fatigue + 6, 0, 100); h.sharp = clamp((h.sharp || 65) + 4, 0, 100); }
+      else h.sharp = clamp((h.sharp || 65) - 2, 10, 100);
+    } else if (C.job) { report.items.push({ type: "money", text: `${JOBS[C.job].label}が終わった` }); C.jobCooldown[C.job] = state.t + JOBS[C.job].cooldown; C.job = null; }
+    const income = (support + extra + rankSponsor + contracts) * diff(state).income + jobIncome, expense = base + team;
     // tax on prize money and sponsor income (support from family or federation is untaxed)
     const tax = Math.round((prize + fee + signing + bonusPay + (extra + rankSponsor + contracts) * diff(state).income) * TAX * 10) / 10;
     const agentFee = staffOf(state).agent ? Math.round((fee + signing + bonusPay + (extra + rankSponsor + contracts) * diff(state).income) * AGENT_CUT * 10) / 10 : 0;
     // rehab and medical bills while injured; the medical contract halves them
     const sev = h.injury ? h.injury.sev || 2 : 0;
-    const rehab = sev ? Math.round((sev === 3 ? 10 : sev === 2 ? 5 : 2) * (assetsOf(state).medical ? 0.5 : 1) * sponsorPerks(state).rehab * 10) / 10 : 0;
+    // top players pay for specialists; lower-ranked players use federation and public care
+    const rehabScale = r <= 50 ? 1 : r <= 200 ? 0.4 : 0.2;
+    const rehab = sev ? Math.round((sev === 3 ? 10 : sev === 2 ? 5 : 2) * rehabScale * (assetsOf(state).medical ? 0.5 : 1) * sponsorPerks(state).rehab * 10) / 10 : 0;
     const assetsCost = Math.round(assetsWeekly(state) * 10) / 10;
     const purchase = state.human.pendingPurchase || 0;
     state.human.pendingPurchase = 0;
     state.human.money += income - expense - tax - agentFee - rehab - assetsCost;
-    const entry = { t: state.t, year: state.year, week: state.week, prize, support, rankSponsor, contracts: contracts * diff(state).income, signing: signing + bonusPay, extra: extra + fee, fee, base, team, travel, travelInfo, tax, agentFee, rehab, assetsCost, purchase, net: Math.round((prize + fee + signing + bonusPay + income - expense - travel - tax - agentFee - rehab - assetsCost - purchase) * 100) / 100, balance: Math.round(state.human.money * 10) / 10 };
+    // loan: interest accrues, repayment comes out of prize money and sponsor income
+    let loanPay = 0;
+    if (C.loan > 0) {
+      C.loan = Math.round((C.loan * (1 + (C.loanRate || 0))) * 100) / 100;
+      const earn = prize + fee + signing + bonusPay + (extra + rankSponsor + contracts) * diff(state).income;
+      loanPay = Math.min(C.loan, Math.max(0, Math.round(earn * 0.25 * 10) / 10), Math.max(0, state.human.money));
+      C.loan = Math.round((C.loan - loanPay) * 100) / 100;
+      state.human.money -= loanPay;
+      if (C.loan <= 0.05) { C.loan = 0; C.loanRate = 0; report.items.push({ type: "money", text: "借入をすべて返済した" }); }
+    }
+    const funding = state.human.pendingFunding || 0;
+    state.human.pendingFunding = 0;
+    // unpaid wages: two weeks deep in the red and the team walks out
+    if (state.human.money < -50 && (state.human.coach || Object.values(staffOf(state)).some(Boolean))) {
+      C.unpaid++;
+      if (C.unpaid === 1) report.items.push({ type: "money", text: "給与が払えていない。来週も払えなければチームが離れる（財務タブで資金繰りを）" });
+      if (C.unpaid >= 2) {
+        const names = [state.human.coach ? state.human.coach.name : null].filter(Boolean);
+        state.human.coach = null;
+        const st = staffOf(state); for (const k of Object.keys(st)) st[k] = false; state.human.physio = false;
+        C.unpaid = 0;
+        news(state, `給与未払いでチームが離脱${names.length ? `（${names.join("・")}）` : ""}`);
+        report.items.push({ type: "money", text: "給与未払いが続き、コーチとスタッフが離れた" });
+        report.stops.push("event");
+      }
+    } else C.unpaid = 0;
+    const entry = { t: state.t, year: state.year, week: state.week, prize, support, rankSponsor, contracts: contracts * diff(state).income, signing: signing + bonusPay, extra: extra + fee, fee, base, team, travel, travelInfo, tax, agentFee, rehab, assetsCost, purchase, jobIncome, funding, loanPay, net: Math.round((prize + fee + signing + bonusPay + funding + income - expense - travel - tax - agentFee - rehab - assetsCost - purchase - loanPay) * 100) / 100, balance: Math.round(state.human.money * 10) / 10 };
     state.human.ledger = state.human.ledger || [];
     state.human.ledger.push(entry);
     if (state.human.ledger.length > 160) state.human.ledger.shift();
@@ -1666,6 +1737,52 @@
     if (total) { state.human.money += total; state.human.pendingBonus = (state.human.pendingBonus || 0) + total; news(state, `優勝ボーナス: ${lines.join("、")}`); if (report && report.items) report.items.push({ type: "sponsor", text: `スポンサーの優勝ボーナス ${money(total)}（${lines.join("、")}）` }); }
     return total;
   }
+  // ---------- cash crunch (v2.3): getting by when the money runs out ----------
+  const BIG_FEDS = ["USA", "FRA", "GBR", "AUS", "ESP", "ITA", "GER", "JPN"];
+  const JOBS = {
+    club: { label: "欧州クラブリーグ", weeks: 8, cooldown: 16, desc: "週末にクラブ対抗戦。週 $2〜4k（ランキング次第）、試合勘 +4/週、疲労 +6/週、練習効果 ×0.8" },
+    lesson: { label: "レッスンのアルバイト", weeks: 8, cooldown: 8, desc: "地元でコーチング。週 $1.2k、練習効果 ×0.6、試合勘 −2/週" },
+  };
+  function cashOf(state) {
+    const H = state.human;
+    if (!H.cash) H.cash = { budget: false, loan: 0, loanRate: 0, unpaid: 0, family: false, crowd: false, fedYear: 0, job: null, jobUntil: 0, jobCooldown: {}, crisisYear: 0, lowYear: 0 };
+    return H.cash;
+  }
+  function fedGrant(state) {
+    const h = human(state), r = h.rank || 9999;
+    const base = r <= 150 ? 25 : r <= 300 ? 15 : r <= 500 ? 8 : 4;
+    return Math.round(base * (BIG_FEDS.includes(h.country) ? 1.5 : 1));
+  }
+  function jobPay(state, key) { const r = human(state).rank || 9999; return key === "club" ? (r <= 200 ? 4 : r <= 400 ? 3 : 2) : 1.2; }
+  // what the player can do about money right now (availability + reason)
+  function fundingOptions(state) {
+    const C = cashOf(state), h = human(state), a = age(state, h), H = state.human;
+    const jobBusy = C.job && C.jobUntil > state.t;
+    const out = [
+      { key: "family", label: "家族からの借金", amount: 40, ok: !C.family, why: C.family ? "一度だけ" : "", desc: "$40k。無利子。賞金とスポンサー収入の一部から返済" },
+      { key: "fed", label: "協会の強化費", amount: fedGrant(state), ok: C.fedYear !== state.year && a <= 25, why: a > 25 ? "25歳まで" : C.fedYear === state.year ? "今年は受給済み" : "", desc: `年1回・返済不要。ランキングと協会の規模で決まる（今なら $${fedGrant(state)}k）` },
+      { key: "crowd", label: "クラウドファンディング", amount: 0, ok: !C.crowd && (h.rank || 9999) <= 600, why: C.crowd ? "一度だけ" : (h.rank || 9999) > 600 ? "ランキング600位以内" : "", desc: "一度だけ。$15〜35k（母国の注目度次第）" },
+      { key: "bank", label: "銀行ローン", amount: 100, ok: C.loan < 250, why: C.loan >= 250 ? "借入上限" : "", desc: "$100k。週0.15%の利息（年約8%）。賞金とスポンサー収入の一部から返済" },
+      { key: "club", label: JOBS.club.label, amount: 0, ok: !jobBusy && !(C.jobCooldown.club > state.t), why: jobBusy ? "別の仕事中" : C.jobCooldown.club > state.t ? `あと${C.jobCooldown.club - state.t}週` : "", desc: JOBS.club.desc },
+      { key: "lesson", label: JOBS.lesson.label, amount: 0, ok: !jobBusy && !(C.jobCooldown.lesson > state.t), why: jobBusy ? "別の仕事中" : C.jobCooldown.lesson > state.t ? `あと${C.jobCooldown.lesson - state.t}週` : "", desc: JOBS.lesson.desc },
+    ];
+    return out;
+  }
+  function useFunding(state, key) {
+    const C = cashOf(state), H = state.human, h = human(state);
+    const opt = fundingOptions(state).find((o) => o.key === key);
+    if (!opt || !opt.ok) return null;
+    let amt = 0, text = "";
+    if (key === "family") { amt = 40; C.family = true; C.loan += 40; text = "家族から $40k を借りた。勝って返す。"; }
+    else if (key === "fed") { amt = fedGrant(state); C.fedYear = state.year; text = `協会から強化費 $${amt}k を受け取った。`; }
+    else if (key === "crowd") { amt = Math.round(15 + state.rng.next() * 20 + (h.country === "JPN" ? 5 : 0)); C.crowd = true; text = `クラウドファンディングで $${amt}k が集まった。応援してくれる人がいる。`; }
+    else if (key === "bank") { amt = 100; C.loan += 100; C.loanRate = 0.0015; text = "銀行から $100k を借りた。利息がかかる。"; }
+    else if (key === "club" || key === "lesson") { C.job = key; C.jobUntil = state.t + JOBS[key].weeks; text = `${JOBS[key].label}を${JOBS[key].weeks}週間引き受けた。`; }
+    if (amt) { H.money += amt; H.pendingFunding = (H.pendingFunding || 0) + amt; }
+    news(state, text);
+    return text;
+  }
+  function setBudget(state, on) { cashOf(state).budget = !!on; }
   // ---------- money sinks (v1.5): what a wealthy player can buy ----------
   const TAX = 0.3;          // flat tax on prize money and sponsor income
   const AGENT_CUT = 0.15;   // agent's commission on sponsor income and appearance fees
@@ -1690,6 +1807,7 @@
   function assetsWeekly(state) { const as = assetsOf(state); let c = 0; for (const k of Object.keys(ASSETS)) if (as[k] && ASSETS[k].type === "weekly") c += ASSETS[k].cost; return c; }
   // Travelling party: the player, the coach and the staff who travel.
   function partySize(state) {
+    if (cashOf(state).budget) return 1; // budget mode: the player travels alone
     const st = staffOf(state);
     let n = 1 + (state.human.coach ? 1 : 0);
     for (const k of Object.keys(ROLES)) if (st[k] && ROLES[k].travels) n++;
@@ -1707,12 +1825,13 @@
     const cls = r <= 10 ? 2.5 : r <= 30 ? 2.0 : r <= 100 ? 1.4 : 1;
     const perHead = (0.35 + 0.25 * (dist / 1000) + 0.4 + (T.def.weeks === 2 ? 0.4 : 0)) * cls;
     const sp = sponsorPerks(state);
-    let cost = perHead * party * sp.travel;
+    const budget = cashOf(state).budget;
+    let cost = perHead * party * sp.travel * (budget ? 0.6 : 1);
     const jet = assetsOf(state).jet;
     if (jet) cost = Math.max(25, cost * 3);
     // long-haul fatigue (jet lag) carried into the following week; a charter halves it
-    const lag = Math.max(0, (dist > 8000 ? 6 : dist > 4000 ? 3 : 0) * (jet ? 0.5 : 1) - (dist > 4000 ? sp.lag : 0));
-    return { from, to: T.country, dist, party, cls, jet, lag, cost: Math.round(cost * 10) / 10 };
+    const lag = Math.max(0, (dist > 8000 ? 6 : dist > 4000 ? 3 : 0) * (jet ? 0.5 : 1) * (budget ? 1.5 : 1) - (dist > 4000 ? sp.lag : 0)) + (budget ? 3 : 0);
+    return { from, to: T.country, dist, party, cls, jet, budget, lag, cost: Math.round(cost * 10) / 10 };
   }
   function travelCost(state, T) {
     return travelQuote(state, T).cost;
@@ -1827,7 +1946,7 @@
     summary.no1 = state.players.filter((p) => p.rank === 1).map((p) => p.name)[0] || "-";
     summary.gsWinners = state.history.tournaments.filter((t) => t.year === yr && t.cat === "GS").map((t) => `${t.name}: ${t.winner}`);
     summary.ovrDelta = (h.stats.seasons.length ? summary.overall - h.stats.seasons[h.stats.seasons.length - 1].overall : null);
-    const fin = { prize: 0, support: 0, rankSponsor: 0, contracts: 0, signing: 0, extra: 0, base: 0, team: 0, travel: 0, tax: 0, agentFee: 0, rehab: 0, assetsCost: 0, purchase: 0 };
+    const fin = { prize: 0, support: 0, rankSponsor: 0, contracts: 0, signing: 0, extra: 0, base: 0, team: 0, travel: 0, tax: 0, agentFee: 0, rehab: 0, assetsCost: 0, purchase: 0, jobIncome: 0, funding: 0, loanPay: 0 };
     for (const e of (state.human.ledger || [])) if (e.year === yr) for (const k of Object.keys(fin)) fin[k] += e[k] || 0;
     for (const k of Object.keys(fin)) fin[k] = Math.round(fin[k] * 10) / 10;
     summary.finance = fin;
@@ -2022,6 +2141,7 @@
     if (!H.strategy) H.strategy = "big";
     H.dev = H.dev || { style: null, intensity: "normal", auto: false, established: false };
     H.actLog = H.actLog || [];
+    cashOf(s); H.cash.jobCooldown = H.cash.jobCooldown || {};
     allocOf(s); H.gp = H.gp || 0; H.gpLog = H.gpLog || []; H.traits = H.traits || [];
     H.rivalry = H.rivalry || { heat: 25, log: [], flags: {}, lastCross: -99 };
     H.rivalry.flags = H.rivalry.flags || {};
@@ -2043,5 +2163,5 @@
     return s;
   }
 
-  TL.World = { forcedRetire, TRAIN_SLOTS, TRAIN_CATS, allocOf, allocShare, autoAlloc, allocSummary, TRAITS, hasTrait, traitReqOk, learnTrait, DEV_STYLES, INTENSITY, devOf, styleGap, autoFocus, trainRate, STRATEGIES, sharpBonus, sharpLabel, confLabel, sponsorsOf, brandOf, sponsorOffer, sponsorUnlocked, activeContracts, signSponsor, releaseSponsor, sponsorTerminationFee, sponsorPerks, sponsorWeekly, ASSETS, TAX, AGENT_CUT, assetsOf, assetUnlocked, buyAsset, assetsWeekly, DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
+  TL.World = { cashOf, fundingOptions, useFunding, setBudget, JOBS, forcedRetire, TRAIN_SLOTS, TRAIN_CATS, allocOf, allocShare, autoAlloc, allocSummary, TRAITS, hasTrait, traitReqOk, learnTrait, DEV_STYLES, INTENSITY, devOf, styleGap, autoFocus, trainRate, STRATEGIES, sharpBonus, sharpLabel, confLabel, sponsorsOf, brandOf, sponsorOffer, sponsorUnlocked, activeContracts, signSponsor, releaseSponsor, sponsorTerminationFee, sponsorPerks, sponsorWeekly, ASSETS, TAX, AGENT_CUT, assetsOf, assetUnlocked, buyAsset, assetsWeekly, DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
 })(typeof globalThis !== "undefined" ? globalThis : window);

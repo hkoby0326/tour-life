@@ -5,7 +5,7 @@
     W, D, S: null, tab: "home", modal: null, planSel: null, planWeekT: -1, runLog: null, running: false, screens: {},
     SAVE_KEY: "tourlife_v1", SETTINGS_KEY: "tourlife_settings_v1", HOF_KEY: "tourlife_hof_v1",
     DEFAULT_SETTINGS: { stopTournament: true, stopMilestone: true, stopInjury: true, stopSeason: true, stopEvent: true, stopRival: true, watchEnabled: true, watchGs: true, watchFinals: true, watchRival: true, watchTop10: true, watchTitle: true, watchSpeed: 300, sound: false, volume: 0.5, reduceMotion: false, slot: 1, introSeen: false, hints: {}, hintsAlways: false },
-    VERSION: "v2.2",
+    VERSION: "v2.3",
   });
   U.ATTRL = W.ATTR_LABEL;
   U.ORIGINS = {
@@ -146,6 +146,7 @@
     layer.querySelectorAll("[data-slot-copy-confirm]").forEach((b) => b.onclick = () => U.copyToSlot(parseInt(b.dataset.slotCopyConfirm, 10)));
     layer.querySelectorAll("[data-slot-del-confirm]").forEach((b) => b.onclick = () => U.deleteSlot(parseInt(b.dataset.slotDelConfirm, 10)));
     if (S) {
+      layer.querySelectorAll("[data-fund-confirm]").forEach((b) => b.onclick = () => { const t = W.useFunding(S, b.dataset.fundConfirm); U.save(); U.modalDirty = true; U.openModal(`<h2>資金繰り</h2><p>${esc(t || "今は使えない。")}</p><button class="primary" data-close>閉じる</button>`, false, true); });
       layer.querySelectorAll("[data-trait-confirm]").forEach((b) => b.onclick = () => { W.learnTrait(S, b.dataset.traitConfirm); U.save(); U.modal = null; U.render(); });
       layer.querySelectorAll("[data-sp-confirm]").forEach((b) => b.onclick = () => { const [cat, id, y] = b.dataset.spConfirm.split(":"); W.signSponsor(S, cat, id, parseInt(y, 10)); U.save(); U.modal = null; U.render(); });
       layer.querySelectorAll("[data-sp-release-confirm]").forEach((b) => b.onclick = () => { const [cat, id] = b.dataset.spReleaseConfirm.split(":"); W.releaseSponsor(S, cat, id); U.save(); U.modal = null; U.render(); });
@@ -168,7 +169,7 @@
     report: ["結果の見方", "試合ごとのスコアと、練習で伸びた能力が週単位で出る。「ドロー表」で本戦の全試合を確認できる。"],
     sponsor: ["スポンサー契約", "ラケット・ウエア・シューズは各1社、その他は2社まで。ブランドはランキングで解放され、週給は契約時のランキングで決まって期間中固定。用具には試合やコンディションへの効果、優勝ボーナス条項もある。"],
     team: ["チームの作り方", "コーチは契約年数と相性つき。相性は数ヶ月かけて判明する。スタッフ枠はランキングが上がると解禁され、同行させる人数ぶん移動費も増える。"],
-    finance: ["お金の流れ", "収入は賞金・スポンサー・支援。支出はチーム給与と移動費（ホームからの距離 × 同行人数）。資金がマイナスだとコーチが雇えない。"],
+    finance: ["お金の流れ", "収入は賞金・スポンサー・支援。支出はチーム給与と移動費（ホームからの距離 × 同行人数）。資金が尽きそうなら「資金繰り」で節約モード・強化費・借入・クラブリーグなどを使う。マイナスだと長距離遠征とコーチの雇用ができない。"],
     player: ["育成の組み立て", "上の「育成計画」で目標スタイル・練習強度・週10コマの練習配分を決める。タイトルや節目で貯まる成長ポイントで「特性」を習得できる。キー能力の練習効果が上がり、確立すると試合で効く。表の「練習1週」は実際に伸びる期待値。能力の天井（ポテンシャル）は見えない。"],
     ranking: ["ランキングの仕組み", "直近52週のベスト19大会（＋ファイナルズ）の合計。昨年の同じ週のポイントは消える（防衛）。他の選手名を押すとスカウティングレポート。"],
   };
