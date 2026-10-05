@@ -41,6 +41,9 @@
     hard: { label: "難しい", grow: 0.85, aiGrow: 1.2, income: 0.8, injury: 1.15, pot: -4, desc: "成長が遅く、天井が低め。AIの若手が速く伸び、収入も少ない" },
   };
   function diff(state) { return DIFFICULTY[state.config.difficulty] || DIFFICULTY.normal; }
+  // v2.2: the tour renews itself with faster-developing young AI players. The human's growth is
+  // scaled so a "normal" career climbs at the same pace as before the world got younger.
+  const HUMAN_GROW = 1.15;
   // Age curve of development. Flatter than a pure "prodigy" curve: a player keeps developing
   // through 22-25 (real tour peaks are 25-28), so the climb from 100 to 30 is spread over seasons.
   function ageMult(a) {
@@ -93,8 +96,8 @@
 
   function potentialFor(rng, ovr, a, eliteP) {
     let hr;
-    if (a <= 19) hr = rng.gauss(14, 6);
-    else if (a <= 22) hr = rng.gauss(9, 4);
+    if (a <= 19) hr = rng.gauss(11, 6);
+    else if (a <= 22) hr = rng.gauss(7, 4);
     else if (a <= 25) hr = rng.gauss(4, 3);
     else hr = rng.gauss(1, 1.5);
     hr = Math.max(0, hr);
@@ -873,7 +876,8 @@
         if ((ct === "clay" && T.surface === "clay") || (ct === "grass" && (T.surface === "grass" || T.surface === "indoor"))) mult *= 1.3;
       }
       if (p.isHuman && staffOf(state).hitting) mult *= 1.1;
-      mult *= p.isHuman ? diff(state).grow : diff(state).aiGrow;
+      if (!p.isHuman) { const ga = growthAge(state, p); mult *= ga <= 20 ? 2.0 : ga <= 22 ? 1.6 : ga <= 24 ? 1.25 : 1; } // young AI players learn fast from matches
+      mult *= p.isHuman ? diff(state).grow * HUMAN_GROW : diff(state).aiGrow;
       for (const k of ["serve", "return", "fh", "bh", "speed", "clutch"]) p.attrs[k] = clamp(p.attrs[k] + 0.03 * mult * (0.6 + rng.next()), 25, 99);
       p.surf[T.surface] = clamp(p.surf[T.surface] + 0.25 * (p.isHuman ? 1 : 0.6), 20, 85);
       rollInjury(state, p, T);
@@ -1185,7 +1189,7 @@
       if (state.human.focusBoostUntil > state.t) f *= 1.25;
       if (assetsOf(state).base) f *= 1.1;
       if (hasTrait(state, "learner")) f *= 1.1;
-      f *= diff(state).grow;
+      f *= diff(state).grow * HUMAN_GROW;
       const dev = devOf(state);
       if (opts && opts.session) {
         f *= INTENSITY[dev.intensity] ? INTENSITY[dev.intensity].mult : 1;
@@ -1240,7 +1244,10 @@
     const weakest = ATTRS.slice().sort((a, b) => p.attrs[a] - p.attrs[b]).slice(0, 3);
     for (const k of ATTRS) {
       // AI youngsters develop at a pace comparable to the human's, so the climb is contested
-      const f = (weakest.includes(k) ? 0.34 : 0.08) * diff(state).aiGrow;
+      // young AI players develop fastest: juniors turning pro reach their level within a few seasons
+      const ga = growthAge(state, p);
+      const youth = ga <= 20 ? 2.0 : ga <= 22 ? 1.6 : ga <= 24 ? 1.25 : 1;
+      const f = (weakest.includes(k) ? 0.34 : 0.08) * diff(state).aiGrow * youth;
       p.attrs[k] = clamp(p.attrs[k] + f * mult * (0.7 + 0.6 * rng.next()), 25, 99);
     }
     p.fatigue = clamp(p.fatigue - 25, 0, 100);
@@ -1839,10 +1846,10 @@
       const ga = a + (p.growth === "late" ? -2 : p.growth === "early" ? 2 : 0);
       if (ga >= 30) {
         // physical decline from 30, steepening in the mid-thirties; technique erodes later and slower
-        const dec = (ga - 29) * (ga >= 34 ? 0.9 : 0.7) * (p.fragile ? 1.5 : 1);
+        const dec = (ga - 29) * (ga >= 34 ? 0.95 : 0.8) * (p.fragile ? 1.5 : 1);
         for (const k of ["speed", "stamina", "power"]) p.attrs[k] = clamp(p.attrs[k] - dec * (0.7 + 0.6 * rng.next()), 25, 99);
         p.attrs.durability = clamp(p.attrs.durability - (ga >= 34 ? 1.2 : 0.6), 25, 99);
-        for (const k of ["serve", "fh", "bh", "return"]) p.attrs[k] = clamp(p.attrs[k] - dec * (ga >= 34 ? 0.55 : 0.3) * rng.next(), 25, 99);
+        for (const k of ["serve", "fh", "bh", "return"]) p.attrs[k] = clamp(p.attrs[k] - dec * (ga >= 34 ? 0.6 : 0.4) * rng.next(), 25, 99);
       }
       if (ga < 33) p.attrs.clutch = clamp(p.attrs.clutch + 0.4, 25, 99);
       if (p.isHuman) continue;
@@ -1853,19 +1860,25 @@
       else if (a >= 31 && r > 250 && rng.chance(0.6)) retire = true;
       else if (a >= 29 && r > 320 && rng.chance(0.5)) retire = true;
       if (!retire && a >= 27 && !p.rank && rng.chance(0.5)) retire = true;
+      if (!retire && a >= 25 && r > 280 && rng.chance(0.35)) retire = true; // journeymen leave the lower tiers, making room for juniors
       if (retire) { p.retired = true; p.retiredYear = yr; p.rank = null; p.points = 0; p.results = []; retired.push(p); }
     }
     summary.retired = retired.filter((p) => p.real || p.isRival || (p.stats.bestRank && p.stats.bestRank <= 30)).map((p) => `${p.name}（最高${p.stats.bestRank || "-"}位、${p.stats.titles}勝）`);
     if (rv && rv.retired) news(state, `宿敵 ${rv.name} が現役引退を表明`);
     const academy = assetsOf(state).academy;
     const active = state.players.filter((p) => !p.retired).length;
-    const need = Math.max(12, ROSTER + 1 - active);
+    const need = Math.max(18, ROSTER + 1 - active);
     const newcomers = [];
     for (let i = 0; i < need; i++) {
       const country = randomCountry(rng);
-      const a = rng.pick([17, 18, 18, 19, 19, 20]);
+      const a = rng.pick([16, 17, 17, 18, 18, 19, 20]);
       const grad = academy && i === 0;
-      const p = newPlayer(state, { name: randomName(rng, grad ? h.country : country), country: grad ? h.country : country, birthYear: START_YEAR + yr - a, overall: 44 + rng.gauss(0, 3) + (a - 17) * 1.2 + (grad ? 3 : 0), eliteP: grad ? 0.25 : 0.04 });
+      // newcomers: junior-circuit graduates at 50-56 with a ceiling drawn on an absolute scale
+      // (about a third can reach the top 100, a few the top 10), so the tour keeps renewing itself
+      // ~6% are blue-chip prospects: further along at turning pro and with a high ceiling
+      const elite = rng.chance(grad ? 0.25 : 0.12);
+      const ovr0 = 51 + rng.gauss(0, 3) + (a - 17) * 1.5 + (grad ? 3 : 0) + (elite ? 6 : 0);
+      const p = newPlayer(state, { name: randomName(rng, grad ? h.country : country), country: grad ? h.country : country, birthYear: START_YEAR + yr - a, overall: ovr0, potential: clamp(Math.max(ovr0 + 5, rng.gauss(63, 7) + (elite ? 18 : 0)), 50, 95) });
       if (grad) { p.academy = true; news(state, `${h.name} のアカデミーから ${p.name}（${a}歳）がプロ転向`); }
       state.players.push(p);
       if (rng.chance(0.6)) p.results.push({ t: state.t - rng.int(1, 20), tid: "jr", name: "ITF下部大会", cat: "M15", pts: rng.int(5, 40), prize: 0, round: "-" });
