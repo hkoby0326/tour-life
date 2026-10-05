@@ -51,7 +51,8 @@
     if (a <= 25) return 0.6;
     if (a <= 27) return 0.4;
     if (a <= 29) return 0.25;
-    return 0.12;
+    if (a <= 32) return 0.12;
+    return 0.05; // mid-thirties: training mostly slows the decline instead of adding
   }
   function headroomMult(p) {
     const hr = p.potential - TL.overall(p);
@@ -455,6 +456,24 @@
       return;
     }
     if (state.t - H.lastEventT < 5) return;
+    {
+      const a = age(state, h);
+      if (a >= 32 && H.retireThinkYear !== state.year && !H.retireYear && !H.retireAtSeasonEnd && !h.injury) {
+        const ago = (H.rankHist || []).find((x) => x.t === state.t - 52);
+        const prev = ago && ago.rank ? ago.rank : null;
+        const cur = h.rank || 9999;
+        const dropped = prev && cur >= prev * 2 && cur - prev >= 40;
+        const fallen = (h.stats.bestRank || 9999) <= 100 && cur > 200;
+        if (dropped || fallen) {
+          H.retireThinkYear = state.year;
+          const ev = { id: "retirethink", title: "引退を考える", text: `${a}歳。${prev ? `この1年で${prev}位から` : ""}${h.rank ? h.rank + "位" : "ランク外"}まで落ちた。最高${h.stats.bestRank || "-"}位まで上った身体は、もう以前のようには動かない。家族とコーチは「決めるのはあなた」と言っている。`, choices: [
+            { key: "continue", label: "まだ続ける", desc: "もう一度上を目指す。自信 +3。来年また大きく順位を落とせば、またこの話になる" },
+            { key: "farewell", label: "来季限りで引退", desc: "来季を最後のシーズンにすると表明する。ラストシーズンは全試合で勝負所 +2（声援と覚悟）" }] };
+          H.event = ev; H.lastEventT = state.t; report.event = ev; report.stops.push("event");
+          return;
+        }
+      }
+    }
     const rv = rival(state), R = H.rivalry;
     const countryName = D.COUNTRIES[h.country].name;
     const topOfCountry = state.players.filter((p) => !p.retired && p.country === h.country && p.rank && p.rank < r).length < 4;
@@ -525,6 +544,8 @@
       case "successor:ignore": text = "受け流した。"; break;
       case "contract:renew": H.coach.cost = ev.terms.cost; H.coach.years = ev.terms.years; H.coach.until = state.t + 52 * ev.terms.years; H.coach.rankAtHire = h.rank || 9999; text = "契約を更新した。"; break;
       case "contract:release": text = `${H.coach.name} と別れた。`; H.coach = null; break;
+      case "retirethink:continue": h.conf = clamp((h.conf || 0) + 3, -10, 10); text = "まだ終われない。もう一度コートに戻る。"; break;
+      case "retirethink:farewell": H.retireYear = state.year + 1; news(state, `${h.name} が来季限りでの引退を表明`); text = "来季を最後のシーズンにすると発表した。"; break;
       case "limit:continue": h.fragile = true; text = "リハビリに入る。身体と相談しながら続ける。"; break;
       case "limit:retire": H.retireAtSeasonEnd = true; text = "今シーズン限りでの引退を決めた。"; break;
       case "rivalmedia:fire": H.sponsor2 = { weekly: (H.sponsor2.weekly || 0) + 0.3, until: state.t + 26 }; rivalHeat(state, 15); text = "「次は必ず勝つ」と答えた。記事は大きく取り上げられた。"; break;
@@ -806,6 +827,7 @@
     rules[idx] = H.switchRule || "none";
     if (H.coach && H.coach.type === "mental") clutch[idx] += 2;
     if (H.pressureUntil > state.t) clutch[idx] -= 3;
+    if (H.retireYear && state.year === H.retireYear) clutch[idx] += 2; // farewell season
     clutch[idx] -= sponsorPerks(state).focus * 3; // media obligations: slightly worse on big points
     const edge = [0, 0];
     const me = a.isHuman ? a : b, opp = a.isHuman ? b : a;
@@ -1816,16 +1838,17 @@
       const a = age(state, p) + 1; // age next season
       const ga = a + (p.growth === "late" ? -2 : p.growth === "early" ? 2 : 0);
       if (ga >= 30) {
-        const dec = (ga - 29) * 0.7 * (p.fragile ? 1.5 : 1);
+        // physical decline from 30, steepening in the mid-thirties; technique erodes later and slower
+        const dec = (ga - 29) * (ga >= 34 ? 0.9 : 0.7) * (p.fragile ? 1.5 : 1);
         for (const k of ["speed", "stamina", "power"]) p.attrs[k] = clamp(p.attrs[k] - dec * (0.7 + 0.6 * rng.next()), 25, 99);
-        p.attrs.durability = clamp(p.attrs.durability - 0.6, 25, 99);
-        for (const k of ["serve", "fh", "bh", "return"]) p.attrs[k] = clamp(p.attrs[k] - dec * 0.3 * rng.next(), 25, 99);
+        p.attrs.durability = clamp(p.attrs.durability - (ga >= 34 ? 1.2 : 0.6), 25, 99);
+        for (const k of ["serve", "fh", "bh", "return"]) p.attrs[k] = clamp(p.attrs[k] - dec * (ga >= 34 ? 0.55 : 0.3) * rng.next(), 25, 99);
       }
       if (ga < 33) p.attrs.clutch = clamp(p.attrs.clutch + 0.4, 25, 99);
       if (p.isHuman) continue;
       const r = p.rank || 9999;
       let retire = false;
-      if (a >= 37) retire = true;
+      if (a >= 37) retire = r > 30 || rng.chance(0.35); // a 37-year-old in the top 30 may well go on
       else if (a >= 34 && r > 100 && rng.chance(0.6)) retire = true;
       else if (a >= 31 && r > 250 && rng.chance(0.6)) retire = true;
       else if (a >= 29 && r > 320 && rng.chance(0.5)) retire = true;
@@ -1850,14 +1873,26 @@
     }
     const hot = newcomers.slice().sort((a, b) => b.potential - a.potential)[0];
     summary.newcomer = hot ? `注目の新人: ${hot.name}（${D.COUNTRIES[hot.country].name}、${age(state, hot) + 1}歳）` : "";
-    // career end
-    if (age(state, h) + 1 >= 36 || state.human.retireAtSeasonEnd) {
+    // career end: chosen (this season / farewell season) or forced by age AND ranking — never by age alone
+    const nextAge = age(state, h) + 1;
+    const forced = forcedRetire(nextAge, h.rank);
+    const farewell = state.human.retireYear && yr >= state.human.retireYear;
+    if (forced || farewell || state.human.retireAtSeasonEnd) {
       state.human.careerOver = true;
+      state.human.retireReason = forced && !farewell && !state.human.retireAtSeasonEnd ? forced : farewell ? "ラストシーズンを終えて引退" : "引退を決断";
+      news(state, `${h.name} が現役引退を表明（${state.human.retireReason}）`);
       state.human.epilogue = epilogue(state);
     }
     return summary;
   }
 
+  // Forced end of a career: the tour no longer has room for the player (age and ranking together).
+  function forcedRetire(nextAge, rank) {
+    const r = rank || 9999;
+    if (nextAge >= 34 && r > 250) return `${nextAge}歳で${rank ? rank + "位" : "ランク外"}。ツアーで戦える場所がなくなった`;
+    if (nextAge >= 38 && r > 100) return `${nextAge}歳でトップ100の外。身体がツアーの水準についてこなくなった`;
+    return null;
+  }
   function epilogue(state) {
     const h = human(state);
     const s = h.stats;
@@ -1995,5 +2030,5 @@
     return s;
   }
 
-  TL.World = { TRAIN_SLOTS, TRAIN_CATS, allocOf, allocShare, autoAlloc, allocSummary, TRAITS, hasTrait, traitReqOk, learnTrait, DEV_STYLES, INTENSITY, devOf, styleGap, autoFocus, trainRate, STRATEGIES, sharpBonus, sharpLabel, confLabel, sponsorsOf, brandOf, sponsorOffer, sponsorUnlocked, activeContracts, signSponsor, releaseSponsor, sponsorTerminationFee, sponsorPerks, sponsorWeekly, ASSETS, TAX, AGENT_CUT, assetsOf, assetUnlocked, buyAsset, assetsWeekly, DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
+  TL.World = { forcedRetire, TRAIN_SLOTS, TRAIN_CATS, allocOf, allocShare, autoAlloc, allocSummary, TRAITS, hasTrait, traitReqOk, learnTrait, DEV_STYLES, INTENSITY, devOf, styleGap, autoFocus, trainRate, STRATEGIES, sharpBonus, sharpLabel, confLabel, sponsorsOf, brandOf, sponsorOffer, sponsorUnlocked, activeContracts, signSponsor, releaseSponsor, sponsorTerminationFee, sponsorPerks, sponsorWeekly, ASSETS, TAX, AGENT_CUT, assetsOf, assetUnlocked, buyAsset, assetsWeekly, DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
 })(typeof globalThis !== "undefined" ? globalThis : window);

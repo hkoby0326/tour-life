@@ -5,7 +5,7 @@
     W, D, S: null, tab: "home", modal: null, planSel: null, planWeekT: -1, runLog: null, running: false, screens: {},
     SAVE_KEY: "tourlife_v1", SETTINGS_KEY: "tourlife_settings_v1", HOF_KEY: "tourlife_hof_v1",
     DEFAULT_SETTINGS: { stopTournament: true, stopMilestone: true, stopInjury: true, stopSeason: true, stopEvent: true, stopRival: true, watchEnabled: true, watchGs: true, watchFinals: true, watchRival: true, watchTop10: true, watchTitle: true, watchSpeed: 300, sound: false, volume: 0.5, reduceMotion: false, slot: 1, introSeen: false, hints: {}, hintsAlways: false },
-    VERSION: "v2.0",
+    VERSION: "v2.1",
   });
   U.ATTRL = W.ATTR_LABEL;
   U.ORIGINS = {
@@ -109,7 +109,7 @@
         <button class="nav more-only ${U.PRIMARY.includes(U.tab) ? "" : "active"}" data-more title="その他">${U.icon("more")}<span>${U.PRIMARY.includes(U.tab) ? "その他" : U.TAB_LABEL[U.tab]}</span></button>
         <div class="spacer"></div><div class="version">${U.VERSION}</div></nav>
       <div class="main"><header class="topbar">
-        <div class="identity">${U.avatar(me)}<div><div class="name">${esc(me.name)}</div><div class="sub">${U.cal()}年 第${S.week}週 ・ ${W.age(S, me)}歳 ・ ${U.ORIGINS[S.config.origin].name}</div></div></div>
+        <div class="identity">${U.avatar(me)}<div><div class="name">${esc(me.name)}</div><div class="sub">${U.cal()}年 第${S.week}週 ・ ${W.age(S, me)}歳 ・ ${U.ORIGINS[S.config.origin].name}${S.human.retireYear && S.year === S.human.retireYear ? ' ・ <span class="gold">ラストシーズン</span>' : ""}</div></div></div>
         <div class="statrow">
         <div class="stat"><span class="l">Ranking</span><span class="v">${me.rank ? me.rank + "位" : "ランク外"}</span><span class="d">${me.points}pt ${delta > 0 ? `<span class="green">▲${delta}</span>` : delta < 0 ? `<span class="red">▼${-delta}</span>` : ""}</span></div>
         <div class="stat"><span class="l">Money</span><span class="v ${S.human.money < 0 ? "red" : ""}">${money(S.human.money)}</span><span class="d">${S.human.ledger && S.human.ledger.length ? (S.human.ledger[S.human.ledger.length - 1].net >= 0 ? '<span class="green">+' : '<span class="red">') + money(S.human.ledger[S.human.ledger.length - 1].net) + "/週</span>" : ""}</span></div>
@@ -245,7 +245,7 @@
       <p class="small muted">チームタブに新しいコーチ候補が届いています。</p>
       <button class="primary" data-close>閉じる</button>`;
   };
-  U.epilogueHtml = () => { const e = U.S.human.epilogue; if (!e) return ""; return `<h1 class="gold">「${U.esc(e.tag)}」</h1><p>${e.lines.map(U.esc).join("<br>")}</p><p class="small muted">殿堂ギャラリー（スタート画面）に記録されました。</p>`; };
+  U.epilogueHtml = () => { const e = U.S.human.epilogue; if (!e) return ""; return `${U.S.human.retireReason ? `<p class="small muted">${U.esc(U.S.human.retireReason)}</p>` : ""}<h1 class="gold">「${U.esc(e.tag)}」</h1><p>${e.lines.map(U.esc).join("<br>")}</p><p class="small muted">殿堂ギャラリー（スタート画面）に記録されました。</p>`; };
 
   // ---------- run loop ----------
   U.shouldStop = (rep) => { const st = rep.stops, s = U.settings; return (st.includes("injury") && s.stopInjury) || (st.includes("season") && s.stopSeason) || (st.includes("event") && s.stopEvent) || (st.includes("rival") && s.stopRival); };
