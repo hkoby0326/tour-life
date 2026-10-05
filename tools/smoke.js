@@ -1,6 +1,6 @@
 // Full-career smoke test: runs N seasons on auto for each origin and prints a summary.
 // usage: node tools/smoke.js [seasons] [seed]
-require("../src/rng.js"); require("../src/data_tournaments.js"); require("../src/data_players.js"); require("../src/match.js"); require("../src/world.js");
+require("../src/rng.js"); require("../src/data_tournaments.js"); require("../src/data_players.js"); require("../src/data_sponsors.js"); require("../src/match.js"); require("../src/world.js");
 const seasons = parseInt(process.argv[2] || "8", 10);
 const seed = parseInt(process.argv[3] || "7", 10);
 let fail = 0;

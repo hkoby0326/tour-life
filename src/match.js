@@ -65,6 +65,7 @@
     };
     const base = [components(pa, surface), components(pb, surface)];
     if (opts.edge) for (const i of [0, 1]) { base[i].serve += opts.edge[i] || 0; base[i].ret += opts.edge[i] || 0; }
+    if (opts.bonus) for (const i of [0, 1]) { const b = opts.bonus[i]; if (b) { base[i].serve += b.serve || 0; base[i].ret += b.ret || 0; base[i].rally += b.rally || 0; } }
     const clutchB = [(opts.clutch && opts.clutch[0]) || 0, (opts.clutch && opts.clutch[1]) || 0];
     const comp = [applyPlan(base[0], M.plans[0], clutchB[0]), applyPlan(base[1], M.plans[1], clutchB[1])];
     const fatigueMultArr = [comp[0].fat, comp[1].fat];

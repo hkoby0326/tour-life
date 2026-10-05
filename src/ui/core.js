@@ -5,7 +5,7 @@
     W, D, S: null, tab: "home", modal: null, planSel: null, planWeekT: -1, runLog: null, running: false, screens: {},
     SAVE_KEY: "tourlife_v1", SETTINGS_KEY: "tourlife_settings_v1", HOF_KEY: "tourlife_hof_v1",
     DEFAULT_SETTINGS: { stopTournament: true, stopMilestone: true, stopInjury: true, stopSeason: true, stopEvent: true, stopRival: true, watchEnabled: true, watchGs: true, watchFinals: true, watchRival: true, watchTop10: true, watchTitle: true, watchSpeed: 300, sound: false, volume: 0.5, reduceMotion: false, slot: 1, introSeen: false, hints: {}, hintsAlways: false },
-    VERSION: "v1.5",
+    VERSION: "v1.6",
   });
   U.ATTRL = W.ATTR_LABEL;
   U.ORIGINS = {
@@ -40,11 +40,12 @@
     player: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
     team: '<circle cx="9" cy="8" r="3.5"/><circle cx="17" cy="9" r="2.5"/><path d="M2 20a7 7 0 0 1 14 0M15 20a5 5 0 0 1 7-4"/>',
     finance: '<path d="M3 7h18v12H3zM3 11h18M16 15h2"/>',
+    sponsor: '<path d="M20 7h-4V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1zM10 5h4v2h-4z"/><path d="M3 12h18"/>',
     records: '<path d="M4 4h12a2 2 0 0 1 2 2v14H6a2 2 0 0 1-2-2zM4 18a2 2 0 0 1 2-2h12"/>',
     settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
   };
   U.icon = (n) => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n] || ""}</svg>`;
-  U.TABS = [["home", "ホーム"], ["plan", "プラン"], ["report", "結果"], ["ranking", "ランキング"], ["calendar", "カレンダー"], ["player", "選手"], ["team", "チーム"], ["finance", "財務"], ["records", "記録"], ["settings", "設定"]];
+  U.TABS = [["home", "ホーム"], ["plan", "プラン"], ["report", "結果"], ["ranking", "ランキング"], ["calendar", "カレンダー"], ["player", "選手"], ["team", "チーム"], ["sponsor", "スポンサー"], ["finance", "財務"], ["records", "記録"], ["settings", "設定"]];
   U.PRIMARY = ["home", "plan", "report", "ranking"]; // bottom tab bar on phones; the rest live behind "その他"
   U.TAB_LABEL = Object.fromEntries(U.TABS);
 
@@ -145,6 +146,8 @@
     layer.querySelectorAll("[data-slot-copy-confirm]").forEach((b) => b.onclick = () => U.copyToSlot(parseInt(b.dataset.slotCopyConfirm, 10)));
     layer.querySelectorAll("[data-slot-del-confirm]").forEach((b) => b.onclick = () => U.deleteSlot(parseInt(b.dataset.slotDelConfirm, 10)));
     if (S) {
+      layer.querySelectorAll("[data-sp-confirm]").forEach((b) => b.onclick = () => { const [cat, id, y] = b.dataset.spConfirm.split(":"); W.signSponsor(S, cat, id, parseInt(y, 10)); U.save(); U.modal = null; U.render(); });
+      layer.querySelectorAll("[data-sp-release-confirm]").forEach((b) => b.onclick = () => { const [cat, id] = b.dataset.spReleaseConfirm.split(":"); W.releaseSponsor(S, cat, id); U.save(); U.modal = null; U.render(); });
       layer.querySelectorAll("[data-asset-confirm]").forEach((b) => b.onclick = () => { W.buyAsset(S, b.dataset.assetConfirm); U.save(); U.modal = null; U.render(); });
       layer.querySelectorAll("[data-confirm-fire]").forEach((b) => b.onclick = () => { W.fireCoach(S); U.save(); U.modal = null; U.render(); });
       layer.querySelectorAll("[data-confirm-retire]").forEach((b) => b.onclick = () => { W.retireNow(S); U.save(); U.pushHof(S.human.epilogue); U.modal = `<h2>引退</h2>${U.epilogueHtml()}<button data-close>閉じる</button>`; U.tab = "plan"; U.render(); });
@@ -162,6 +165,7 @@
     home: ["ホームの読み方", "「今週の決断」は自動方針の提案。そのまま1週進めるか、「4週プラン」で大会・練習・休養を自分で組む。受信箱には選択肢つきのイベントとニュースが届く。"],
     plan: ["4週プランの組み方", "各週は 自動／大会／練習／休養／合宿 から選ぶ。大会カードの点はエントリー見込み（緑=本戦、黄=予選、赤=カットオフ外）。負荷メーターが赤なら休養を。重要試合は観戦モードになる。"],
     report: ["結果の見方", "試合ごとのスコアと、練習で伸びた能力が週単位で出る。「ドロー表」で本戦の全試合を確認できる。"],
+    sponsor: ["スポンサー契約", "ラケット・ウエア・シューズは各1社、その他は2社まで。ブランドはランキングで解放され、週給は契約時のランキングで決まって期間中固定。用具には試合やコンディションへの効果、優勝ボーナス条項もある。"],
     team: ["チームの作り方", "コーチは契約年数と相性つき。相性は数ヶ月かけて判明する。スタッフ枠はランキングが上がると解禁され、同行させる人数ぶん移動費も増える。"],
     finance: ["お金の流れ", "収入は賞金・スポンサー・支援。支出はチーム給与と移動費（ホームからの距離 × 同行人数）。資金がマイナスだとコーチが雇えない。"],
     player: ["成長の見方", "能力の天井（ポテンシャル）は見えない。コーチのコメントと同年代比較から推測する。重点スキルは4週プランで変えられる。"],

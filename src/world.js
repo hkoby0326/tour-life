@@ -182,7 +182,7 @@
       config: { name: cfg.name || "選手", country: cfg.country || "JPN", origin: cfg.origin || "grinder", injuryRealism: cfg.injuryRealism || "standard", difficulty: DIFFICULTY[cfg.difficulty] ? cfg.difficulty : "normal" },
       rankSnaps: [], history: { tournaments: [], seasons: [], matches: [], news: [] }, lastReport: null,
       human: { money: 0, sponsorWeekly: 0, sponsorUntil: 0, wcBoostUntil: 0, lastRegion: null, focus: ["serve", "fh"], careerOver: false, epilogue: null, milestones: {},
-        coach: null, physio: false, coachOffers: [], plan: "balanced", switchRule: "none", event: null, lastEventT: -99, forceRest: false, riskWeek: -1, sponsor2: { weekly: 0, until: 0 }, pressureUntil: -1, attrHist: [], seasonStartAttrs: null, exhibitionYear: 0, rivalry: { heat: 25, log: [], flags: {}, lastCross: -99 }, rivalAhead: null, focusBoostUntil: -1, assets: { jet: false, medical: false, base: false, academy: false }, investment: null, pendingPurchase: 0 },
+        coach: null, physio: false, coachOffers: [], plan: "balanced", switchRule: "none", event: null, lastEventT: -99, forceRest: false, riskWeek: -1, sponsor2: { weekly: 0, until: 0 }, pressureUntil: -1, attrHist: [], seasonStartAttrs: null, exhibitionYear: 0, rivalry: { heat: 25, log: [], flags: {}, lastCross: -99 }, rivalAhead: null, focusBoostUntil: -1, assets: { jet: false, medical: false, base: false, academy: false }, investment: null, pendingPurchase: 0, sponsors: { racket: null, apparel: null, shoes: null, other: [] }, sponsorsInit: true, pendingSigning: 0, pendingBonus: 0 },
       cutoffs: {},
     };
     state.rng = new TL.RNG(seed);
@@ -236,6 +236,7 @@
     seedResults(state, rv, Math.max(0, spec.pts + rng.int(-10, 30)));
 
     recomputeRanking(state);
+    starterSponsors(state);
     state.rankSnaps.push(snapshot(state));
     state.human.coachOffers = genCoachOffers(state);
     normalizeNumbers(state);
@@ -461,11 +462,6 @@
       ev = { id: "daviscup", title: `デビスカップ ${countryName}代表に招集`, text: "代表戦は国の期待を背負う。経験は得られるが、翌週の大会に疲労を持ち越す。", choices: [
         { key: "accept", label: "受ける", desc: "疲労＋15、クラッチ＋0.8、国内スポンサー ＋$0.3k/週（1年）" },
         { key: "decline", label: "辞退する", desc: h.country === "JPN" ? "国内メディアに批判される（スポンサー収入 −$0.2k/週、半年）" : "特に影響なし" }] };
-    } else if (r <= 150 && rng.chance(0.05)) {
-      const lump = r <= 20 ? 150 : r <= 50 ? 60 : r <= 100 ? 25 : 10;
-      ev = { id: "sponsor", title: "スポンサー契約の打診", text: `用具メーカーから契約の申し出。契約金 ${lump >= 1000 ? "$" + lump / 1000 + "M" : "$" + lump + "k"}、週 $${(lump / 40).toFixed(1)}k を1年。`, lump, choices: [
-        { key: "accept", label: "契約する", desc: "資金が増える。露出が増え、集中力 −1" },
-        { key: "decline", label: "断る", desc: "テニスに集中。集中力 ＋1" }] };
     } else if (state.week >= 48 && state.week <= 50 && r <= 60 && H.exhibitionYear !== state.year && rng.chance(0.6)) {
       const fee = r <= 10 ? 300 : r <= 30 ? 120 : 50;
       H.exhibitionYear = state.year;
@@ -518,6 +514,8 @@
       case "rivalcamp:solo": h.attrs.clutch = clamp(h.attrs.clutch + 0.4, 25, 99); rivalHeat(state, 8); text = "独りでコートに立ち続けた。"; break;
       case "rivalinjury:visit": h.attrs.focus = clamp(h.attrs.focus + 0.5, 25, 99); rivalHeat(state, -20); text = "短い返事が来た。「戻ったら、また」。"; break;
       case "rivalinjury:focus": H.focusBoostUntil = state.t + 4; rivalHeat(state, 10); text = "練習量を上げた。相手が戻る前に差をつける。"; break;
+      case "spexpire:renew": signSponsor(state, ev.cat, ev.brand, 1); text = "契約を更新した。"; break;
+      case "spexpire:release": text = "更新しなかった。"; break;
       case "invest:yes": H.money -= ev.amount; H.investment = { amount: ev.amount, label: ev.label, until: state.t + 52 }; text = `${ev.label} に $${ev.amount}k を出資した。結果は1年後。`; break;
       case "invest:no": text = "見送った。"; break;
       case "camp:accept": H.money -= 6; h.surf.clay = clamp(h.surf.clay + 4, 20, 85); h.fatigue = clamp(h.fatigue + 10, 0, 100); text = "スペインで2週間クレーを打ち込んだ。"; break;
@@ -786,12 +784,15 @@
     rules[idx] = H.switchRule || "none";
     if (H.coach && H.coach.type === "mental") clutch[idx] += 2;
     if (H.pressureUntil > state.t) clutch[idx] -= 3;
+    clutch[idx] -= sponsorPerks(state).focus * 3; // media obligations: slightly worse on big points
     const edge = [0, 0];
     const me = a.isHuman ? a : b, opp = a.isHuman ? b : a;
     if (staffOf(state).analyst && (opp.rank || 9999) < (me.rank || 9999)) edge[idx] = 1;
+    const sp = sponsorPerks(state);
+    const bonus = [null, null]; bonus[idx] = { serve: sp.serve, ret: sp.ret, rally: sp.rally };
     // charged rivalry: big points swing more for both (clutch difference matters more)
     if (opp.isRival && H.rivalry && H.rivalry.heat >= 60) { const k = (H.rivalry.heat - 60) / 40; clutch[idx] += (me.attrs.clutch - opp.attrs.clutch) * 0.15 * k; }
-    return { plans, rules, clutch, edge };
+    return { plans, rules, clutch, edge, bonus };
   }
   // per-match consequences: stats, fatigue, xp, injury roll
   function afterMatch(state, w, l, res, T, label) {
@@ -835,7 +836,7 @@
     const a = age(state, p);
     if (a >= 33) f *= 1.8; else if (a >= 30) f *= 1.4;
     if (p.fragile) f *= 1.3;
-    if (p.isHuman) { f *= diff(state).injury; if (assetsOf(state).medical) f *= 0.7; const st = staffOf(state); if (st.physio) f *= 0.7; if (st.fitness) f *= 0.85; if (state.human.riskWeek === state.t) f *= 2; }
+    if (p.isHuman) { f *= diff(state).injury * sponsorPerks(state).injury; if (assetsOf(state).medical) f *= 0.7; const st = staffOf(state); if (st.physio) f *= 0.7; if (st.fitness) f *= 0.85; if (state.human.riskWeek === state.t) f *= 2; }
     return f * (1 + Math.max(0, p.fatigue - 45) / 20) * (1.7 - p.attrs.durability / 100);
   }
   // Target (calibrated with tools/injury_stats.js): ~1 injury per player-season, ~4 weeks lost, ~11% chance of a 10+ week layoff.
@@ -922,7 +923,7 @@
       const prize = (def.prize && def.prize[idx]) || 0;
       const round = pl.won ? "優勝" : pl.roundIdx === res.rounds - 1 ? "準優勝" : roundLabel(res.N / Math.pow(2, pl.roundIdx)) + "敗退";
       addResult(state, p, T, pts, prize, round);
-      if (pl.won) { p.stats.titles++; if (def.tier === 9) p.stats.gs++; if (def.tier === 8) p.stats.m1000++; }
+      if (pl.won) { p.stats.titles++; if (def.tier === 9) p.stats.gs++; if (def.tier === 8) p.stats.m1000++; if (p.isHuman) sponsorTitleBonus(state, T, report); }
       if (p.isHuman) { report.humanPlayed = true; report.humanRound = round; report.humanPts = pts; report.humanPrize = prize; }
       p.consec++;
       if (def.weeks === 2) p.blockedUntil = state.t + 1;
@@ -1219,7 +1220,7 @@
       if (p.retired) continue;
       if (!p.injury && !assigned.has(p.id) && !blocked(p)) rollInjury(state, p, null, 0.006);
       let rec = 10;
-      if (p.isHuman) { const st = staffOf(state); if (state.human.coach && state.human.coach.type === "physical") rec += 6; if (st.physio) rec += 5; if (st.fitness) rec += 4; }
+      if (p.isHuman) { const st = staffOf(state); if (state.human.coach && state.human.coach.type === "physical") rec += 6; if (st.physio) rec += 5; if (st.fitness) rec += 4; rec += sponsorPerks(state).recovery; }
       p.fatigue = clamp(p.fatigue - rec, 0, 100);
       if (p.injury && p.injuredAt !== state.t) {
         p.injury.weeks--;
@@ -1228,6 +1229,8 @@
     }
     if (h.injury && h.injuredAt === state.t) report.stops.push("injury");
 
+    // --- sponsors: expiry, collapses ---
+    sponsorTick(state, report);
     // --- finances ---
     const support = state.human.sponsorUntil > state.t ? state.human.sponsorWeekly : 0;
     const extra = state.human.sponsor2 && state.human.sponsor2.until > state.t ? state.human.sponsor2.weekly : 0;
@@ -1235,22 +1238,26 @@
     const agentMult = staffOf(state).agent ? 1.3 : 1;
     // sponsors pay for appearances: an injured player loses the ranking-linked bonus while out
     const injCut = h.injury ? 0.5 : 1;
-    const rankSponsor = Math.round((r <= 5 ? 40 : r <= 10 ? 25 : r <= 20 ? 12 : r <= 50 ? 5 : r <= 100 ? 2.5 : r <= 200 ? 0.8 : r <= 300 ? 0.3 : 0) * agentMult * injCut * 10) / 10;
+    // small sponsors and appearance deals (the big money now comes from brand contracts in the sponsor tab)
+    const rankSponsor = Math.round((r <= 5 ? 40 : r <= 10 ? 25 : r <= 20 ? 12 : r <= 50 ? 5 : r <= 100 ? 2.5 : r <= 200 ? 0.8 : r <= 300 ? 0.3 : 0) * 0.25 * agentMult * injCut * 10) / 10;
+    const contracts = Math.round(sponsorWeekly(state) * injCut * 10) / 10;
+    const signing = state.human.pendingSigning || 0, bonusPay = state.human.pendingBonus || 0;
+    state.human.pendingSigning = 0; state.human.pendingBonus = 0;
     const team = (state.human.coach ? state.human.coach.cost : 0) + staffCost(state);
     const base = 0.5;
     const prize = (report.human ? report.human.humanPrize || 0 : 0) + (report.human && report.human.doubles ? report.human.doubles.prize : 0);
-    const income = (support + extra + rankSponsor) * diff(state).income, expense = base + team;
+    const income = (support + extra + rankSponsor + contracts) * diff(state).income, expense = base + team;
     // tax on prize money and sponsor income (support from family or federation is untaxed)
-    const tax = Math.round((prize + fee + (extra + rankSponsor) * diff(state).income) * TAX * 10) / 10;
-    const agentFee = staffOf(state).agent ? Math.round((fee + (extra + rankSponsor) * diff(state).income) * AGENT_CUT * 10) / 10 : 0;
+    const tax = Math.round((prize + fee + signing + bonusPay + (extra + rankSponsor + contracts) * diff(state).income) * TAX * 10) / 10;
+    const agentFee = staffOf(state).agent ? Math.round((fee + signing + bonusPay + (extra + rankSponsor + contracts) * diff(state).income) * AGENT_CUT * 10) / 10 : 0;
     // rehab and medical bills while injured; the medical contract halves them
     const sev = h.injury ? h.injury.sev || 2 : 0;
-    const rehab = sev ? Math.round((sev === 3 ? 10 : sev === 2 ? 5 : 2) * (assetsOf(state).medical ? 0.5 : 1) * 10) / 10 : 0;
+    const rehab = sev ? Math.round((sev === 3 ? 10 : sev === 2 ? 5 : 2) * (assetsOf(state).medical ? 0.5 : 1) * sponsorPerks(state).rehab * 10) / 10 : 0;
     const assetsCost = Math.round(assetsWeekly(state) * 10) / 10;
     const purchase = state.human.pendingPurchase || 0;
     state.human.pendingPurchase = 0;
     state.human.money += income - expense - tax - agentFee - rehab - assetsCost;
-    const entry = { t: state.t, year: state.year, week: state.week, prize, support, rankSponsor, extra: extra + fee, fee, base, team, travel, travelInfo, tax, agentFee, rehab, assetsCost, purchase, net: Math.round((prize + fee + income - expense - travel - tax - agentFee - rehab - assetsCost - purchase) * 100) / 100, balance: Math.round(state.human.money * 10) / 10 };
+    const entry = { t: state.t, year: state.year, week: state.week, prize, support, rankSponsor, contracts: contracts * diff(state).income, signing: signing + bonusPay, extra: extra + fee, fee, base, team, travel, travelInfo, tax, agentFee, rehab, assetsCost, purchase, net: Math.round((prize + fee + signing + bonusPay + income - expense - travel - tax - agentFee - rehab - assetsCost - purchase) * 100) / 100, balance: Math.round(state.human.money * 10) / 10 };
     state.human.ledger = state.human.ledger || [];
     state.human.ledger.push(entry);
     if (state.human.ledger.length > 160) state.human.ledger.shift();
@@ -1323,6 +1330,106 @@
     const h = Math.sin(dLat / 2) ** 2 + Math.cos(a[0] * toR) * Math.cos(b[0] * toR) * Math.sin(dLon / 2) ** 2;
     return Math.round(2 * R * Math.asin(Math.sqrt(h)));
   }
+  // ---------- sponsors (v1.6): brand contracts per category ----------
+  const SPONSOR_SCALE = [[1, 40], [5, 40], [10, 25], [20, 12], [50, 5], [100, 2.5], [200, 0.8], [300, 0.3], [500, 0.12]];
+  function sponsorsOf(state) { return state.human.sponsors || (state.human.sponsors = { racket: null, apparel: null, shoes: null, other: [] }); }
+  function brandOf(cat, id) { return (D.SPONSORS[cat] || []).find((b) => b.id === id); }
+  // weekly pay a brand would offer now (k$/week), fixed for the contract term once signed
+  function sponsorOffer(state, cat, brand) {
+    const h = human(state);
+    const r = h.rank || 9999;
+    const scale = r > 500 ? 0.08 : interp(SPONSOR_SCALE, r);
+    const agent = staffOf(state).agent ? 1.2 : 1;
+    const home = brand.id === "bank" && true;
+    return Math.max(0.1, Math.round(scale * D.SPONSOR_SHARE[cat] * brand.tier * agent * (home ? 1 : 1) * 10) / 10);
+  }
+  function sponsorUnlocked(state, brand) { const h = human(state); return (h.rank || 9999) <= brand.unlock; }
+  function activeContracts(state) { const sp = sponsorsOf(state); return [sp.racket, sp.apparel, sp.shoes, ...sp.other].filter(Boolean); }
+  function signSponsor(state, cat, id, years) {
+    const brand = brandOf(cat, id);
+    if (!brand || !sponsorUnlocked(state, brand)) return false;
+    const sp = sponsorsOf(state);
+    if (cat === "other") { if (sp.other.length >= D.SPONSOR_MAX_OTHER || sp.other.some((c) => c.id === id)) return false; }
+    else if (sp[cat]) return false;
+    years = Math.max(1, Math.min(3, years || 1));
+    const pay = sponsorOffer(state, cat, brand);
+    const signing = Math.round(pay * 10 * years * 10) / 10; // signing bonus: 10 weeks of pay per contract year
+    const c = { cat, id, name: brand.name, pay, years, until: state.t + 52 * years, signed: state.t, signing };
+    if (cat === "other") sp.other.push(c); else sp[cat] = c;
+    state.human.money += signing;
+    state.human.pendingSigning = (state.human.pendingSigning || 0) + signing;
+    news(state, `${brand.name} と${years}年契約（${money(pay)}/週、契約金 ${money(signing)}）`);
+    return true;
+  }
+  // every career starts with entry-level deals so income never collapses for a player who ignores the tab
+  function starterSponsors(state) {
+    const sp = sponsorsOf(state);
+    if (sp.racket || sp.apparel || sp.shoes || sp.other.length) return;
+    for (const [cat, id] of [["racket", "nova"], ["apparel", "courtline"], ["shoes", "grip"]]) {
+      const b = brandOf(cat, id);
+      const pay = sponsorOffer(state, cat, b);
+      sp[cat] = { cat, id, name: b.name, pay, years: 1, until: state.t + 52, signed: state.t, signing: 0 };
+    }
+  }
+  function sponsorTerminationFee(state, c) { return Math.round(Math.max(0, c.until - state.t) * c.pay * 0.25 * 10) / 10; }
+  function releaseSponsor(state, cat, id) {
+    const sp = sponsorsOf(state);
+    const c = cat === "other" ? sp.other.find((x) => x.id === id) : sp[cat];
+    if (!c) return false;
+    const fee = sponsorTerminationFee(state, c);
+    state.human.money -= fee;
+    if (cat === "other") sp.other = sp.other.filter((x) => x.id !== id); else sp[cat] = null;
+    news(state, `${c.name} との契約を解除（違約金 ${money(fee)}）`);
+    return true;
+  }
+  // combined perks of every active contract
+  function sponsorPerks(state) {
+    const P = { serve: 0, ret: 0, rally: 0, injury: 1, recovery: 0, travel: 1, rehab: 1, focus: 0, lag: 0 };
+    for (const c of activeContracts(state)) {
+      const b = brandOf(c.cat, c.id); if (!b) continue;
+      for (const [k, v] of Object.entries(b.perk)) { if (k === "injury" || k === "travel" || k === "rehab") P[k] *= v; else P[k] += v; }
+    }
+    return P;
+  }
+  function sponsorWeekly(state) { return Math.round(activeContracts(state).reduce((s, c) => s + c.pay, 0) * 10) / 10; }
+  // expiry, risky brands, and title bonuses
+  function sponsorTick(state, report) {
+    const sp = sponsorsOf(state), rng = state.rng;
+    const check = (c) => {
+      if (!c) return c;
+      const b = brandOf(c.cat, c.id);
+      if (state.t >= c.until) {
+        news(state, `${c.name} との契約が満了`);
+        if (!state.human.event && b && sponsorUnlocked(state, b)) {
+          const pay = sponsorOffer(state, c.cat, b);
+          state.human.event = { id: "spexpire", title: `${c.name} との契約満了`, text: `${D.SPONSOR_CATS[c.cat]}契約が満了。${c.name} は ${money(pay)}/週 で1年の更新を提示している${pay > c.pay ? "（ランキング上昇で増額）" : ""}。`, cat: c.cat, brand: b.id, pay, choices: [
+            { key: "renew", label: "更新する", desc: `${money(pay)}/週 × 1年、契約金 ${money(pay * 10)}` },
+            { key: "release", label: "更新しない", desc: "スポンサータブで別のブランドを探す" }] };
+          state.human.lastEventT = state.t; report.event = state.human.event; report.stops.push("event");
+        } else report.items.push({ type: "sponsor", text: `${c.name} との契約が満了。スポンサータブで再契約できる` });
+        return null;
+      }
+      if (b && b.risky && rng.chance(0.2 / 52)) { const h = human(state); h.attrs.focus = clamp(h.attrs.focus - 1, 25, 99); news(state, `${c.name} が経営破綻。契約は消滅し、イメージが傷ついた`); report.items.push({ type: "sponsor", text: `${c.name} が破綻した` }); return null; }
+      return c;
+    };
+    sp.racket = check(sp.racket); sp.apparel = check(sp.apparel); sp.shoes = check(sp.shoes);
+    sp.other = sp.other.map(check).filter(Boolean);
+    // tell the player once when a better brand opens up
+    const seen = state.human.sponsorSeen || (state.human.sponsorSeen = {});
+    const h = human(state);
+    if (h.rank) for (const cat of Object.keys(D.SPONSORS)) for (const b of D.SPONSORS[cat]) if (!seen[b.id] && h.rank <= b.unlock) { seen[b.id] = 1; if (b.unlock < 400) { news(state, `${b.name}（${D.SPONSOR_CATS[cat]}）がスポンサー候補に加わった`); report.items.push({ type: "sponsor", text: `${b.name}（${D.SPONSOR_CATS[cat]}）と契約できるようになった` }); } }
+  }
+  function sponsorTitleBonus(state, T, report) {
+    let total = 0; const lines = [];
+    const key = T.def.tier === 9 ? "gs" : T.def.tier === 8 ? "m1000" : "title";
+    for (const c of activeContracts(state)) {
+      const b = brandOf(c.cat, c.id); if (!b) continue;
+      const v = b.bonus[key] !== undefined ? b.bonus[key] : key !== "title" ? b.bonus.title || 0 : 0;
+      if (v) { total += v; lines.push(`${c.name} ${money(v)}`); }
+    }
+    if (total) { state.human.money += total; state.human.pendingBonus = (state.human.pendingBonus || 0) + total; news(state, `優勝ボーナス: ${lines.join("、")}`); if (report && report.items) report.items.push({ type: "sponsor", text: `スポンサーの優勝ボーナス ${money(total)}（${lines.join("、")}）` }); }
+    return total;
+  }
   // ---------- money sinks (v1.5): what a wealthy player can buy ----------
   const TAX = 0.3;          // flat tax on prize money and sponsor income
   const AGENT_CUT = 0.15;   // agent's commission on sponsor income and appearance fees
@@ -1363,11 +1470,12 @@
     const r = human(state).rank || 9999;
     const cls = r <= 10 ? 2.5 : r <= 30 ? 2.0 : r <= 100 ? 1.4 : 1;
     const perHead = (0.35 + 0.25 * (dist / 1000) + 0.4 + (T.def.weeks === 2 ? 0.4 : 0)) * cls;
-    let cost = perHead * party;
+    const sp = sponsorPerks(state);
+    let cost = perHead * party * sp.travel;
     const jet = assetsOf(state).jet;
     if (jet) cost = Math.max(25, cost * 3);
     // long-haul fatigue (jet lag) carried into the following week; a charter halves it
-    const lag = (dist > 8000 ? 6 : dist > 4000 ? 3 : 0) * (jet ? 0.5 : 1);
+    const lag = Math.max(0, (dist > 8000 ? 6 : dist > 4000 ? 3 : 0) * (jet ? 0.5 : 1) - (dist > 4000 ? sp.lag : 0));
     return { from, to: T.country, dist, party, cls, jet, lag, cost: Math.round(cost * 10) / 10 };
   }
   function travelCost(state, T) {
@@ -1452,7 +1560,7 @@
     summary.no1 = state.players.filter((p) => p.rank === 1).map((p) => p.name)[0] || "-";
     summary.gsWinners = state.history.tournaments.filter((t) => t.year === yr && t.cat === "GS").map((t) => `${t.name}: ${t.winner}`);
     summary.ovrDelta = (h.stats.seasons.length ? summary.overall - h.stats.seasons[h.stats.seasons.length - 1].overall : null);
-    const fin = { prize: 0, support: 0, rankSponsor: 0, extra: 0, base: 0, team: 0, travel: 0, tax: 0, agentFee: 0, rehab: 0, assetsCost: 0, purchase: 0 };
+    const fin = { prize: 0, support: 0, rankSponsor: 0, contracts: 0, signing: 0, extra: 0, base: 0, team: 0, travel: 0, tax: 0, agentFee: 0, rehab: 0, assetsCost: 0, purchase: 0 };
     for (const e of (state.human.ledger || [])) if (e.year === yr) for (const k of Object.keys(fin)) fin[k] += e[k] || 0;
     for (const k of Object.keys(fin)) fin[k] = Math.round(fin[k] * 10) / 10;
     summary.finance = fin;
@@ -1630,6 +1738,9 @@
     H.assets = H.assets || { jet: false, medical: false, base: false, academy: false };
     if (H.investment === undefined) H.investment = null;
     H.pendingPurchase = H.pendingPurchase || 0;
+    H.sponsors = H.sponsors || { racket: null, apparel: null, shoes: null, other: [] };
+    H.pendingSigning = H.pendingSigning || 0; H.pendingBonus = H.pendingBonus || 0;
+    if (!H.sponsorsInit) { H.sponsorsInit = true; starterSponsors(s); }
     H.ledger = H.ledger || [];
     H.rankHist = H.rankHist || [];
     H.injuryLog = H.injuryLog || [];
@@ -1640,5 +1751,5 @@
     return s;
   }
 
-  TL.World = { ASSETS, TAX, AGENT_CUT, assetsOf, assetUnlocked, buyAsset, assetsWeekly, DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
+  TL.World = { sponsorsOf, brandOf, sponsorOffer, sponsorUnlocked, activeContracts, signSponsor, releaseSponsor, sponsorTerminationFee, sponsorPerks, sponsorWeekly, ASSETS, TAX, AGENT_CUT, assetsOf, assetUnlocked, buyAsset, assetsWeekly, DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
 })(typeof globalThis !== "undefined" ? globalThis : window);

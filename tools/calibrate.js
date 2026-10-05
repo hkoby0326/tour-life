@@ -1,6 +1,6 @@
 // Phase 0: match-model calibration. Prints win-rate matrix between synthetic players
 // at given overall ratings and compares with target rank-based expectations.
-require("../src/rng.js"); require("../src/data_tournaments.js"); require("../src/data_players.js"); require("../src/match.js");
+require("../src/rng.js"); require("../src/data_tournaments.js"); require("../src/data_players.js"); require("../src/data_sponsors.js"); require("../src/match.js");
 const rng = new TL.RNG(12345);
 function mk(o, name) {
   const a = {};

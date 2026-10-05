@@ -1,5 +1,5 @@
 // Injury-rate calibration: injuries per player-season by severity, weeks lost, long layoffs.
-require("../src/rng.js"); require("../src/data_tournaments.js"); require("../src/data_players.js"); require("../src/match.js"); require("../src/world.js");
+require("../src/rng.js"); require("../src/data_tournaments.js"); require("../src/data_players.js"); require("../src/data_sponsors.js"); require("../src/match.js"); require("../src/world.js");
 const seasons = parseInt(process.argv[2] || "3", 10);
 const s = TL.World.create({ name: "t", country: "JPN", origin: "college", seed: 9 });
 const counts = { 1: 0, 2: 0, 3: 0 }; let weeksOut = 0; let long = 0; const humanInj = []; let wos = 0;
