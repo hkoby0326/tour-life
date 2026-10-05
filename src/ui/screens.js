@@ -372,16 +372,27 @@
       <p class="small muted" style="margin-top:6px">練習1週あたりの期待値（年齢・伸びしろ・コーチ・スタッフ・強度・方針込み）。直近12週の練習は ${trainWks}週${S.human.strategy === "develop" ? "（育成重視: 練習効果 ×1.2）" : ""}。試合でも少しずつ伸びる。天井より 6 以上高い能力は伸びが鈍る。</p></div>`;
   };
   U.traitsPanelHtml = function () {
-    const S = U.S, H = S.human, me = human();
-    const learned = H.traits || [];
-    const reqText = (T) => Object.entries(T.req).map(([k, v]) => `${ATTRL[k]}${v}以上`).join("・");
+    const S = U.S, H = S.human;
+    const lv = W.traitLevels(S), held = W.traitList(S), slots = W.traitSlots(S);
+    const pips = (l) => `<span class="pips">${[1, 2, 3, 4, 5].map((i) => `<i class="${i <= l ? "on" : ""}"></i>`).join("")}</span>`;
     const card = (id) => {
-      const T = W.TRAITS[id], has = learned.includes(id), reqOk = W.traitReqOk(S, id), afford = (H.gp || 0) >= T.cost;
-      return `<div class="card trait ${has ? "on" : ""}" style="${has || reqOk ? "" : "opacity:.6"}"><div class="row between"><div><b>${esc(T.label)}</b> ${has ? '<span class="pill gold">習得済み</span>' : `<span class="pill">${T.cost}pt</span>`}<div class="small muted">${esc(T.desc)}</div>${reqText(T) ? `<div class="tiny ${reqOk ? "green" : "gold"}">条件: ${reqText(T)}</div>` : ""}</div>${has ? "" : `<button class="small ${afford && reqOk ? "primary" : ""}" data-trait="${id}" ${afford && reqOk ? "" : "disabled"}>習得</button>`}</div></div>`;
+      const T = W.TRAITS[id], l = lv[id] || 0, next = l + 1;
+      const cost = l < 5 ? W.TRAIT_COST[l] : null;
+      const req = l < 5 ? W.traitReq(S, id, next) : [];
+      const reqOk = req.every((r) => r.ok), afford = cost !== null && (H.gp || 0) >= cost, slotOk = l > 0 || held.length < slots;
+      const can = l < 5 && reqOk && afford && slotOk;
+      const why = l >= 5 ? "" : !slotOk ? "スロットが空いていない" : !reqOk ? "" : !afford ? `あと ${cost - (H.gp || 0)}pt` : "";
+      return `<div class="card trait ${l ? "on" : ""}" style="${l || (reqOk && slotOk) ? "" : "opacity:.6"}">
+        <div class="row between"><div><b>${esc(T.label)}</b> ${l ? `<span class="pill gold">Lv${l}</span>` : ""} ${pips(l)}</div>
+          <div class="row" style="gap:6px">${l ? `<button class="small" data-trait-drop="${id}">外す</button>` : ""}${l < 5 ? `<button class="small ${can ? "primary" : ""}" data-trait="${id}" ${can ? "" : "disabled"}>${l ? "強化" : "習得"} ${cost}pt</button>` : '<span class="pill gold">最大</span>'}</div></div>
+        ${l ? `<div class="small">${esc(W.traitEffectText(id, l))}</div>` : ""}
+        ${l < 5 ? `<div class="small muted">${l ? "次" : "Lv1"}: ${esc(W.traitEffectText(id, next))}</div>` : ""}
+        ${req.length ? `<div class="tiny">${req.map((r) => `<span class="${r.ok ? "green" : "gold"}">${esc(r.text)}</span>`).join("・")}</div>` : ""}
+        ${why ? `<div class="tiny gold">${esc(why)}</div>` : ""}</div>`;
     };
-    const ids = Object.keys(W.TRAITS).sort((a, b) => learned.includes(b) - learned.includes(a));
-    return `<div class="panel"><h2>特性 <span class="muted small">成長ポイント <b class="accent">${H.gp || 0}</b></span></h2>
-      <p class="small muted">タイトル（下部 1／ATP250・500 2〜3／1000 4／GS・ファイナルズ 6）、トップ200以上の節目（2）、シーズン終了（1）で貯まる。特性は試合の特定の場面だけに効くので、プレースタイルと日程に合わせて選ぶ。</p>
+    const ids = Object.keys(W.TRAITS).sort((a, b) => (lv[b] || 0) - (lv[a] || 0));
+    return `<div class="panel"><h2>特性 <span class="muted small">成長ポイント <b class="accent">${H.gp || 0}</b> ・ スロット <b>${held.length}/${slots}</b></span></h2>
+      <p class="small muted">各特性は Lv1〜5。強化コスト ${W.TRAIT_COST.join("→")}pt、効果は Lv1 の ${W.TRAIT_LV.slice(2).map((x) => "×" + x).join("・")}。持てるのは${slots}つまで（最高20位で+1、最高3位で+1）。外すと使ったポイントの半分が戻る。ポイントはタイトル（下部 1／250・500 2〜3／1000 4／GS・ファイナルズ 6）、トップ200以上の節目（2）、シーズン終了（1）で貯まる。</p>
       ${(H.gpLog || []).length ? `<p class="tiny muted">最近の獲得: ${(H.gpLog || []).slice(-4).reverse().map((g) => `${esc(g.why)} +${g.n}`).join("、")}</p>` : ""}
       <div class="tgrid2">${ids.map(card).join("")}</div></div>`;
   };
@@ -391,7 +402,8 @@
     const si = c.querySelector("[data-dev-int]"); if (si) si.onchange = () => { dev.intensity = si.value; U.save(); U.render(); };
     const sa = c.querySelector("[data-dev-auto]"); if (sa) sa.onchange = () => { dev.auto = sa.checked; if (!dev.auto) S.human.alloc = W.autoAlloc(S, human()); U.save(); U.render(); };
     c.querySelectorAll("[data-alloc]").forEach((b) => b.onclick = () => { const [cat, d] = b.dataset.alloc.split(":"); const a = W.allocOf(S); const tot = Object.values(a).reduce((x, y) => x + y, 0); const n = parseInt(d, 10); if (n > 0 && tot >= W.TRAIN_SLOTS) return; a[cat] = Math.max(0, (a[cat] || 0) + n); U.save(); U.render(); });
-    c.querySelectorAll("[data-trait]").forEach((b) => b.onclick = () => { const id = b.dataset.trait; const T = W.TRAITS[id]; U.openModal(`<h2>${esc(T.label)}</h2><p>${esc(T.desc)}</p><p>成長ポイント ${T.cost} を使って習得しますか？（残り ${S.human.gp}）</p><div class="row"><button class="primary" data-trait-confirm="${id}">習得する</button><button data-close>やめる</button></div>`); });
+    c.querySelectorAll("[data-trait]").forEach((b) => b.onclick = () => { const id = b.dataset.trait; const T = W.TRAITS[id]; const l = W.traitLevel(S, id); U.openModal(`<h2>${esc(T.label)} ${l ? `Lv${l} → Lv${l + 1}` : "を習得"}</h2><p>${esc(W.traitEffectText(id, l + 1))}</p>${l ? `<p class="small muted">現在: ${esc(W.traitEffectText(id, l))}</p>` : ""}<p>成長ポイント ${W.TRAIT_COST[l]} を使いますか？（残り ${S.human.gp}）</p><div class="row"><button class="primary" data-trait-confirm="${id}">${l ? "強化する" : "習得する"}</button><button data-close>やめる</button></div>`); });
+    c.querySelectorAll("[data-trait-drop]").forEach((b) => b.onclick = () => { const id = b.dataset.traitDrop; const T = W.TRAITS[id]; const l = W.traitLevel(S, id); const back = Math.floor(W.TRAIT_COST.slice(0, l).reduce((a, x) => a + x, 0) / 2); U.openModal(`<h2>${esc(T.label)} を外す</h2><p>Lv${l} の特性を外してスロットを空けます。${back}pt が戻ります（使った分の半分）。</p><div class="row"><button class="danger" data-trait-drop-confirm="${id}">外す</button><button data-close>やめる</button></div>`); });
   };
   U.screens.player = function (c) {
     const S = U.S, me = human(), rv = rival();

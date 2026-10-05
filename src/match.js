@@ -84,7 +84,10 @@
 
     // Traits (learned with growth points): deterministic, situation-dependent nudges to the point
     // probability. They consume no randomness, so watched and simulated matches stay identical.
-    const TR = [new Set((opts.traits && opts.traits[0]) || []), new Set((opts.traits && opts.traits[1]) || [])];
+    // traits arrive as {id: level} (v2.6) or a plain list (level 1)
+    const LV = [0, 1, 1.6, 2.1, 2.5, 2.8], MAR = [1, 0.5, 0.42, 0.35, 0.3, 0.25];
+    const toMap = (t) => { const m = new Map(); if (Array.isArray(t)) for (const id of t) m.set(id, 1); else if (t) for (const [id, l] of Object.entries(t)) if (l > 0) m.set(id, l); return m; };
+    const TR = [toMap(opts.traits && opts.traits[0]), toMap(opts.traits && opts.traits[1])];
     const TC = opts.tctx || {};
     const anyTraits = TR[0].size + TR[1].size > 0;
     function traitAdj(sv, ctx) {
@@ -92,20 +95,21 @@
       const decider = M.setsWon[0] === setsToWin - 1 && M.setsWon[1] === setsToWin - 1;
       for (const i of [0, 1]) {
         const t = TR[i]; if (!t.size) continue;
+        const L = (id) => LV[t.get(id) || 0];
         const serving = i === sv;
         let x = 0;
-        if (t.has("bigserve") && serving && (ctx.bp || ctx.big || ctx.sp)) x += 0.03;
-        if (t.has("returner") && !serving && ctx.bp) x += 0.03;
-        if (t.has("tiebreak") && ctx.tb) x += 0.025;
-        if (t.has("comeback") && M.setsWon[i] < M.setsWon[1 - i]) x += 0.012;
-        if (t.has("frontrunner") && M.setsWon[i] > M.setsWon[1 - i]) x += 0.009;
-        if (t.has("marathon") && decider) x += 0.006;
-        if (t.has("claycourt") && surface === "clay") x += 0.005;
-        if (t.has("fastcourt") && (surface === "grass" || surface === "indoor")) x += 0.005;
-        if (t.has("faststart") && M.setNo === 0) x += 0.011;
-        if (t.has("bigstage") && TC.bigStage) x += 0.005;
-        if (t.has("crowd") && TC.home && TC.home[i]) x += 0.005;
-        if (t.has("giantkiller") && TC.underdog && TC.underdog[i]) x += 0.006;
+        if (serving && (ctx.bp || ctx.big || ctx.sp)) x += 0.03 * L("bigserve");
+        if (!serving && ctx.bp) x += 0.03 * L("returner");
+        if (ctx.tb) x += 0.025 * L("tiebreak");
+        if (M.setsWon[i] < M.setsWon[1 - i]) x += 0.016 * L("comeback");
+        if (M.setsWon[i] > M.setsWon[1 - i]) x += 0.012 * L("frontrunner");
+        if (decider) x += 0.006 * L("marathon");
+        if (surface === "clay") x += 0.005 * L("claycourt");
+        if (surface === "grass" || surface === "indoor") x += 0.005 * L("fastcourt");
+        if (M.setNo === 0) x += 0.011 * L("faststart");
+        if (TC.bigStage) x += 0.005 * L("bigstage");
+        if (TC.home && TC.home[i]) x += 0.005 * L("crowd");
+        if (TC.underdog && TC.underdog[i]) x += 0.006 * L("giantkiller");
         d += serving ? x : -x;
       }
       return d;
@@ -114,7 +118,7 @@
       const A = comp[sv], B = comp[rt];
       let p = S.base + S.k1 * (A.serve + form[sv] - (B.ret + form[rt])) + S.k2 * (A.rally + form[sv] - (B.rally + form[rt]));
       p += momentum[sv] - momentum[rt];
-      const fat = (s) => Math.max(0, M.setNo) * 0.006 * (1 - comp[s].stamina / 100) * 2 * (TR[s].has("marathon") ? 0.5 : 1);
+      const fat = (s) => Math.max(0, M.setNo) * 0.006 * (1 - comp[s].stamina / 100) * 2 * MAR[TR[s].get("marathon") || 0];
       p -= fat(sv) - fat(rt);
       if (ctx.bp) p += (A.clutch - B.clutch) * 0.0008;
       if (ctx.big) p += (A.clutch - B.clutch) * 0.0006;
