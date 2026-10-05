@@ -73,14 +73,43 @@
     const momentum = [0, 0];
     M.server = rng.int(0, 1);
 
+    // Traits (learned with growth points): deterministic, situation-dependent nudges to the point
+    // probability. They consume no randomness, so watched and simulated matches stay identical.
+    const TR = [new Set((opts.traits && opts.traits[0]) || []), new Set((opts.traits && opts.traits[1]) || [])];
+    const TC = opts.tctx || {};
+    const anyTraits = TR[0].size + TR[1].size > 0;
+    function traitAdj(sv, ctx) {
+      let d = 0;
+      const decider = M.setsWon[0] === setsToWin - 1 && M.setsWon[1] === setsToWin - 1;
+      for (const i of [0, 1]) {
+        const t = TR[i]; if (!t.size) continue;
+        const serving = i === sv;
+        let x = 0;
+        if (t.has("bigserve") && serving && (ctx.bp || ctx.big || ctx.sp)) x += 0.03;
+        if (t.has("returner") && !serving && ctx.bp) x += 0.03;
+        if (t.has("tiebreak") && ctx.tb) x += 0.025;
+        if (t.has("comeback") && M.setsWon[i] < M.setsWon[1 - i]) x += 0.012;
+        if (t.has("frontrunner") && M.setsWon[i] > M.setsWon[1 - i]) x += 0.009;
+        if (t.has("marathon") && decider) x += 0.006;
+        if (t.has("claycourt") && surface === "clay") x += 0.005;
+        if (t.has("fastcourt") && (surface === "grass" || surface === "indoor")) x += 0.005;
+        if (t.has("faststart") && M.setNo === 0) x += 0.011;
+        if (t.has("bigstage") && TC.bigStage) x += 0.005;
+        if (t.has("crowd") && TC.home && TC.home[i]) x += 0.005;
+        if (t.has("giantkiller") && TC.underdog && TC.underdog[i]) x += 0.006;
+        d += serving ? x : -x;
+      }
+      return d;
+    }
     function pPoint(sv, rt, ctx) {
       const A = comp[sv], B = comp[rt];
       let p = S.base + S.k1 * (A.serve + form[sv] - (B.ret + form[rt])) + S.k2 * (A.rally + form[sv] - (B.rally + form[rt]));
       p += momentum[sv] - momentum[rt];
-      const fat = (s) => Math.max(0, M.setNo) * 0.006 * (1 - comp[s].stamina / 100) * 2;
+      const fat = (s) => Math.max(0, M.setNo) * 0.006 * (1 - comp[s].stamina / 100) * 2 * (TR[s].has("marathon") ? 0.5 : 1);
       p -= fat(sv) - fat(rt);
       if (ctx.bp) p += (A.clutch - B.clutch) * 0.0008;
       if (ctx.big) p += (A.clutch - B.clutch) * 0.0006;
+      if (anyTraits) p += traitAdj(sv, ctx);
       return clamp(p, 0.25, 0.92);
     }
     // Cosmetic point classification (how the point was won) sampled after the winner is known.
@@ -206,7 +235,7 @@
       if (M.tb) {
         const target = isDecider ? 10 : 7;
         if (sit.bp) M.stats.bpFaced[sv] += 0;
-        const p = pPoint(sv, rt, { bp: sit.bp, big: sit.big });
+        const p = pPoint(sv, rt, { bp: sit.bp, big: sit.big, tb: true });
         const w = rng.next() < p ? sv : rt;
         Object.assign(ev, pointKind(sv, rt, w));
         if (sit.matchPoint === rt && w === sv) M.stats.mpSaved[sv]++;
@@ -230,7 +259,7 @@
         return ev;
       }
       if (sit.bp) M.stats.bpFaced[sv]++;
-      const p = pPoint(sv, rt, { bp: sit.bp });
+      const p = pPoint(sv, rt, { bp: sit.bp, sp: sit.setPoint >= 0 });
       const w = rng.next() < p ? sv : rt;
       Object.assign(ev, pointKind(sv, rt, w));
       M.pts[w]++;

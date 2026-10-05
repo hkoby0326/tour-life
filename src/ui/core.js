@@ -5,7 +5,7 @@
     W, D, S: null, tab: "home", modal: null, planSel: null, planWeekT: -1, runLog: null, running: false, screens: {},
     SAVE_KEY: "tourlife_v1", SETTINGS_KEY: "tourlife_settings_v1", HOF_KEY: "tourlife_hof_v1",
     DEFAULT_SETTINGS: { stopTournament: true, stopMilestone: true, stopInjury: true, stopSeason: true, stopEvent: true, stopRival: true, watchEnabled: true, watchGs: true, watchFinals: true, watchRival: true, watchTop10: true, watchTitle: true, watchSpeed: 300, sound: false, volume: 0.5, reduceMotion: false, slot: 1, introSeen: false, hints: {}, hintsAlways: false },
-    VERSION: "v1.9",
+    VERSION: "v2.0",
   });
   U.ATTRL = W.ATTR_LABEL;
   U.ORIGINS = {
@@ -146,6 +146,7 @@
     layer.querySelectorAll("[data-slot-copy-confirm]").forEach((b) => b.onclick = () => U.copyToSlot(parseInt(b.dataset.slotCopyConfirm, 10)));
     layer.querySelectorAll("[data-slot-del-confirm]").forEach((b) => b.onclick = () => U.deleteSlot(parseInt(b.dataset.slotDelConfirm, 10)));
     if (S) {
+      layer.querySelectorAll("[data-trait-confirm]").forEach((b) => b.onclick = () => { W.learnTrait(S, b.dataset.traitConfirm); U.save(); U.modal = null; U.render(); });
       layer.querySelectorAll("[data-sp-confirm]").forEach((b) => b.onclick = () => { const [cat, id, y] = b.dataset.spConfirm.split(":"); W.signSponsor(S, cat, id, parseInt(y, 10)); U.save(); U.modal = null; U.render(); });
       layer.querySelectorAll("[data-sp-release-confirm]").forEach((b) => b.onclick = () => { const [cat, id] = b.dataset.spReleaseConfirm.split(":"); W.releaseSponsor(S, cat, id); U.save(); U.modal = null; U.render(); });
       layer.querySelectorAll("[data-asset-confirm]").forEach((b) => b.onclick = () => { W.buyAsset(S, b.dataset.assetConfirm); U.save(); U.modal = null; U.render(); });
@@ -168,7 +169,7 @@
     sponsor: ["スポンサー契約", "ラケット・ウエア・シューズは各1社、その他は2社まで。ブランドはランキングで解放され、週給は契約時のランキングで決まって期間中固定。用具には試合やコンディションへの効果、優勝ボーナス条項もある。"],
     team: ["チームの作り方", "コーチは契約年数と相性つき。相性は数ヶ月かけて判明する。スタッフ枠はランキングが上がると解禁され、同行させる人数ぶん移動費も増える。"],
     finance: ["お金の流れ", "収入は賞金・スポンサー・支援。支出はチーム給与と移動費（ホームからの距離 × 同行人数）。資金がマイナスだとコーチが雇えない。"],
-    player: ["育成の組み立て", "上の「育成計画」で目標スタイルと練習強度を決める。キー能力の練習効果が上がり、確立すると試合で効く。表の「練習1週」は実際に伸びる期待値。能力の天井（ポテンシャル）は見えない。"],
+    player: ["育成の組み立て", "上の「育成計画」で目標スタイル・練習強度・週10コマの練習配分を決める。タイトルや節目で貯まる成長ポイントで「特性」を習得できる。キー能力の練習効果が上がり、確立すると試合で効く。表の「練習1週」は実際に伸びる期待値。能力の天井（ポテンシャル）は見えない。"],
     ranking: ["ランキングの仕組み", "直近52週のベスト19大会（＋ファイナルズ）の合計。昨年の同じ週のポイントは消える（防衛）。他の選手名を押すとスカウティングレポート。"],
   };
   U.applyHints = (c) => {
@@ -217,7 +218,7 @@
     const surf = Object.keys(D.SURFACES).map((k) => `<div class="attr" style="grid-template-columns:84px 1fr 36px"><span>${D.SURFACES[k]}</span>${bar(p.surf[k], `var(--${k})`)}<span class="num">${p.surf[k]}</span></div>`).join("");
     return `<div class="row between"><div class="identity">${U.avatar(p)}<div><div class="name">${esc(p.name)} ${p.isRival ? '<span class="pill rival">宿敵</span>' : ""}${p.isHuman ? '<span class="pill">自分</span>' : ""}</div><div class="sub">${p.age}歳 ・ ${D.COUNTRIES[p.country].name} ・ ${p.hand === "L" ? "左利き" : "右利き"} ・ ${W.STYLE_LABEL[p.style] || p.style}</div></div></div><div style="text-align:right"><div class="kpi .v" style="font-size:22px;font-weight:800">${p.retired ? "引退" : p.rank ? p.rank + "位" : "ランク外"}</div><div class="small muted">${p.points}pt ・ 最高${p.bestRank || "-"}位 ・ 総合 ${p.overall}${p.scout && !p.scout.exact ? `<span class="pill" style="margin-left:4px">推定 ±${p.scout.amp}</span>` : ""}</div></div></div>
       ${p.injury ? `<p class="small red">${esc(p.injury.label)} 残り${p.injury.weeks}週</p>` : ""}
-      <p class="small muted">試合勘 ${p.sharp}（${p.sharpLabel}） ・ 自信: ${p.confLabel}</p>
+      <p class="small muted">試合勘 ${p.sharp}（${p.sharpLabel}） ・ 自信: ${p.confLabel}${p.isHuman && (U.S.human.traits || []).length ? ` ・ 特性: ${(U.S.human.traits || []).map((t) => W.TRAITS[t].label).join("・")}` : ""}</p>
       <div class="grid2" style="margin-top:10px"><div>${U.radarSvg(p.attrs, p.isHuman ? null : U.human().attrs)}<div class="small muted" style="text-align:center;margin:-4px 0 8px"><span class="accent">■</span> ${esc(p.name)}${p.isHuman ? "" : ' <span class="red">■</span> 自分'}</div>${attrs}<h3 style="margin-top:8px">サーフェス</h3>${surf}</div>
       <div><div class="kpi"><div class="card"><div class="v">${p.titles}</div><div class="l">タイトル</div></div><div class="card"><div class="v">${p.gs}</div><div class="l">GS</div></div><div class="card"><div class="v">${p.w}-${p.l}</div><div class="l">通算</div></div><div class="card"><div class="v">${money(p.prize)}</div><div class="l">賞金</div></div></div>
         <p class="small">直近52週 ${p.tournaments52}大会 ・ 疲労 ${p.fatigue} ・ 同年代${p.peers}人中${p.peerPos ? p.peerPos + "番目" : "-"}</p>

@@ -84,7 +84,7 @@
           <div class="small muted">${me.injury ? `<span class="red">${esc(me.injury.label)} 残り${me.injury.weeks}週</span>` : "怪我なし"} ・ 資金 <b class="${S.human.money < 0 ? "red" : ""}">${money(S.human.money)}</b></div>
           <div class="attr" style="grid-template-columns:70px 1fr 40px;margin-top:4px"><span>試合勘</span><div class="bar"><div style="width:${Math.round(me.sharp || 0)}%;background:${(me.sharp || 0) >= 55 ? "var(--green)" : (me.sharp || 0) >= 40 ? "var(--gold)" : "var(--red)"}"></div></div><span class="num">${Math.round(me.sharp || 0)}</span></div>
           <div class="small muted">${W.sharpLabel(me.sharp || 0)} ・ 自信: ${W.confLabel(me.conf || 0)}${(me.sharp || 0) < 55 ? ' <span class="gold">（試合に出ると戻る）</span>' : ""}</div>
-          <div class="small muted" style="margin-top:6px">試合プラン: ${TL.PLANS[S.human.plan].label} ・ 重点: ${ATTRL[S.human.focus[0]]}・${ATTRL[S.human.focus[1]]} ・ 方針: ${W.STRATEGIES[S.human.strategy || "big"].label}</div></div></div>
+          <div class="small muted" style="margin-top:6px">試合プラン: ${TL.PLANS[S.human.plan].label} ・ 練習: ${esc(W.allocSummary(W.devOf(S).auto ? W.autoAlloc(S, me) : W.allocOf(S)))} ・ 方針: ${W.STRATEGIES[S.human.strategy || "big"].label}</div></div></div>
       </div>
       <div>${rivalCard}<div class="panel"><h2>受信箱</h2><div class="inbox">${items.join("")}</div></div></div></div>`;
     c.querySelector("[data-go-auto]").onclick = () => U.runWeeks([auto0.type === "blocked" ? { type: "blocked" } : { type: "auto" }]);
@@ -130,7 +130,7 @@
     // header: policy + load meter
     html += `<div class="panel"><div class="row between"><h2 style="margin:0;border:0;padding:0">4週間のプラン <span class="muted small">第${S.week}週〜</span></h2><span class="loadmeter">今季 ${seasonT}大会（目安 ${guide}） ・ 負荷 <span class="bar"><div style="width:${Math.min(100, (load8 / maxLoad) * 100)}%;background:${load8 >= maxLoad ? "var(--red)" : load8 >= maxLoad - 1 ? "var(--gold)" : "var(--green)"}"></div></span> ${load8}/${maxLoad}</span></div>
       <div class="row" style="gap:16px;margin-top:10px">
-      <label class="small">重点スキル ${[0, 1].map((i) => `<select data-focus="${i}" ${W.devOf(S).auto ? "disabled" : ""}>${W.ATTRS.map((k) => `<option value="${k}" ${S.human.focus[i] === k ? "selected" : ""}>${ATTRL[k]}</option>`).join("")}</select>`).join(" ")}</label>
+      <span class="small">練習配分: <b>${esc(W.allocSummary(W.devOf(S).auto ? W.autoAlloc(S, me) : W.allocOf(S)))}</b>${W.devOf(S).auto ? "（コーチ）" : ""}</span>
       <label class="small">試合プラン <select data-plan>${Object.entries(TL.PLANS).map(([k, p]) => `<option value="${k}" ${S.human.plan === k ? "selected" : ""}>${p.label}</option>`).join("")}</select></label>
       <label class="small">自動の方針 <select data-strategy>${Object.entries(W.STRATEGIES).map(([k, v]) => `<option value="${k}" ${(S.human.strategy || "big") === k ? "selected" : ""}>${v.label}</option>`).join("")}</select></label>
       <label class="small">セット間 <select data-rule><option value="none" ${S.human.switchRule === "none" ? "selected" : ""}>切り替えない</option><option value="behind" ${S.human.switchRule === "behind" ? "selected" : ""}>セットを落としたら攻撃的に</option></select></label></div>
@@ -336,7 +336,8 @@
   U.devPanelHtml = function () {
     const S = U.S, me = human(), dev = W.devOf(S);
     const st = dev.style ? W.DEV_STYLES[dev.style] : null;
-    const focus = dev.auto ? W.autoFocus(S, me) : S.human.focus;
+    const alloc = dev.auto ? W.autoAlloc(S, me) : W.allocOf(S);
+    const focus = W.ATTRS.slice().sort((x, y) => W.allocShare(alloc, y) - W.allocShare(alloc, x)).slice(0, 2);
     const log = S.human.actLog || [];
     const trainWks = log.filter((a) => a === "train" || a === "camp").length;
     const share = log.length ? trainWks / log.length : 0.35;
@@ -344,8 +345,8 @@
     const oa = others.reduce((a, k) => a + me.attrs[k], 0) / others.length;
     const gap = st ? W.styleGap(me, dev.style) : 0;
     const rows = W.ATTRS.map((k) => {
-      const isKey = st && st.keys.includes(k), isFocus = focus.includes(k);
-      const rate = W.trainRate(S, me, k, focus, 1, { session: true });
+      const isKey = st && st.keys.includes(k), isFocus = W.allocShare(alloc, k) > 0.04;
+      const rate = W.trainRate(S, me, k, focus, 1, { session: true, alloc });
       const capped = me.attrs[k] > me.potential + 6;
       let eta = "";
       if (isKey && !dev.established) {
@@ -360,17 +361,35 @@
       <div class="row" style="gap:14px;flex-wrap:wrap">
         <label class="small">目標スタイル <select data-dev-style><option value="">決めない</option>${Object.entries(W.DEV_STYLES).map(([k, v]) => `<option value="${k}" ${dev.style === k ? "selected" : ""}>${v.label}</option>`).join("")}</select></label>
         <label class="small">練習強度 <select data-dev-int>${Object.entries(W.INTENSITY).map(([k, v]) => `<option value="${k}" ${dev.intensity === k ? "selected" : ""}>${v.label}</option>`).join("")}</select></label>
-        <label class="small" style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-dev-auto style="width:auto;margin:0" ${dev.auto ? "checked" : ""}> 重点はコーチに任せる</label></div>
-      <p class="small muted" style="margin:6px 0">${st ? esc(st.desc) + `。キー能力（${st.keys.map((k) => ATTRL[k]).join("・")}）の練習効果 ×1.15。` : "スタイルを決めると、キー能力の練習効果が上がり、確立すると試合で効果が出る。"} ${esc(W.INTENSITY[dev.intensity].desc)}。${dev.auto ? `重点はコーチが毎週選ぶ（今週: ${focus.map((k) => ATTRL[k]).join("・")}）。` : ""}</p>
+        <label class="small" style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-dev-auto style="width:auto;margin:0" ${dev.auto ? "checked" : ""}> 練習配分はコーチに任せる</label></div>
+      <p class="small muted" style="margin:6px 0">${st ? esc(st.desc) + `。キー能力（${st.keys.map((k) => ATTRL[k]).join("・")}）の練習効果 ×1.15。` : "スタイルを決めると、キー能力の練習効果が上がり、確立すると試合で効果が出る。"} ${esc(W.INTENSITY[dev.intensity].desc)}。</p>
+      <h3 style="margin:10px 0 4px">練習配分 <span class="muted small">週${W.TRAIN_SLOTS}コマ${dev.auto ? " ・ コーチが毎週組む" : ` ・ 残り ${W.TRAIN_SLOTS - Object.values(alloc).reduce((a, b) => a + b, 0)}コマ`}</span></h3>
+      <div class="alloc">${Object.entries(W.TRAIN_CATS).map(([c, v]) => `<div class="arow"><div><b>${v.label}</b><div class="tiny muted">${esc(v.desc)}</div></div><div class="actl">${dev.auto ? "" : `<button class="small" data-alloc="${c}:-1" ${alloc[c] ? "" : "disabled"}>−</button>`}<span class="num">${alloc[c] || 0}</span>${dev.auto ? "" : `<button class="small" data-alloc="${c}:1" ${Object.values(alloc).reduce((a, b) => a + b, 0) < W.TRAIN_SLOTS ? "" : "disabled"}>＋</button>`}</div><div class="abar"><div style="width:${(alloc[c] || 0) * 10}%"></div></div></div>`).join("")}</div>
       ${st ? `<div class="attr" style="grid-template-columns:110px 1fr 70px"><span class="small">スタイル確立度</span><div class="bar"><div style="width:${Math.max(0, Math.min(100, (gap / 5) * 100))}%;background:${dev.established ? "var(--gold)" : "var(--accent)"}"></div></div><span class="num small">${dev.established ? '<b class="gold">確立</b>' : `${gap.toFixed(1)}/5`}</span></div><p class="small muted" style="margin:2px 0 8px">キー能力の平均が他の能力の平均より 5 以上高くなると確立（3 を割ると解除）。</p>` : ""}
       <div class="tscroll"><table class="small"><tr><th>能力</th><th class="num">現在</th><th class="num">練習1週</th><th>${st && !dev.established ? "確立の目安" : ""}</th></tr>${rows}</table></div>
       <p class="small muted" style="margin-top:6px">練習1週あたりの期待値（年齢・伸びしろ・コーチ・スタッフ・強度・方針込み）。直近12週の練習は ${trainWks}週${S.human.strategy === "develop" ? "（育成重視: 練習効果 ×1.2）" : ""}。試合でも少しずつ伸びる。天井より 6 以上高い能力は伸びが鈍る。</p></div>`;
+  };
+  U.traitsPanelHtml = function () {
+    const S = U.S, H = S.human, me = human();
+    const learned = H.traits || [];
+    const reqText = (T) => Object.entries(T.req).map(([k, v]) => `${ATTRL[k]}${v}以上`).join("・");
+    const card = (id) => {
+      const T = W.TRAITS[id], has = learned.includes(id), reqOk = W.traitReqOk(S, id), afford = (H.gp || 0) >= T.cost;
+      return `<div class="card trait ${has ? "on" : ""}" style="${has || reqOk ? "" : "opacity:.6"}"><div class="row between"><div><b>${esc(T.label)}</b> ${has ? '<span class="pill gold">習得済み</span>' : `<span class="pill">${T.cost}pt</span>`}<div class="small muted">${esc(T.desc)}</div>${reqText(T) ? `<div class="tiny ${reqOk ? "green" : "gold"}">条件: ${reqText(T)}</div>` : ""}</div>${has ? "" : `<button class="small ${afford && reqOk ? "primary" : ""}" data-trait="${id}" ${afford && reqOk ? "" : "disabled"}>習得</button>`}</div></div>`;
+    };
+    const ids = Object.keys(W.TRAITS).sort((a, b) => learned.includes(b) - learned.includes(a));
+    return `<div class="panel"><h2>特性 <span class="muted small">成長ポイント <b class="accent">${H.gp || 0}</b></span></h2>
+      <p class="small muted">タイトル（下部 1／ATP250・500 2〜3／1000 4／GS・ファイナルズ 6）、トップ200以上の節目（2）、シーズン終了（1）で貯まる。特性は試合の特定の場面だけに効くので、プレースタイルと日程に合わせて選ぶ。</p>
+      ${(H.gpLog || []).length ? `<p class="tiny muted">最近の獲得: ${(H.gpLog || []).slice(-4).reverse().map((g) => `${esc(g.why)} +${g.n}`).join("、")}</p>` : ""}
+      <div class="tgrid2">${ids.map(card).join("")}</div></div>`;
   };
   U.bindDevPanel = function (c) {
     const S = U.S, dev = W.devOf(S);
     const ss = c.querySelector("[data-dev-style]"); if (ss) ss.onchange = () => { dev.style = ss.value || null; dev.established = false; U.save(); U.render(); };
     const si = c.querySelector("[data-dev-int]"); if (si) si.onchange = () => { dev.intensity = si.value; U.save(); U.render(); };
-    const sa = c.querySelector("[data-dev-auto]"); if (sa) sa.onchange = () => { dev.auto = sa.checked; if (dev.auto) S.human.focus = W.autoFocus(S, human()); U.save(); U.render(); };
+    const sa = c.querySelector("[data-dev-auto]"); if (sa) sa.onchange = () => { dev.auto = sa.checked; if (!dev.auto) S.human.alloc = W.autoAlloc(S, human()); U.save(); U.render(); };
+    c.querySelectorAll("[data-alloc]").forEach((b) => b.onclick = () => { const [cat, d] = b.dataset.alloc.split(":"); const a = W.allocOf(S); const tot = Object.values(a).reduce((x, y) => x + y, 0); const n = parseInt(d, 10); if (n > 0 && tot >= W.TRAIN_SLOTS) return; a[cat] = Math.max(0, (a[cat] || 0) + n); U.save(); U.render(); });
+    c.querySelectorAll("[data-trait]").forEach((b) => b.onclick = () => { const id = b.dataset.trait; const T = W.TRAITS[id]; U.openModal(`<h2>${esc(T.label)}</h2><p>${esc(T.desc)}</p><p>成長ポイント ${T.cost} を使って習得しますか？（残り ${S.human.gp}）</p><div class="row"><button class="primary" data-trait-confirm="${id}">習得する</button><button data-close>やめる</button></div>`); });
   };
   U.screens.player = function (c) {
     const S = U.S, me = human(), rv = rival();
@@ -388,7 +407,7 @@
     const top10 = S.history.matches.filter((m) => m.oppRank && m.oppRank <= 10);
     const titles = S.history.tournaments.filter((t) => t.winnerId === me.id);
     const curSeason = { age: W.age(S, me), rank: me.rank, w: S.history.matches.filter((m) => m.year === S.year && m.won).length, l: S.history.matches.filter((m) => m.year === S.year && !m.won).length };
-    c.innerHTML = `${U.devPanelHtml()}<div class="grid2"><div class="panel"><div class="identity" style="margin-bottom:12px">${U.avatar(me)}<div><div class="name">${esc(me.name)}</div><div class="sub">総合 ${ovr.toFixed(1)} ・ ${me.hand === "L" ? "左利き" : "右利き"} ・ ${W.STYLE_LABEL[me.style] || ""} ・ ${esc(hint)}</div></div></div>
+    c.innerHTML = `${U.devPanelHtml()}${U.traitsPanelHtml()}<div class="grid2"><div class="panel"><div class="identity" style="margin-bottom:12px">${U.avatar(me)}<div><div class="name">${esc(me.name)}</div><div class="sub">総合 ${ovr.toFixed(1)} ・ ${me.hand === "L" ? "左利き" : "右利き"} ・ ${W.STYLE_LABEL[me.style] || ""} ・ ${esc(hint)}</div></div></div>
       ${U.radarSvg(me.attrs, rv && !rv.retired ? rv.attrs : null)}<div class="small muted" style="text-align:center;margin:-4px 0 10px"><span class="accent">■</span> 自分${rv && !rv.retired ? ` <span class="red">■</span> 宿敵 ${esc(rv.name)}` : ""}</div>
       <div class="attr" style="color:var(--muted);font-size:11px"><span></span><span></span><span class="num">値</span><span>4週</span><span>今季</span></div>${attrs}
       <h3 style="margin-top:12px">サーフェス適性</h3>${surf}

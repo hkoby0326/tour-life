@@ -201,7 +201,7 @@
       config: { name: cfg.name || "選手", country: cfg.country || "JPN", origin: cfg.origin || "grinder", injuryRealism: cfg.injuryRealism || "standard", difficulty: DIFFICULTY[cfg.difficulty] ? cfg.difficulty : "normal" },
       rankSnaps: [], history: { tournaments: [], seasons: [], matches: [], news: [] }, lastReport: null,
       human: { money: 0, sponsorWeekly: 0, sponsorUntil: 0, wcBoostUntil: 0, lastRegion: null, focus: ["serve", "fh"], careerOver: false, epilogue: null, milestones: {},
-        coach: null, physio: false, coachOffers: [], plan: "balanced", switchRule: "none", event: null, lastEventT: -99, forceRest: false, riskWeek: -1, sponsor2: { weekly: 0, until: 0 }, pressureUntil: -1, attrHist: [], seasonStartAttrs: null, exhibitionYear: 0, rivalry: { heat: 25, log: [], flags: {}, lastCross: -99 }, rivalAhead: null, focusBoostUntil: -1, assets: { jet: false, medical: false, base: false, academy: false }, investment: null, pendingPurchase: 0, sponsors: { racket: null, apparel: null, shoes: null, other: [] }, sponsorsInit: true, pendingSigning: 0, pendingBonus: 0, strategy: "big", dev: { style: null, intensity: "normal", auto: false, established: false }, actLog: [] },
+        coach: null, physio: false, coachOffers: [], plan: "balanced", switchRule: "none", event: null, lastEventT: -99, forceRest: false, riskWeek: -1, sponsor2: { weekly: 0, until: 0 }, pressureUntil: -1, attrHist: [], seasonStartAttrs: null, exhibitionYear: 0, rivalry: { heat: 25, log: [], flags: {}, lastCross: -99 }, rivalAhead: null, focusBoostUntil: -1, assets: { jet: false, medical: false, base: false, academy: false }, investment: null, pendingPurchase: 0, sponsors: { racket: null, apparel: null, shoes: null, other: [] }, sponsorsInit: true, pendingSigning: 0, pendingBonus: 0, strategy: "big", dev: { style: null, intensity: "normal", auto: false, established: false }, actLog: [], alloc: { serve: 5, stroke: 5, ret: 0, physical: 0, mental: 0, match: 0 }, gp: 0, gpLog: [], traits: [] },
       cutoffs: {},
     };
     state.rng = new TL.RNG(seed);
@@ -813,6 +813,10 @@
     const sp = sponsorPerks(state);
     const bonus = [null, null]; bonus[idx] = { serve: sp.serve, ret: sp.ret, rally: sp.rally };
     const dev = devOf(state);
+    const traits = [null, null]; traits[idx] = H.traits || [];
+    const tctx = { bigStage: !!(T && (T.def.tier >= 8 || T.cat === "FINALS")), home: [false, false], underdog: [false, false] };
+    tctx.home[idx] = !!(T && T.country === me.country);
+    tctx.underdog[idx] = (opp.rank || 9999) + 30 < (me.rank || 9999);
     if (dev.style && dev.established) {
       const sb = DEV_STYLES[dev.style].bonus;
       bonus[idx].serve += sb.serve || 0; bonus[idx].ret += sb.ret || 0; bonus[idx].rally += (sb.rally || 0) + (sb.clay && T && T.surface === "clay" ? sb.clay : 0);
@@ -820,7 +824,7 @@
     }
     // charged rivalry: big points swing more for both (clutch difference matters more)
     if (opp.isRival && H.rivalry && H.rivalry.heat >= 60) { const k = (H.rivalry.heat - 60) / 40; clutch[idx] += (me.attrs.clutch - opp.attrs.clutch) * 0.15 * k; }
-    return { plans, rules, clutch, edge, bonus };
+    return { plans, rules, clutch, edge, bonus, traits, tctx };
   }
   // per-match consequences: stats, fatigue, xp, injury roll
   function afterMatch(state, w, l, res, T, label) {
@@ -868,7 +872,7 @@
     const a = age(state, p);
     if (a >= 33) f *= 1.8; else if (a >= 30) f *= 1.4;
     if (p.fragile) f *= 1.3;
-    if (p.isHuman) { f *= diff(state).injury * sponsorPerks(state).injury; if (assetsOf(state).medical) f *= 0.7; const st = staffOf(state); if (st.physio) f *= 0.7; if (st.fitness) f *= 0.85; if (state.human.riskWeek === state.t) f *= 2; }
+    if (p.isHuman) { f *= diff(state).injury * sponsorPerks(state).injury * (hasTrait(state, "ironbody") ? 0.8 : 1); if (assetsOf(state).medical) f *= 0.7; const st = staffOf(state); if (st.physio) f *= 0.7; if (st.fitness) f *= 0.85; if (state.human.riskWeek === state.t) f *= 2; }
     return f * (1 + Math.max(0, p.fatigue - 45) / 20) * (1.7 - p.attrs.durability / 100);
   }
   // Target (calibrated with tools/injury_stats.js): ~1 injury per player-season, ~4 weeks lost, ~11% chance of a 10+ week layoff.
@@ -955,7 +959,7 @@
       const prize = (def.prize && def.prize[idx]) || 0;
       const round = pl.won ? "優勝" : pl.roundIdx === res.rounds - 1 ? "準優勝" : roundLabel(res.N / Math.pow(2, pl.roundIdx)) + "敗退";
       addResult(state, p, T, pts, prize, round);
-      if (pl.won) { p.stats.titles++; if (def.tier === 9) p.stats.gs++; if (def.tier === 8) p.stats.m1000++; if (p.isHuman) sponsorTitleBonus(state, T, report); }
+      if (pl.won) { p.stats.titles++; if (def.tier === 9) p.stats.gs++; if (def.tier === 8) p.stats.m1000++; if (p.isHuman) { sponsorTitleBonus(state, T, report); awardGP(state, def.tier >= 6 ? GP_AWARD.title[def.tier] || 2 : GP_AWARD.lowerTitle, `${T.name} 優勝`, report); } }
       if (p.isHuman) { report.humanPlayed = true; report.humanRound = round; report.humanPts = pts; report.humanPrize = prize; }
       p.consec++;
       if (def.weeks === 2) p.blockedUntil = state.t + 1;
@@ -1018,6 +1022,7 @@
     const ce = pts.get(champ.id); ce.pts += 500; ce.prize += 2200;
     allMatches.push({ round: "決勝", a: sf[0], b: sf[1], w: champ, res: fres });
     champ.stats.titles++;
+    if (champ.isHuman) awardGP(state, 6, "ATPファイナルズ優勝", report);
     for (const e of pts.values()) {
       addResult(state, e.p, T, e.pts, e.prize, e.p === champ ? "優勝" : e.p === runner ? "準優勝" : sf.includes(e.p) ? "準決勝敗退" : "ラウンドロビン");
       if (e.p.isHuman) { report.humanPlayed = true; report.humanRound = e.p === champ ? "優勝" : e.p === runner ? "準優勝" : "敗退"; report.humanPts = e.pts; report.humanPrize = e.prize; }
@@ -1049,6 +1054,72 @@
     normal: { label: "標準", mult: 1, fat: 0, inj: 1, desc: "標準の練習量" },
     hard: { label: "ハード", mult: 1.3, fat: 8, inj: 2.5, desc: "練習効果 ×1.3、疲労 +8、練習中の怪我 ×2.5" },
   };
+  // Weekly training time: 10 sessions split across categories (replaces "two focus skills").
+  const TRAIN_SLOTS = 10, SLOT_BUDGET = 0.056; // a category spreads over several skills, so the budget is a little above the old 2 x 0.245
+  const TRAIN_CATS = {
+    serve: { label: "サーブ", w: { serve: 0.75, power: 0.25 }, desc: "サーブ・パワー" },
+    stroke: { label: "ストローク", w: { fh: 0.45, bh: 0.4, net: 0.15 }, desc: "フォア・バック・ネット" },
+    ret: { label: "リターン・守備", w: { return: 0.65, speed: 0.35 }, desc: "リターン・スピード" },
+    physical: { label: "フィジカル", w: { stamina: 0.35, speed: 0.25, power: 0.2, durability: 0.2 }, desc: "スタミナ・スピード・パワー・耐久。4コマ以上で疲労が溜まる" },
+    mental: { label: "メンタル", w: { clutch: 0.5, focus: 0.5 }, desc: "クラッチ・集中力" },
+    match: { label: "実戦形式", w: { serve: 0.2, return: 0.2, fh: 0.2, bh: 0.2, clutch: 0.2 }, desc: "全体を少しずつ。1コマごとに試合勘 +1.5、疲労 +0.5" },
+  };
+  const ATTR_CAT = { serve: "serve", power: "serve", fh: "stroke", bh: "stroke", net: "stroke", return: "ret", speed: "ret", stamina: "physical", durability: "physical", clutch: "mental", focus: "mental" };
+  function allocOf(state) {
+    const H = state.human;
+    if (!H.alloc) {
+      const a = { serve: 0, stroke: 0, ret: 0, physical: 0, mental: 0, match: 0 };
+      for (const k of H.focus || ["serve", "fh"]) a[ATTR_CAT[k] || "stroke"] += 5;
+      H.alloc = a;
+    }
+    return H.alloc;
+  }
+  function allocShare(alloc, k) { let x = 0; for (const c of Object.keys(TRAIN_CATS)) x += (alloc[c] || 0) * SLOT_BUDGET * (TRAIN_CATS[c].w[k] || 0); return x; }
+  // coach's allocation: most time on the categories of the two skills autoFocus picks
+  function autoAlloc(state, p) {
+    const f = autoFocus(state, p);
+    const a = { serve: 0, stroke: 0, ret: 0, physical: 1, mental: 0, match: 2 };
+    a[ATTR_CAT[f[0]]] += 4; a[ATTR_CAT[f[1]]] += 3;
+    return a;
+  }
+  function allocSummary(a) { return Object.keys(TRAIN_CATS).filter((c) => a[c]).map((c) => `${TRAIN_CATS[c].label}${a[c]}`).join("・"); }
+  function topFocus(a) { return ATTRS.slice().sort((x, y) => allocShare(a, y) - allocShare(a, x)).slice(0, 2); }
+
+  // ---------- traits (v2.0): learned with growth points ----------
+  const TRAITS = {
+    bigserve: { label: "ビッグサーブ", cost: 4, req: { serve: 72 }, desc: "自分のサービスでブレークポイント・セットポイント・タイブレークの得点率 +3%" },
+    returner: { label: "鉄壁のリターン", cost: 4, req: { return: 72 }, desc: "相手のサービスでブレークポイントを握ったとき得点率 +3%" },
+    tiebreak: { label: "タイブレークの鬼", cost: 3, req: { clutch: 65 }, desc: "タイブレーク中の得点率 +2.5%" },
+    comeback: { label: "逆転の鬼", cost: 4, req: {}, desc: "セットカウントで負けている間、得点率 +1.2%" },
+    frontrunner: { label: "先行逃げ切り", cost: 3, req: {}, desc: "セットカウントで勝っている間、得点率 +0.9%" },
+    faststart: { label: "立ち上がり", cost: 3, req: {}, desc: "第1セットの得点率 +1.1%" },
+    marathon: { label: "鉄人", cost: 5, req: { stamina: 72 }, desc: "試合中の疲労の影響が半分、最終セットの得点率 +0.6%" },
+    claycourt: { label: "赤土の申し子", cost: 4, req: {}, desc: "クレーでの得点率 +0.5%" },
+    fastcourt: { label: "高速コートの使い手", cost: 4, req: {}, desc: "芝・インドアでの得点率 +0.5%" },
+    bigstage: { label: "大舞台", cost: 5, req: { focus: 65 }, desc: "GS・マスターズ・ファイナルズで得点率 +0.5%" },
+    crowd: { label: "ホームの声援", cost: 3, req: {}, desc: "自国開催の大会で得点率 +0.5%" },
+    giantkiller: { label: "ジャイアントキラー", cost: 4, req: {}, desc: "30位以上格上の相手に得点率 +0.6%" },
+    ironbody: { label: "頑丈な身体", cost: 5, req: { durability: 65 }, desc: "怪我の確率 ×0.8" },
+    recovery: { label: "回復力", cost: 3, req: {}, desc: "毎週の疲労回復 +4" },
+    learner: { label: "吸収力", cost: 6, req: {}, desc: "練習の効果 ×1.1" },
+  };
+  const GP_AWARD = { title: { 9: 6, 10: 6, 8: 4, 7: 3, 6: 2 }, lowerTitle: 1, milestone: 2, season: 1 };
+  function hasTrait(state, id) { return (state.human.traits || []).includes(id); }
+  function traitReqOk(state, id) { const h = human(state); return Object.entries(TRAITS[id].req).every(([k, v]) => h.attrs[k] >= v); }
+  function learnTrait(state, id) {
+    const T = TRAITS[id], H = state.human;
+    if (!T || hasTrait(state, id) || (H.gp || 0) < T.cost || !traitReqOk(state, id)) return false;
+    H.gp -= T.cost; H.traits = (H.traits || []).concat(id);
+    news(state, `${human(state).name} が特性「${T.label}」を身につけた`);
+    return true;
+  }
+  function awardGP(state, n, why, report) {
+    if (!n) return;
+    const H = state.human;
+    H.gp = (H.gp || 0) + n;
+    H.gpLog = H.gpLog || []; H.gpLog.push({ year: state.year, week: state.week, n, why }); if (H.gpLog.length > 40) H.gpLog.shift();
+    H.gpNew = (H.gpNew || []).concat({ n, why }); // flushed into the weekly report
+  }
   function devOf(state) { return state.human.dev || (state.human.dev = { style: null, intensity: "normal", auto: false, established: false }); }
   function styleGap(p, key) {
     const st = DEV_STYLES[key]; if (!st) return 0;
@@ -1076,9 +1147,11 @@
   function trainRate(state, p, k, focus, intensity, opts) {
     const mult = ageMult(growthAge(state, p)) * headroomMult(p);
     const coach = p.isHuman ? state.human.coach : null;
-    let f = focus && focus.includes(k) ? 0.28 * intensity : 0.035 * intensity;
+    const useAlloc = p.isHuman && opts && opts.session;
+    const share = useAlloc ? allocShare(opts.alloc || allocOf(state), k) : focus && focus.includes(k) ? 0.245 : 0;
+    let f = (0.035 + share) * intensity;
     if (coach) {
-      if (coach.type === "tech" && focus && focus.includes(k)) f *= 1 + 0.25 * coach.quality;
+      if (coach.type === "tech" && share > 0.05) f *= 1 + 0.25 * coach.quality;
       if (coach.type === "physical" && PHYS.includes(k)) f *= 1.5;
       if (coach.type === "mental" && (k === "clutch" || k === "focus")) f *= 1.6;
     }
@@ -1089,6 +1162,7 @@
       if (coach) f *= 1 + (coach.compat || 0);
       if (state.human.focusBoostUntil > state.t) f *= 1.25;
       if (assetsOf(state).base) f *= 1.1;
+      if (hasTrait(state, "learner")) f *= 1.1;
       f *= diff(state).grow;
       const dev = devOf(state);
       if (opts && opts.session) {
@@ -1308,13 +1382,17 @@
       if (act.type !== "blocked") state.human.loc = h.country; // back to the home base
       if (act.type === "train" || act.type === "camp") {
         const dev = devOf(state);
-        const focus = dev.auto ? autoFocus(state, h) : act.focus || state.human.focus;
+        if (dev.auto) state.human.alloc = autoAlloc(state, h);
+        const alloc = allocOf(state);
+        const focus = topFocus(alloc);
         state.human.focus = focus;
         trainPlayer(state, h, focus, act.type === "camp" ? (state.human.campBonus ? 1.7 : 1.4) : 1, { session: true });
         if (act.type === "camp") state.human.campBonus = false;
-        h.fatigue = clamp(h.fatigue - (act.type === "camp" ? 18 : 12) + (INTENSITY[dev.intensity] ? INTENSITY[dev.intensity].fat : 0), 0, 100);
+        const physLoad = Math.max(0, (alloc.physical || 0) - 3) * 1.5 + (alloc.match || 0) * 0.5;
+        h.fatigue = clamp(h.fatigue - (act.type === "camp" ? 18 : 12) + (INTENSITY[dev.intensity] ? INTENSITY[dev.intensity].fat : 0) + physLoad, 0, 100);
+        if (alloc.match) h.sharp = clamp((h.sharp || 65) + alloc.match * 1.5, 0, 100);
         h.consec = 0;
-        report.items.push({ type: "train", text: `練習ブロック: ${focus.map((k) => ATTR_LABEL[k]).join("・")} を重点強化${act.fallback ? "（大会に入れなかったため）" : ""}` });
+        report.items.push({ type: "train", text: `練習: ${allocSummary(alloc)}${act.fallback ? "（大会に入れなかったため）" : ""}` });
       } else if (act.type === "rest") {
         h.fatigue = clamp(h.fatigue - 30 - (assetsOf(state).base ? 5 : 0), 0, 100);
         h.consec = 0;
@@ -1332,7 +1410,7 @@
       const trainWk = p.isHuman && act && (act.type === "train" || act.type === "camp");
       if (!p.injury && !assigned.has(p.id) && !blocked(p)) rollInjury(state, p, null, 0.006 * (trainWk && INTENSITY[devOf(state).intensity] ? INTENSITY[devOf(state).intensity].inj : 1));
       let rec = 10;
-      if (p.isHuman) { const st = staffOf(state); if (state.human.coach && state.human.coach.type === "physical") rec += 6; if (st.physio) rec += 5; if (st.fitness) rec += 4; rec += sponsorPerks(state).recovery; }
+      if (p.isHuman) { const st = staffOf(state); if (state.human.coach && state.human.coach.type === "physical") rec += 6; if (st.physio) rec += 5; if (st.fitness) rec += 4; rec += sponsorPerks(state).recovery + (hasTrait(state, "recovery") ? 4 : 0); }
       p.fatigue = clamp(p.fatigue - rec, 0, 100);
       const hadSharp = p.sharp;
       sharpWeekly(state, p, p.isHuman && act && act.type === "rest" ? "rest" : "other");
@@ -1410,6 +1488,7 @@
       if (h.rank && h.rank <= m && !state.human.milestones[m]) {
         state.human.milestones[m] = { year: state.year, week: state.week };
         report.items.push({ type: "milestone", text: m === 1 ? "世界ランキング1位に到達！" : `トップ${m}入り（${h.rank}位）` });
+        if (m <= 200) awardGP(state, GP_AWARD.milestone, m === 1 ? "世界1位" : `トップ${m}入り`, report);
         report.stops.push("milestone");
       }
     }
@@ -1442,6 +1521,8 @@
     state.human.rankHist.push({ t: state.t, year: state.year, week: state.week, rank: h.rank, pts: h.points });
     if (state.human.rankHist.length > 160) state.human.rankHist.shift();
     normalizeNumbers(state);
+    for (const g of state.human.gpNew || []) report.items.push({ type: "gp", text: `成長ポイント +${g.n}（${g.why}）。選手タブで特性を習得できる（残り ${state.human.gp}）` });
+    state.human.gpNew = [];
     report.news = state.history.news.slice(report.newsStart).map((n) => n.text);
     report.rivalNote = rv && !rv.retired ? `${rv.name}: ${rv.rank ? rv.rank + "位" : "ランク外"}` : null;
     state.lastReport = report;
@@ -1697,6 +1778,7 @@
     summary.points = h.points;
     summary.prize = Math.round(myRes.reduce((s, r) => s + r.prize, 0));
     summary.money = Math.round(state.human.money);
+    awardGP(state, GP_AWARD.season, "シーズン終了", null);
     const wins = myMatches.filter((m) => m.won && m.oppRank).sort((a, b) => a.oppRank - b.oppRank);
     summary.bestWin = wins[0] ? `${wins[0].opp}（${wins[0].oppRank}位）${wins[0].tour} ${wins[0].round} ${wins[0].score}` : "なし";
     const rvM = myMatches.filter((m) => m.oppId === state.rivalId);
@@ -1892,6 +1974,7 @@
     if (!H.strategy) H.strategy = "big";
     H.dev = H.dev || { style: null, intensity: "normal", auto: false, established: false };
     H.actLog = H.actLog || [];
+    allocOf(s); H.gp = H.gp || 0; H.gpLog = H.gpLog || []; H.traits = H.traits || [];
     H.rivalry = H.rivalry || { heat: 25, log: [], flags: {}, lastCross: -99 };
     H.rivalry.flags = H.rivalry.flags || {};
     if (H.rivalAhead === undefined) H.rivalAhead = null;
@@ -1912,5 +1995,5 @@
     return s;
   }
 
-  TL.World = { DEV_STYLES, INTENSITY, devOf, styleGap, autoFocus, trainRate, STRATEGIES, sharpBonus, sharpLabel, confLabel, sponsorsOf, brandOf, sponsorOffer, sponsorUnlocked, activeContracts, signSponsor, releaseSponsor, sponsorTerminationFee, sponsorPerks, sponsorWeekly, ASSETS, TAX, AGENT_CUT, assetsOf, assetUnlocked, buyAsset, assetsWeekly, DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
+  TL.World = { TRAIN_SLOTS, TRAIN_CATS, allocOf, allocShare, autoAlloc, allocSummary, TRAITS, hasTrait, traitReqOk, learnTrait, DEV_STYLES, INTENSITY, devOf, styleGap, autoFocus, trainRate, STRATEGIES, sharpBonus, sharpLabel, confLabel, sponsorsOf, brandOf, sponsorOffer, sponsorUnlocked, activeContracts, signSponsor, releaseSponsor, sponsorTerminationFee, sponsorPerks, sponsorWeekly, ASSETS, TAX, AGENT_CUT, assetsOf, assetUnlocked, buyAsset, assetsWeekly, DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
 })(typeof globalThis !== "undefined" ? globalThis : window);
