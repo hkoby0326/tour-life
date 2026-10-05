@@ -1502,11 +1502,27 @@
     const maxLoad = r <= 20 ? 4 : r <= 100 ? 5 : 6;
     const lastWeek = h.results.find((x) => x.t === state.t - 1 && x.cat !== "PREV");
     const bigLast = lastWeek && D.CATS[lastWeek.cat] && D.CATS[lastWeek.cat].tier >= 9;
+    const ranked = tours.filter((T) => T.cat !== "FINALS").map((T) => ({ T, st: humanStatus(state, T) }));
+    // Priority events: Grand Slams, Masters 1000 and home-country ATP events come first. They
+    // override the pacing rules below (only exhaustion keeps the player out), and the week
+    // before a Slam or Masters is kept free so the player arrives fresh.
+    const prio = (T) => (T.def.tier === 9 ? 3 : T.def.tier === 8 ? 2 : T.def.tier >= 6 && T.country === h.country ? 2 : 0);
+    const enterable = (x) => x.st.code === "direct" || x.st.code === "bubble" || (x.st.code === "qual" && r <= 250) || (x.st.code === "wc" && x.T.country === h.country && (r <= 250 || state.human.wcBoostUntil > state.t));
+    const big = ranked.filter((x) => prio(x.T) > 0 && enterable(x)).sort((a, b) => prio(b.T) - prio(a.T) || b.T.def.tier - a.T.def.tier)[0];
+    const prioName = (T) => (T.def.tier === 9 ? "グランドスラム" : T.def.tier === 8 ? "マスターズ1000" : "自国のATP大会");
+    if (big) {
+      if (h.fatigue > 65) return { type: "rest", reason: `${prioName(big.T)}の週だが疲労が${Math.round(h.fatigue)}。無理をせず休養` };
+      return { type: "enter", tid: big.T.id, auto: true, reason: `${prioName(big.T)}を最優先（${big.st.label}）` };
+    }
+    // look ahead: a Slam or Masters next week → arrive fresh
+    let nextWeek = state.week + 1, nextYear = state.year;
+    if (nextWeek > 52) { nextWeek = 1; nextYear++; }
+    const nextBig = weekTournaments(state, nextWeek, nextYear).filter((T) => T.def.tier >= 8).map((T) => ({ T, st: humanStatus(state, T) })).find(enterable);
+    if (nextBig && (h.fatigue > 25 || load8 >= maxLoad - 1 || (h.consec || 0) >= 2)) return { type: h.fatigue > 20 ? "rest" : "train", focus: state.human.focus, reason: `来週の${nextBig.T.name}に備えて${h.fatigue > 20 ? "休養" : "調整練習"}` };
     if (h.fatigue > 45) return { type: "rest", reason: `疲労が${Math.round(h.fatigue)}で高い。休養して回復` };
     if (bigLast && h.fatigue > 25) return { type: "rest", reason: "グランドスラムの翌週は休養" };
     if (load8 >= maxLoad) return { type: h.fatigue > 30 ? "rest" : "train", focus: state.human.focus, reason: `直近8週の負荷が上限（${load8}/${maxLoad}）。出場数の目安を守る` };
     if ((h.consec || 0) >= 3) return { type: "train", focus: state.human.focus, reason: "3週連戦のあとは練習週にする" };
-    const ranked = tours.filter((T) => T.cat !== "FINALS").map((T) => ({ T, st: humanStatus(state, T) }));
     if (state.human.money < 20 && state.human.lastRegion) ranked.sort((a, b) => b.T.def.tier - a.T.def.tier || (b.T.region === state.human.lastRegion) - (a.T.region === state.human.lastRegion));
     const pick = (codes, pred) => ranked.find((x) => codes.includes(x.st.code) && (!pred || pred(x.T)));
     const atpOnly = (T) => T.def.tier >= 6;
