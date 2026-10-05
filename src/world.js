@@ -43,7 +43,7 @@
   function diff(state) { return DIFFICULTY[state.config.difficulty] || DIFFICULTY.normal; }
   // v2.2: the tour renews itself with faster-developing young AI players. The human's growth is
   // scaled so a "normal" career climbs at the same pace as before the world got younger.
-  const HUMAN_GROW = 1.15;
+  const HUMAN_GROW = 1.08;
   // Age curve of development. Flatter than a pure "prodigy" curve: a player keeps developing
   // through 22-25 (real tour peaks are 25-28), so the climb from 100 to 30 is spread over seasons.
   function ageMult(a) {
@@ -167,6 +167,29 @@
     p.conf = Math.round(p.conf * 0.8 * 100) / 100;
     p.mw = 0;
   }
+  // ---------- 実力 (v2.4): match strength in overall-equivalent points ----------
+  // "総合" is a weighted sum of skills. 実力 adds what the match engine also uses: surface affinity
+  // (weighted by how much of the season is played on each surface), match sharpness and, for the
+  // human, the established style, traits, sponsor gear and a mental coach. Conversions are measured:
+  // +1 on all three match components is worth about half a point of overall.
+  const SURF_SHARE = { hard: 0.55, clay: 0.3, grass: 0.08, indoor: 0.07 };
+  const TRAIT_EQ = { bigserve: 1.2, returner: 1.3, tiebreak: 0.9, comeback: 1.0, frontrunner: 0.7, faststart: 1.2, marathon: 1.3, claycourt: 0.6, fastcourt: 0.3, bigstage: 0.5, crowd: 0.1, giantkiller: 0.5 };
+  function strengthOf(state, p, est) {
+    const ovr = est ? est.overall : TL.overall(p);
+    const surf = est ? est.surf : p.surf;
+    let comp = 0;
+    for (const [k, w] of Object.entries(SURF_SHARE)) comp += w * (((surf[k] !== undefined ? surf[k] : 50) - 50) / 50) * 6;
+    comp += sharpBonus(p);
+    let extra = 0;
+    if (p.isHuman) {
+      const dev = devOf(state);
+      if (dev.style && dev.established) extra += DEV_STYLES[dev.style].eq;
+      for (const t of state.human.traits || []) extra += TRAIT_EQ[t] || 0;
+      if (state.human.coach && state.human.coach.type === "mental" && !cashOf(state).budget) extra += 0.3;
+      const sp = sponsorPerks(state); extra += (sp.serve + sp.ret + sp.rally) * 0.2;
+    }
+    return Math.round((ovr + comp * 0.5 + extra) * 10) / 10;
+  }
   function newPlayer(state, spec) {
     const rng = state.rng;
     const style = spec.style || rng.pick(["all", "server", "grinder", "clay", "grass", "mental", "baseline", "big", "counter", "all", "baseline"]);
@@ -205,7 +228,7 @@
       config: { name: cfg.name || "選手", country: cfg.country || "JPN", origin: cfg.origin || "grinder", injuryRealism: cfg.injuryRealism || "standard", difficulty: DIFFICULTY[cfg.difficulty] ? cfg.difficulty : "normal" },
       rankSnaps: [], history: { tournaments: [], seasons: [], matches: [], news: [] }, lastReport: null,
       human: { money: 0, sponsorWeekly: 0, sponsorUntil: 0, wcBoostUntil: 0, lastRegion: null, focus: ["serve", "fh"], careerOver: false, epilogue: null, milestones: {},
-        coach: null, physio: false, coachOffers: [], plan: "balanced", switchRule: "none", event: null, lastEventT: -99, forceRest: false, riskWeek: -1, sponsor2: { weekly: 0, until: 0 }, pressureUntil: -1, attrHist: [], seasonStartAttrs: null, exhibitionYear: 0, rivalry: { heat: 25, log: [], flags: {}, lastCross: -99 }, rivalAhead: null, focusBoostUntil: -1, assets: { jet: false, medical: false, base: false, academy: false }, investment: null, pendingPurchase: 0, sponsors: { racket: null, apparel: null, shoes: null, other: [] }, sponsorsInit: true, pendingSigning: 0, pendingBonus: 0, strategy: "big", dev: { style: null, intensity: "normal", auto: false, established: false }, actLog: [], alloc: { serve: 5, stroke: 5, ret: 0, physical: 0, mental: 0, match: 0 }, gp: 0, gpLog: [], traits: [], cash: { budget: false, loan: 0, loanRate: 0, unpaid: 0, family: false, crowd: false, fedYear: 0, job: null, jobUntil: 0, jobCooldown: {}, crisisYear: 0, lowYear: 0 } },
+        coach: null, physio: false, coachOffers: [], plan: "balanced", switchRule: "none", event: null, lastEventT: -99, forceRest: false, riskWeek: -1, sponsor2: { weekly: 0, until: 0 }, pressureUntil: -1, attrHist: [], seasonStartAttrs: null, exhibitionYear: 0, rivalry: { heat: 25, log: [], flags: {}, lastCross: -99 }, rivalAhead: null, focusBoostUntil: -1, assets: { jet: false, medical: false, base: false, academy: false }, investment: null, pendingPurchase: 0, sponsors: { racket: null, apparel: null, shoes: null, other: [] }, sponsorsInit: true, pendingSigning: 0, pendingBonus: 0, strategy: "big", dev: { style: null, intensity: "normal", auto: false, established: false }, actLog: [], alloc: { serve: 3, stroke: 3, ret: 3, physical: 1, mental: 0, match: 0 }, allocV2: true, gp: 0, gpLog: [], traits: [], cash: { budget: false, loan: 0, loanRate: 0, unpaid: 0, family: false, crowd: false, fedYear: 0, job: null, jobUntil: 0, jobCooldown: {}, crisisYear: 0, lowYear: 0 } },
       cutoffs: {},
     };
     state.rng = new TL.RNG(seed);
@@ -912,7 +935,7 @@
       if (!p.isHuman) { const ga = growthAge(state, p); mult *= ga <= 20 ? 2.0 : ga <= 22 ? 1.6 : ga <= 24 ? 1.25 : 1; } // young AI players learn fast from matches
       mult *= p.isHuman ? diff(state).grow * HUMAN_GROW : diff(state).aiGrow;
       for (const k of ["serve", "return", "fh", "bh", "speed", "clutch"]) p.attrs[k] = clamp(p.attrs[k] + 0.03 * mult * (0.6 + rng.next()), 25, 99);
-      p.surf[T.surface] = clamp(p.surf[T.surface] + 0.25 * (p.isHuman ? 1 : 0.6), 20, 85);
+      p.surf[T.surface] = clamp(p.surf[T.surface] + 0.18, 20, 85); // same rate for the human and the AI
       rollInjury(state, p, T);
     }
     if (w.isHuman || l.isHuman) {
@@ -1100,13 +1123,15 @@
   // A target style names the 3-4 attributes that define the player. Key attributes train 15%
   // faster; once they stand 5 points above the rest the style is "established" and pays off in
   // matches. Training intensity trades growth for fatigue and injury risk on training weeks.
+  // Bonuses sized so an established style is worth about one good trait (~+3.5% win rate against
+  // an equal opponent, about +1 overall). A one-component bonus needs ~4 points for that.
   const DEV_STYLES = {
-    server: { label: "ビッグサーバー", keys: ["serve", "power", "fh"], bonus: { serve: 1.0 }, desc: "サーブとフォアの一撃で主導権を握る。確立するとサーブ +1.0" },
-    baseline: { label: "アグレッシブベースライナー", keys: ["fh", "bh", "speed"], bonus: { rally: 1.0 }, desc: "ストロークで押し込む。確立するとラリー +1.0" },
-    counter: { label: "カウンターパンチャー", keys: ["return", "speed", "bh"], bonus: { ret: 1.0 }, desc: "拾って粘って崩す。確立するとリターン +1.0" },
-    all: { label: "オールコート", keys: ["serve", "return", "fh", "bh"], bonus: { serve: 0.4, ret: 0.4, rally: 0.4 }, desc: "穴のない万能型。確立すると全体 +0.4" },
-    clay: { label: "クレー巧者", keys: ["speed", "bh", "stamina"], bonus: { clay: 2.0 }, desc: "赤土の長期戦に強い。確立するとクレーでラリー +2.0、練習でクレー適性も伸びる" },
-    mental: { label: "勝負師", keys: ["clutch", "return", "fh"], bonus: { clutch: 4 }, desc: "大事なポイントで強い。確立すると勝負所 +4" },
+    server: { label: "ビッグサーバー", keys: ["serve", "power", "fh"], bonus: { serve: 5.5 }, eq: 1.0, desc: "サーブとフォアの一撃で主導権を握る。確立するとサーブ +5.5（勝率 約+3.5%）" },
+    baseline: { label: "アグレッシブベースライナー", keys: ["fh", "bh", "speed"], bonus: { rally: 3.5 }, eq: 1.0, desc: "ストロークで押し込む。確立するとラリー +3.5（勝率 約+3.5%）" },
+    counter: { label: "カウンターパンチャー", keys: ["return", "speed", "bh"], bonus: { ret: 5.5 }, eq: 1.0, desc: "拾って粘って崩す。確立するとリターン +5.5（勝率 約+3.5%）" },
+    all: { label: "オールコート", keys: ["serve", "return", "fh", "bh"], bonus: { serve: 1.6, ret: 1.6, rally: 1.6 }, eq: 1.0, desc: "穴のない万能型。確立すると全体 +1.6（勝率 約+3%）" },
+    clay: { label: "クレー巧者", keys: ["speed", "bh", "stamina"], bonus: { clay: 5 }, eq: 0.5, desc: "赤土の長期戦に強い。確立するとクレーでラリー +5（クレーで勝率 約+6%）、練習でクレー適性も伸びる" },
+    mental: { label: "勝負師", keys: ["clutch", "return", "fh"], bonus: { clutch: 16 }, eq: 0.9, desc: "大事なポイントで強い。確立すると勝負所 +16（勝率 約+3%）" },
   };
   const INTENSITY = {
     light: { label: "軽め", mult: 0.75, fat: -6, inj: 0.7, desc: "練習効果 ×0.75、疲労がさらに 6 抜ける、練習中の怪我 ×0.7" },
@@ -1127,9 +1152,7 @@
   function allocOf(state) {
     const H = state.human;
     if (!H.alloc) {
-      const a = { serve: 0, stroke: 0, ret: 0, physical: 0, mental: 0, match: 0 };
-      for (const k of H.focus || ["serve", "fh"]) a[ATTR_CAT[k] || "stroke"] += 5;
-      H.alloc = a;
+      H.alloc = { serve: 3, stroke: 3, ret: 3, physical: 1, mental: 0, match: 0 };
     }
     return H.alloc;
   }
@@ -1194,7 +1217,7 @@
     const keys = dev.style ? DEV_STYLES[dev.style].keys : null;
     if (keys && styleGap(p, dev.style) < 7) return keys.slice().sort((a, b) => p.attrs[a] - p.attrs[b]).slice(0, 2);
     // otherwise pick by match value: how much the attribute counts × how far it lags the player's average
-    const OVW = { serve: 0.18, return: 0.14, fh: 0.15, bh: 0.13, net: 0.06, speed: 0.12, stamina: 0.08, power: 0.08, clutch: 0.06, focus: 0.05 };
+    const OVW = TL.OVERALL_W;
     const avg = ATTRS.reduce((a, k) => a + p.attrs[k], 0) / ATTRS.length;
     const pool = Object.keys(OVW).filter((k) => !keys || !keys.includes(k));
     const val = (k) => OVW[k] * (p.attrs[k] > p.potential + 6 ? 0.4 : 1) * (1 + (avg - p.attrs[k]) / 40);
@@ -1871,7 +1894,10 @@
     // override the pacing rules below (only exhaustion keeps the player out), and the week
     // before a Slam or Masters is kept free so the player arrives fresh.
     const prio = (T) => (T.def.tier === 9 ? 3 : T.def.tier === 8 ? 2 : T.def.tier >= 6 && T.country === h.country ? 2 : 0);
-    const enterable = (x) => x.st.code === "direct" || x.st.code === "bubble" || (x.st.code === "qual" && r <= 250) || (x.st.code === "wc" && x.T.country === h.country && (r <= 250 || state.human.wcBoostUntil > state.t));
+    // qualifying is worth it for a Slam (points and prize money even when losing), for a Masters
+    // only near the cut, for a home ATP event only inside the top 150
+    const qualOk = (T) => (T.def.tier === 9 ? r <= 250 : T.def.tier === 8 ? r <= 90 : r <= 150);
+    const enterable = (x) => x.st.code === "direct" || x.st.code === "bubble" || (x.st.code === "qual" && qualOk(x.T)) || (x.st.code === "wc" && x.T.country === h.country && (r <= 250 || state.human.wcBoostUntil > state.t));
     const big = ranked.filter((x) => prio(x.T) > 0 && enterable(x)).sort((a, b) => prio(b.T) - prio(a.T) || b.T.def.tier - a.T.def.tier)[0];
     const prioName = (T) => (T.def.tier === 9 ? "グランドスラム" : T.def.tier === 8 ? "マスターズ1000" : "自国のATP大会");
     if (big) {
@@ -1897,7 +1923,10 @@
     if ((h.sharp || 65) < 45 && !h.injury) { const any = pick(["direct"]); if (any) return { type: "enter", tid: any.T.id, auto: true, reason: `試合勘が落ちている（${Math.round(h.sharp)}）。試合数を取り戻す` }; }
     let c;
     if (strat === "develop") c = pick(["direct"], (T) => atpOnly(T) && skip250(T)) || (r > 100 ? pick(["direct"]) : null);
-    else c = pick(["direct"], (T) => atpOnly(T) && skip250(T)) || pick(["bubble"], atpOnly) || pick(["qual"], (T) => T.def.tier >= 6 && r <= 250) || pick(["wc"], (T) => T.country === h.country && T.def.tier >= 6);
+    else if (r > 80) {
+      // outside the top 80, a Challenger main draw earns far more than an ATP qualifying loss
+      c = pick(["direct"], atpOnly) || pick(["direct"], (T) => T.def.tier >= 4) || pick(["bubble"], atpOnly) || (r <= 120 ? pick(["qual"], (T) => T.def.tier >= 6) : null) || pick(["wc"], (T) => T.country === h.country && T.def.tier >= 6);
+    } else c = pick(["direct"], (T) => atpOnly(T) && skip250(T)) || pick(["bubble"], atpOnly) || pick(["qual"], (T) => T.def.tier >= 6 && r <= 250) || pick(["wc"], (T) => T.country === h.country && T.def.tier >= 6);
     if (!c && strat !== "develop" && (r > 50 || strat === "points")) c = pick(["direct"], (T) => T.def.tier >= 4 || r > 100) || pick(["bubble"]) || pick(["wc"], (T) => T.def.tier <= 2);
     if (!c && r <= 100 && h.fatigue > 35) return { type: "rest", reason: "出られるツアー大会がない週。疲労もあるので休養" };
     if (c) return { type: "enter", tid: c.T.id, auto: true, reason: (strat === "regional" ? "移動を抑えつつ、" : strat === "points" ? "ポイントを稼ぐため、" : "") + (c.st.code === "direct" ? "出られる最上位の大会（本戦ダイレクトイン見込み）" : c.st.code === "bubble" ? "当落線上だが最上位の大会に挑む" : c.st.code === "qual" ? "予選から上のカテゴリーに挑戦" : "ワイルドカードに期待してエントリー") };
@@ -2097,7 +2126,7 @@
     for (const k of Object.keys(p.surf)) surf[k] = clamp(Math.round(p.surf[k]) + noise("s" + k), 20, 85);
     const ovrEst = exact ? Math.round(TL.overall(p) * 10) / 10 : Math.round(TL.overall(p) + noise("ovr") / 2);
     const peers = state.players.filter((x) => !x.retired && x.rank && Math.abs(x.birthYear - p.birthYear) <= 1);
-    return { id: p.id, name: p.name, country: p.country, age: age(state, p), hand: p.hand, style: p.style, rank: p.rank, points: p.points, bestRank: p.stats.bestRank, overall: ovrEst, scout: { exact, amp, seen: h2h.length },
+    return { id: p.id, name: p.name, country: p.country, age: age(state, p), hand: p.hand, style: p.style, rank: p.rank, points: p.points, bestRank: p.stats.bestRank, overall: ovrEst, strength: strengthOf(state, p, exact ? null : { overall: ovrEst, surf }), scout: { exact, amp, seen: h2h.length },
       attrs, surf, w: p.stats.w, l: p.stats.l, titles: p.stats.titles, gs: p.stats.gs, m1000: p.stats.m1000, prize: p.stats.prize, injury: p.injury, fatigue: Math.round(p.fatigue), retired: p.retired,
       isHuman: p.isHuman, isRival: !!p.isRival, real: p.real, sharp: Math.round(p.sharp === undefined ? 65 : p.sharp), sharpLabel: sharpLabel(p.sharp === undefined ? 65 : p.sharp), conf: Math.round(p.conf || 0), confLabel: confLabel(p.conf || 0), h2hW: h2h.filter((m) => m.won).length, h2hL: h2h.filter((m) => !m.won).length, h2h: h2h.slice(-6).reverse(),
       titleList: titles.slice(-8).reverse(), tournaments52: new Set(seasonRes.map((r) => r.t)).size, peers: peers.length,
@@ -2142,7 +2171,10 @@
     H.dev = H.dev || { style: null, intensity: "normal", auto: false, established: false };
     H.actLog = H.actLog || [];
     cashOf(s); H.cash.jobCooldown = H.cash.jobCooldown || {};
-    allocOf(s); H.gp = H.gp || 0; H.gpLog = H.gpLog || []; H.traits = H.traits || [];
+    allocOf(s);
+    // v2.4: the old default (serve 5 / strokes 5) built lopsided players; move untouched defaults to the balanced one
+    if (!H.allocV2) { const a = H.alloc; if (a.serve === 5 && a.stroke === 5 && !a.ret && !a.physical && !a.mental && !a.match) H.alloc = { serve: 3, stroke: 3, ret: 3, physical: 1, mental: 0, match: 0 }; H.allocV2 = true; }
+    H.gp = H.gp || 0; H.gpLog = H.gpLog || []; H.traits = H.traits || [];
     H.rivalry = H.rivalry || { heat: 25, log: [], flags: {}, lastCross: -99 };
     H.rivalry.flags = H.rivalry.flags || {};
     if (H.rivalAhead === undefined) H.rivalAhead = null;
@@ -2163,5 +2195,5 @@
     return s;
   }
 
-  TL.World = { cashOf, fundingOptions, useFunding, setBudget, JOBS, forcedRetire, TRAIN_SLOTS, TRAIN_CATS, allocOf, allocShare, autoAlloc, allocSummary, TRAITS, hasTrait, traitReqOk, learnTrait, DEV_STYLES, INTENSITY, devOf, styleGap, autoFocus, trainRate, STRATEGIES, sharpBonus, sharpLabel, confLabel, sponsorsOf, brandOf, sponsorOffer, sponsorUnlocked, activeContracts, signSponsor, releaseSponsor, sponsorTerminationFee, sponsorPerks, sponsorWeekly, ASSETS, TAX, AGENT_CUT, assetsOf, assetUnlocked, buyAsset, assetsWeekly, DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
+  TL.World = { strengthOf, cashOf, fundingOptions, useFunding, setBudget, JOBS, forcedRetire, TRAIN_SLOTS, TRAIN_CATS, allocOf, allocShare, autoAlloc, allocSummary, TRAITS, hasTrait, traitReqOk, learnTrait, DEV_STYLES, INTENSITY, devOf, styleGap, autoFocus, trainRate, STRATEGIES, sharpBonus, sharpLabel, confLabel, sponsorsOf, brandOf, sponsorOffer, sponsorUnlocked, activeContracts, signSponsor, releaseSponsor, sponsorTerminationFee, sponsorPerks, sponsorWeekly, ASSETS, TAX, AGENT_CUT, assetsOf, assetUnlocked, buyAsset, assetsWeekly, DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
 })(typeof globalThis !== "undefined" ? globalThis : window);

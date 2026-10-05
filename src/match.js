@@ -27,9 +27,18 @@
     return { serve, ret, rally, clutch: a.clutch, stamina: a.stamina };
   }
   TL.components = components;
+  // Overall rating with the weights the match engine actually uses (v2.4). Derived from the point
+  // model: serve and return components weigh k1 each, the rally component 2*k2 (hard court), and
+  // each component is a mix of skills (see components()). Clutch (big points) and stamina (fatigue
+  // in later sets) are added at their measured value. Before v2.4 the forehand/backhand were
+  // overweighted and focus was missing, so lopsided players looked stronger than they played.
+  const OVERALL_W = { serve: 0.183, return: 0.157, fh: 0.103, bh: 0.082, net: 0.041, speed: 0.148, stamina: 0.039, power: 0.12, clutch: 0.047, focus: 0.08 };
+  TL.OVERALL_W = OVERALL_W;
   function overall(p) {
     const a = p.attrs;
-    return 0.18 * a.serve + 0.14 * a.return + 0.15 * a.fh + 0.13 * a.bh + 0.06 * a.net + 0.12 * a.speed + 0.08 * a.stamina + 0.08 * a.power + 0.06 * a.clutch;
+    let s = 0;
+    for (const k in OVERALL_W) s += OVERALL_W[k] * a[k];
+    return s;
   }
   TL.overall = overall;
 

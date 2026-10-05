@@ -292,9 +292,9 @@
     const showAll = window._rankAll;
     const rows = (showAll ? list : list.slice(0, 100).concat(me.rank && me.rank > 100 ? [me] : [])).map((p) => {
       const d = p.prevRank && p.rank ? p.prevRank - p.rank : 0;
-      return `<tr class="${p.isHuman ? "me" : p.isRival ? "rival" : ""}"><td class="num">${p.rank}</td><td><span data-player="${p.id}" class="accent">${U.avatar(p, "sm")} <span style="margin-left:6px">${esc(p.name)}</span></span>${p.isRival ? ' <span class="pill rival">宿敵</span>' : ""}</td><td class="num">${W.age(S, p)}</td><td class="num">${p.points}</td><td class="num small ${d > 0 ? "green" : d < 0 ? "red" : "muted"}">${d > 0 ? "▲" + d : d < 0 ? "▼" + -d : "-"}</td></tr>`;
+      return `<tr class="${p.isHuman ? "me" : p.isRival ? "rival" : ""}"><td class="num">${p.rank}</td><td><span data-player="${p.id}" class="accent">${U.avatar(p, "sm")} <span style="margin-left:6px">${esc(p.name)}</span></span>${p.isRival ? ' <span class="pill rival">宿敵</span>' : ""}</td><td class="num">${W.age(S, p)}</td><td class="num small">${(p.isHuman ? W.strengthOf(S, p) : W.playerInfo(S, p.id).strength).toFixed(1)}</td><td class="num">${p.points}</td><td class="num small ${d > 0 ? "green" : d < 0 ? "red" : "muted"}">${d > 0 ? "▲" + d : d < 0 ? "▼" + -d : "-"}</td></tr>`;
     }).join("");
-    c.innerHTML = `<div class="panel"><div class="row between"><h2>ATPランキング <span class="muted small">${cal()}年 第${S.week}週</span></h2><button data-all>${showAll ? "Top100のみ" : "全選手"}</button></div><table><tr><th class="num">#</th><th>選手</th><th class="num">年齢</th><th class="num">ポイント</th><th class="num">変動</th></tr>${rows}</table></div>`;
+    c.innerHTML = `<div class="panel"><div class="row between"><h2>ATPランキング <span class="muted small">${cal()}年 第${S.week}週</span></h2><button data-all>${showAll ? "Top100のみ" : "全選手"}</button></div><table><tr><th class="num">#</th><th>選手</th><th class="num">年齢</th><th class="num" title="試合での強さ（総合＋サーフェス適性・試合勘・特性など）。他選手はスカウティングの推定">実力</th><th class="num">ポイント</th><th class="num">変動</th></tr>${rows}</table><p class="small muted" style="margin-top:8px">実力＝総合（試合エンジンと同じ重み）にサーフェス適性・試合勘・特性などを足した試合での強さ。ランキングは過去52週の成績なので、伸び盛りの若手や怪我明けの選手は実力より下に、衰え始めたベテランは上にいることが多い。</p></div>`;
     c.querySelector("[data-all]").onclick = () => { window._rankAll = !showAll; U.render(); };
     U.bindPlayerLinks(c);
   };
@@ -409,7 +409,7 @@
     const top10 = S.history.matches.filter((m) => m.oppRank && m.oppRank <= 10);
     const titles = S.history.tournaments.filter((t) => t.winnerId === me.id);
     const curSeason = { age: W.age(S, me), rank: me.rank, w: S.history.matches.filter((m) => m.year === S.year && m.won).length, l: S.history.matches.filter((m) => m.year === S.year && !m.won).length };
-    c.innerHTML = `${U.devPanelHtml()}${U.traitsPanelHtml()}<div class="grid2"><div class="panel"><div class="identity" style="margin-bottom:12px">${U.avatar(me)}<div><div class="name">${esc(me.name)}</div><div class="sub">総合 ${ovr.toFixed(1)} ・ ${me.hand === "L" ? "左利き" : "右利き"} ・ ${W.STYLE_LABEL[me.style] || ""} ・ ${esc(hint)}</div></div></div>
+    c.innerHTML = `${U.devPanelHtml()}${U.traitsPanelHtml()}<div class="grid2"><div class="panel"><div class="identity" style="margin-bottom:12px">${U.avatar(me)}<div><div class="name">${esc(me.name)}</div><div class="sub">総合 ${ovr.toFixed(1)} ・ 実力 ${W.strengthOf(S, me).toFixed(1)} ・ ${me.hand === "L" ? "左利き" : "右利き"} ・ ${W.STYLE_LABEL[me.style] || ""} ・ ${esc(hint)}</div></div></div>
       ${U.radarSvg(me.attrs, rv && !rv.retired ? rv.attrs : null)}<div class="small muted" style="text-align:center;margin:-4px 0 10px"><span class="accent">■</span> 自分${rv && !rv.retired ? ` <span class="red">■</span> 宿敵 ${esc(rv.name)}` : ""}</div>
       <div class="attr" style="color:var(--muted);font-size:11px"><span></span><span></span><span class="num">値</span><span>4週</span><span>今季</span></div>${attrs}
       <h3 style="margin-top:12px">サーフェス適性</h3>${surf}

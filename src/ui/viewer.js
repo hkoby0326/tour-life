@@ -63,7 +63,7 @@
       const from = { x: sv === 0 ? 14 : 186, y: sy };
       pos[sv] = { x: from.x, y: from.y }; pos[rt] = { x: rt === 0 ? 20 : 180, y: deuce ? 44 : 66 };
       const box = { x: sv === 0 ? rnd(108, 144) : rnd(56, 92), y: deuce ? rnd(26, 52) : rnd(58, 86) };
-      if (ev.kind === "double_fault") { F.push({ from, to: { x: 100 - dir * 2, y: box.y }, hitter: sv, mover: rt, moverTo: null, h: 0.5, result: "net" }); return F; }
+      if (ev.kind === "double_fault") { F.push({ from, to: { x: 100 - dir * 2, y: box.y }, hitter: sv, mover: rt, moverTo: { x: pos[rt].x, y: pos[rt].y }, h: 0.5, result: "net" }); return F; }
       if (ev.kind === "ace") { F.push({ from, to: box, hitter: sv, mover: rt, moverTo: { x: pos[rt].x, y: lerp(pos[rt].y, box.y, 0.25) }, h: 1, result: "pass", through: { x: Math.max(3, Math.min(197, box.x + dir * 50)), y: Math.max(4, Math.min(106, box.y + (box.y - 55) * 0.4)) } }); return F; }
       F.push({ from, to: box, hitter: sv, mover: rt, moverTo: { x: rt === 0 ? rnd(16, 26) : rnd(174, 184), y: box.y + rnd(-4, 4) }, h: 1 });
       let hitter = rt, cur = box;
