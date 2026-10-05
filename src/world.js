@@ -802,7 +802,7 @@
     const rng = state.rng;
     const hum = a.isHuman || b.isHuman;
     // Grand Slam qualifying is best-of-three; only the main draw is best-of-five.
-    const mo = Object.assign({ rng, surface: T.surface, bo5: T.def.bo5 && !qualifying, log: hum }, hum ? matchOpts(state, a, b, T) : {});
+    const mo = Object.assign({ rng, surface: T.surface, bo5: T.def.bo5 && !qualifying, finalTb10: T.def.tier === 9, log: hum }, hum ? matchOpts(state, a, b, T) : {});
     const sb = [sharpBonus(a), sharpBonus(b)];
     mo.bonus = [0, 1].map((i) => { const b = (mo.bonus && mo.bonus[i]) || {}; return { serve: (b.serve || 0) + sb[i], ret: (b.ret || 0) + sb[i], rally: (b.rally || 0) + sb[i] }; });
     mo.clutch = [0, 1].map((i) => ((mo.clutch && mo.clutch[i]) || 0) + ([a, b][i].conf || 0) * 0.2);

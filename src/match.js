@@ -61,6 +61,9 @@
     const surface = opts.surface || "hard";
     const S = SURF[surface];
     const bo5 = !!opts.bo5;
+    // Only Grand Slams play a 10-point tiebreak at 6-6 in the deciding set; every other event
+    // uses the normal 7-point tiebreak in all sets (ATP rules).
+    const finalTb10 = opts.finalTb10 !== undefined ? !!opts.finalTb10 : bo5;
     const setsToWin = bo5 ? 3 : 2;
     const doLog = !!opts.log;
     const M = {
@@ -189,7 +192,7 @@
       const sv = M.server, rt = 1 - sv;
       const isDecider = M.setsWon[0] === setsToWin - 1 && M.setsWon[1] === setsToWin - 1;
       if (M.tb) {
-        const target = isDecider ? 10 : 7;
+        const target = isDecider && finalTb10 ? 10 : 7;
         const leader = M.tbPts[0] > M.tbPts[1] ? 0 : M.tbPts[1] > M.tbPts[0] ? 1 : -1;
         const big = leader >= 0 && M.tbPts[leader] >= target - 1 && M.tbPts[leader] - M.tbPts[1 - leader] >= 1;
         const setPoint = big ? leader : -1;
@@ -209,8 +212,9 @@
     function endSet(gamesArr, tbArr) {
       const sw = gamesArr[0] > gamesArr[1] ? 0 : 1;
       M.setsWon[sw]++;
-      M.sets.push(tbArr ? [gamesArr[0], gamesArr[1], tbArr] : [gamesArr[0], gamesArr[1]]);
-      if (doLog) M.log.push({ t: "set", set: M.setNo + 1, who: sw, games: gamesArr.slice(), tb: tbArr ? tbArr.slice() : null });
+      const tb10 = !!tbArr && Math.max(tbArr[0], tbArr[1]) >= 10 && finalTb10 && M.setsWon[0] + M.setsWon[1] === setsToWin * 2 - 1;
+      M.sets.push(tbArr ? (tb10 ? [gamesArr[0], gamesArr[1], tbArr, 1] : [gamesArr[0], gamesArr[1], tbArr]) : [gamesArr[0], gamesArr[1]]);
+      if (doLog) M.log.push({ t: "set", set: M.setNo + 1, who: sw, games: gamesArr.slice(), tb: tbArr ? tbArr.slice() : null, tb10 });
       M.events.push({ kind: "set", who: sw, text: `第${M.setNo + 1}セット ${M.names[sw]} が ${gamesArr[sw]}-${gamesArr[1 - sw]}${tbArr ? "(" + Math.min(tbArr[0], tbArr[1]) + ")" : ""} で取る` });
       M.setNo++;
       M.games = [0, 0]; M.pts = [0, 0]; M.tb = false; M.tbPts = null;
@@ -229,7 +233,7 @@
       const w = M.winnerIdx;
       const score = M.sets.map((s) => {
         const a = w === 0 ? s[0] : s[1], b = w === 0 ? s[1] : s[0];
-        return a + "-" + b + (s[2] ? "(" + Math.min(s[2][0], s[2][1]) + ")" : "");
+        return a + "-" + b + (s[2] ? (s[3] ? "(" + Math.max(s[2][0], s[2][1]) + "-" + Math.min(s[2][0], s[2][1]) + ")" : "(" + Math.min(s[2][0], s[2][1]) + ")") : "");
       }).join(" ");
       const totalPts = M.stats.points[0] + M.stats.points[1];
       // rough broadcast-style duration: ~40s per point plus changeovers and set breaks
@@ -246,7 +250,7 @@
       const isDecider = M.setsWon[0] === setsToWin - 1 && M.setsWon[1] === setsToWin - 1;
       const ev = { kind: "point", server: sv, bp: sit.bp, setPoint: sit.setPoint, matchPoint: sit.matchPoint };
       if (M.tb) {
-        const target = isDecider ? 10 : 7;
+        const target = isDecider && finalTb10 ? 10 : 7;
         if (sit.bp) M.stats.bpFaced[sv] += 0;
         const p = pPoint(sv, rt, { bp: sit.bp, big: sit.big, tb: true });
         const w = rng.next() < p ? sv : rt;
@@ -297,7 +301,7 @@
         M.pts = [0, 0];
         M.server = 1 - M.server;
         M.last = ev;
-        if (M.games[0] === 6 && M.games[1] === 6) { M.tb = true; M.tbPts = [0, 0]; M.tbCount = 0; M.events.push({ kind: "tb", text: isDecider ? "最終セット 10ポイントタイブレークへ" : "タイブレークへ" }); return ev; }
+        if (M.games[0] === 6 && M.games[1] === 6) { M.tb = true; M.tbPts = [0, 0]; M.tbCount = 0; M.events.push({ kind: "tb", text: isDecider && finalTb10 ? "最終セット 10ポイントタイブレークへ" : "タイブレークへ" }); return ev; }
         if ((M.games[0] >= 6 || M.games[1] >= 6) && Math.abs(M.games[0] - M.games[1]) >= 2) endSet(M.games.slice(), null);
         return ev;
       }

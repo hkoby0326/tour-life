@@ -236,7 +236,7 @@
       const mine = s.games[hi], theirs = s.games[1 - hi];
       const bk = breaks.filter((b) => b.set === s.set).map((b) => `${b.who === hi ? "自分" : "相手"}がブレーク(${b.score})`).join("、");
       const pl = plans.filter((p) => p.set === s.set + 1 && p.who === hi).map(() => ` <span class="accent">→ 次セットから攻撃的に切替</span>`).join("");
-      return `第${s.set}セット <b class="score">${mine}-${theirs}${s.tb ? `(${Math.min(s.tb[0], s.tb[1])})` : ""}</b> ${s.who === hi ? '<span class="green">取る</span>' : '<span class="red">落とす</span>'}${bk ? ` <span class="muted">— ${bk}</span>` : ""}${pl}`;
+      return `第${s.set}セット <b class="score">${mine}-${theirs}${s.tb ? (s.tb10 ? `(${Math.max(s.tb[0], s.tb[1])}-${Math.min(s.tb[0], s.tb[1])})` : `(${Math.min(s.tb[0], s.tb[1])})`) : ""}</b> ${s.who === hi ? '<span class="green">取る</span>' : '<span class="red">落とす</span>'}${bk ? ` <span class="muted">— ${bk}</span>` : ""}${pl}`;
     }).join("<br>");
     const st = m.stats;
     const table = st ? `<table class="small statsbox" style="margin-top:6px"><tr><th></th><th class="num">自分</th><th class="num">${esc(m.opp)}</th></tr>${U.matchStatsRows(st, hi)}</table>` : "";
