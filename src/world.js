@@ -43,7 +43,7 @@
   function diff(state) { return DIFFICULTY[state.config.difficulty] || DIFFICULTY.normal; }
   // v2.2: the tour renews itself with faster-developing young AI players. The human's growth is
   // scaled so a "normal" career climbs at the same pace as before the world got younger.
-  const HUMAN_GROW = 1.08;
+  const HUMAN_GROW = 1.11;
   // Age curve of development. Flatter than a pure "prodigy" curve: a player keeps developing
   // through 22-25 (real tour peaks are 25-28), so the climb from 100 to 30 is spread over seasons.
   function ageMult(a) {
@@ -181,6 +181,7 @@
     for (const [k, w] of Object.entries(SURF_SHARE)) comp += w * (((surf[k] !== undefined ? surf[k] : 50) - 50) / 50) * 6;
     comp += sharpBonus(p);
     let extra = 0;
+    if (!p.isHuman && p.traits) for (const [t, l] of Object.entries(p.traits)) extra += (TRAIT_EQ[t] || 0) * TRAIT_LV[l];
     if (p.isHuman) {
       const dev = devOf(state);
       if (dev.style && dev.established) extra += DEV_STYLES[dev.style].eq;
@@ -228,7 +229,7 @@
       config: { name: cfg.name || "選手", country: cfg.country || "JPN", origin: cfg.origin || "grinder", injuryRealism: cfg.injuryRealism || "standard", difficulty: DIFFICULTY[cfg.difficulty] ? cfg.difficulty : "normal" },
       rankSnaps: [], history: { tournaments: [], seasons: [], matches: [], news: [] }, lastReport: null,
       human: { money: 0, sponsorWeekly: 0, sponsorUntil: 0, wcBoostUntil: 0, lastRegion: null, focus: ["serve", "fh"], careerOver: false, epilogue: null, milestones: {},
-        coach: null, physio: false, coachOffers: [], plan: "balanced", switchRule: "none", event: null, lastEventT: -99, forceRest: false, riskWeek: -1, sponsor2: { weekly: 0, until: 0 }, pressureUntil: -1, attrHist: [], seasonStartAttrs: null, exhibitionYear: 0, rivalry: { heat: 25, log: [], flags: {}, lastCross: -99 }, rivalAhead: null, focusBoostUntil: -1, assets: { jet: false, medical: false, base: false, academy: false }, investment: null, pendingPurchase: 0, sponsors: { racket: null, apparel: null, shoes: null, other: [] }, sponsorsInit: true, pendingSigning: 0, pendingBonus: 0, strategy: "big", dev: { style: null, intensity: "normal", auto: false, established: false }, actLog: [], alloc: { serve: 3, stroke: 3, ret: 3, physical: 1, mental: 0, match: 0 }, allocV2: true, gp: 0, gpLog: [], traits: [], traitLv: {}, cash: { budget: false, loan: 0, loanRate: 0, unpaid: 0, family: false, crowd: false, fedYear: 0, job: null, jobUntil: 0, jobCooldown: {}, crisisYear: 0, lowYear: 0 } },
+        coach: null, physio: false, coachOffers: [], plan: "balanced", switchRule: "none", event: null, lastEventT: -99, forceRest: false, riskWeek: -1, sponsor2: { weekly: 0, until: 0 }, pressureUntil: -1, attrHist: [], seasonStartAttrs: null, exhibitionYear: 0, rivalry: { heat: 25, log: [], flags: {}, lastCross: -99 }, rivalAhead: null, focusBoostUntil: -1, assets: { jet: false, medical: false, base: false, academy: false }, investment: null, pendingPurchase: 0, sponsors: { racket: null, apparel: null, shoes: null, other: [] }, sponsorsInit: true, pendingSigning: 0, pendingBonus: 0, strategy: "big", dev: { style: null, intensity: "normal", auto: false, established: false }, actLog: [], alloc: { serve: 3, stroke: 3, ret: 3, physical: 1, mental: 0, match: 0 }, allocV2: true, gp: 0, gpLog: [], traits: [], traitLv: {}, aiTraitsInit: true, cash: { budget: false, loan: 0, loanRate: 0, unpaid: 0, family: false, crowd: false, fedYear: 0, job: null, jobUntil: 0, jobCooldown: {}, crisisYear: 0, lowYear: 0 } },
       cutoffs: {},
     };
     state.rng = new TL.RNG(seed);
@@ -283,6 +284,7 @@
 
     recomputeRanking(state);
     starterSponsors(state);
+    for (const p of state.players) if (!p.isHuman && p.rank && p.rank <= 100) assignAiTraits(state, p, p.rank);
     state.rankSnaps.push(snapshot(state));
     state.human.coachOffers = genCoachOffers(state);
     normalizeNumbers(state);
@@ -803,6 +805,13 @@
     const hum = a.isHuman || b.isHuman;
     // Grand Slam qualifying is best-of-three; only the main draw is best-of-five.
     const mo = Object.assign({ rng, surface: T.surface, bo5: T.def.bo5 && !qualifying, finalTb10: T.def.tier === 9, log: hum }, hum ? matchOpts(state, a, b, T) : {});
+    // AI traits apply in every match (AI vs AI too), with the same situational context
+    if (a.traits || b.traits) {
+      mo.traits = [0, 1].map((i) => { const p = [a, b][i]; return p.isHuman ? (mo.traits && mo.traits[i]) || {} : p.traits || {}; });
+      const t = mo.tctx || { bigStage: T.def.tier >= 8 || T.cat === "FINALS", home: [false, false], underdog: [false, false] };
+      for (const i of [0, 1]) { const p = [a, b][i], o = [a, b][1 - i]; if (!p.isHuman) { t.home[i] = T.country === p.country; t.underdog[i] = (o.rank || 9999) + 30 < (p.rank || 9999); } }
+      mo.tctx = t;
+    }
     const sb = [sharpBonus(a), sharpBonus(b)];
     mo.bonus = [0, 1].map((i) => { const b = (mo.bonus && mo.bonus[i]) || {}; return { serve: (b.serve || 0) + sb[i], ret: (b.ret || 0) + sb[i], rally: (b.rally || 0) + sb[i] }; });
     mo.clutch = [0, 1].map((i) => ((mo.clutch && mo.clutch[i]) || 0) + ([a, b][i].conf || 0) * 0.2);
@@ -1304,6 +1313,53 @@
     news(state, cur ? `${human(state).name} の特性「${T.label}」が Lv${cur + 1} に` : `${human(state).name} が特性「${T.label}」を身につけた`);
     return true;
   }
+  // ---------- AI traits (v2.7) ----------
+  // Top AI players get traits by the same rules as the human: up to 3 by best ranking, chosen
+  // from their strengths, levelled with a budget equivalent to a human's growth points for the
+  // same career (seasons, titles, big titles). Reviewed every season end; held traits are kept.
+  const AI_TRAIT_IDS = ["bigserve", "returner", "tiebreak", "comeback", "frontrunner", "faststart", "marathon", "claycourt", "fastcourt", "bigstage", "giantkiller"];
+  function aiTraitReqOk(p, id, l) {
+    const T = TRAITS[id];
+    for (const [k, v] of Object.entries(T.req)) if (p.attrs[k] < v + 3 * (l - 1)) return false;
+    if (!Object.keys(T.req).length && l >= 4 && (p.stats.bestRank || 9999) > (l === 4 ? 50 : 10)) return false;
+    return true;
+  }
+  function assignAiTraits(state, p, initRank) {
+    const best = Math.min(p.stats.bestRank || 9999, initRank || 9999);
+    if (best > 100 || p.isHuman || p.retired) { if (!p.isHuman) delete p.traits; return; }
+    const n = best <= 10 ? 3 : best <= 30 ? 2 : 1;
+    const a = p.attrs, avg = ATTRS.reduce((x, k) => x + a[k], 0) / ATTRS.length;
+    const ageNow = age(state, p);
+    const fit = {
+      bigserve: a.serve - avg, returner: a.return - avg, tiebreak: a.clutch - avg, marathon: a.stamina - avg,
+      claycourt: (p.surf.clay - 60) * 0.8, fastcourt: ((p.surf.grass + p.surf.indoor) / 2 - 60) * 0.8,
+      bigstage: (p.stats.gs + p.stats.m1000 > 0 ? 3 : -3) + (a.focus - avg) * 0.5, comeback: (a.clutch - avg) * 0.4 - 1,
+      frontrunner: (a.power - avg) * 0.4 - 1, faststart: (a.speed - avg) * 0.4 - 1, giantkiller: ageNow <= 23 ? 2 : -5,
+    };
+    // personality: a stable per-player random preference so similar players still differ
+    const tie = (id) => ((TL.RNG.hash(`${state.seed}:${p.id}:${id}`) % 1000) / 1000) * 5;
+    const held = Object.keys(p.traits || {}).filter((id) => AI_TRAIT_IDS.includes(id));
+    const pick = held.slice(0, n);
+    for (const id of AI_TRAIT_IDS.slice().sort((x, y) => fit[y] + tie(y) - (fit[x] + tie(x)))) { if (pick.length >= n) break; if (!pick.includes(id) && aiTraitReqOk(p, id, 1)) pick.push(id); }
+    // budget equivalent to a human career with the same record
+    const seasons = Math.max(0, ageNow - 18);
+    let budget = initRank ? (initRank <= 3 ? 22 : initRank <= 10 ? 14 : initRank <= 30 ? 8 : 4) : seasons + p.stats.titles * 1.5 + p.stats.m1000 * 2 + p.stats.gs * 4;
+    const lv = {};
+    for (const id of pick) if (aiTraitReqOk(p, id, 1)) lv[id] = 0;
+    let progressed = true;
+    while (progressed) {
+      progressed = false;
+      for (const id of Object.keys(lv)) {
+        const next = lv[id] + 1;
+        if (next > 5 || budget < TRAIT_COST[next - 1] || !aiTraitReqOk(p, id, next)) continue;
+        budget -= TRAIT_COST[next - 1]; lv[id] = next; progressed = true;
+      }
+    }
+    for (const id of Object.keys(lv)) if (!lv[id]) delete lv[id];
+    p.traits = Object.keys(lv).length ? lv : undefined;
+    if (!p.traits) delete p.traits;
+  }
+  function aiTraitList(p) { return p.traits ? Object.entries(p.traits).map(([id, l]) => ({ id, l, label: TRAITS[id].label })) : []; }
   function dropTrait(state, id) {
     const H = state.human, lv = traitLevels(state), cur = lv[id] || 0;
     if (!cur) return 0;
@@ -2119,6 +2175,7 @@
       }
       if (ga < 33) p.attrs.clutch = clamp(p.attrs.clutch + 0.4, 25, 99);
       if (p.isHuman) continue;
+      assignAiTraits(state, p);
       const r = p.rank || 9999;
       let retire = false;
       if (a >= 37) retire = r > 30 || rng.chance(0.35); // a 37-year-old in the top 30 may well go on
@@ -2244,7 +2301,7 @@
     for (const k of Object.keys(p.surf)) surf[k] = clamp(Math.round(p.surf[k]) + noise("s" + k), 20, 85);
     const ovrEst = exact ? Math.round(TL.overall(p) * 10) / 10 : Math.round(TL.overall(p) + noise("ovr") / 2);
     const peers = state.players.filter((x) => !x.retired && x.rank && Math.abs(x.birthYear - p.birthYear) <= 1);
-    return { id: p.id, name: p.name, country: p.country, age: age(state, p), hand: p.hand, style: p.style, rank: p.rank, points: p.points, bestRank: p.stats.bestRank, overall: ovrEst, strength: strengthOf(state, p, exact ? null : { overall: ovrEst, surf }), scout: { exact, amp, seen: h2h.length },
+    return { id: p.id, name: p.name, country: p.country, age: age(state, p), hand: p.hand, style: p.style, rank: p.rank, points: p.points, bestRank: p.stats.bestRank, traits: aiTraitList(p).map((t) => ({ id: t.id, label: t.label, l: exact || h2h.length ? t.l : null })), overall: ovrEst, strength: strengthOf(state, p, exact ? null : { overall: ovrEst, surf }), scout: { exact, amp, seen: h2h.length },
       attrs, surf, w: p.stats.w, l: p.stats.l, titles: p.stats.titles, gs: p.stats.gs, m1000: p.stats.m1000, prize: p.stats.prize, injury: p.injury, fatigue: Math.round(p.fatigue), retired: p.retired,
       isHuman: p.isHuman, isRival: !!p.isRival, real: p.real, sharp: Math.round(p.sharp === undefined ? 65 : p.sharp), sharpLabel: sharpLabel(p.sharp === undefined ? 65 : p.sharp), conf: Math.round(p.conf || 0), confLabel: confLabel(p.conf || 0), h2hW: h2h.filter((m) => m.won).length, h2hL: h2h.filter((m) => !m.won).length, h2h: h2h.slice(-6).reverse(),
       titleList: titles.slice(-8).reverse(), tournaments52: new Set(seasonRes.map((r) => r.t)).size, peers: peers.length,
@@ -2290,6 +2347,7 @@
     H.actLog = H.actLog || [];
     cashOf(s); H.cash.jobCooldown = H.cash.jobCooldown || {};
     backfillBig(s);
+    if (!H.aiTraitsInit) { H.aiTraitsInit = true; for (const p of s.players) if (!p.isHuman && !p.retired) assignAiTraits(s, p); }
     allocOf(s);
     // v2.4: the old default (serve 5 / strokes 5) built lopsided players; move untouched defaults to the balanced one
     if (!H.allocV2) { const a = H.alloc; if (a.serve === 5 && a.stroke === 5 && !a.ret && !a.physical && !a.mental && !a.match) H.alloc = { serve: 3, stroke: 3, ret: 3, physical: 1, mental: 0, match: 0 }; H.allocV2 = true; }
@@ -2314,5 +2372,5 @@
     return s;
   }
 
-  TL.World = { TRAIT_LV, TRAIT_COST, traitLevels, traitLevel, traitList, traitSlots, traitEffectText, traitReq, dropTrait, bigTimeline, strengthOf, cashOf, fundingOptions, useFunding, setBudget, JOBS, forcedRetire, TRAIN_SLOTS, TRAIN_CATS, allocOf, allocShare, autoAlloc, allocSummary, TRAITS, hasTrait, traitReqOk, learnTrait, DEV_STYLES, INTENSITY, devOf, styleGap, autoFocus, trainRate, STRATEGIES, sharpBonus, sharpLabel, confLabel, sponsorsOf, brandOf, sponsorOffer, sponsorUnlocked, activeContracts, signSponsor, releaseSponsor, sponsorTerminationFee, sponsorPerks, sponsorWeekly, ASSETS, TAX, AGENT_CUT, assetsOf, assetUnlocked, buyAsset, assetsWeekly, DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
+  TL.World = { aiTraitList, TRAIT_LV, TRAIT_COST, traitLevels, traitLevel, traitList, traitSlots, traitEffectText, traitReq, dropTrait, bigTimeline, strengthOf, cashOf, fundingOptions, useFunding, setBudget, JOBS, forcedRetire, TRAIN_SLOTS, TRAIN_CATS, allocOf, allocShare, autoAlloc, allocSummary, TRAITS, hasTrait, traitReqOk, learnTrait, DEV_STYLES, INTENSITY, devOf, styleGap, autoFocus, trainRate, STRATEGIES, sharpBonus, sharpLabel, confLabel, sponsorsOf, brandOf, sponsorOffer, sponsorUnlocked, activeContracts, signSponsor, releaseSponsor, sponsorTerminationFee, sponsorPerks, sponsorWeekly, ASSETS, TAX, AGENT_CUT, assetsOf, assetUnlocked, buyAsset, assetsWeekly, DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
 })(typeof globalThis !== "undefined" ? globalThis : window);
