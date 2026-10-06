@@ -980,8 +980,11 @@
     else if (r < 0.88) inj = { weeks: rng.int(3, 8), label: rng.pick(["肘の炎症", "ハムストリング損傷", "腹斜筋の損傷", "膝の炎症", "肩の炎症", "足底筋膜炎"]), sev: 2 };
     else {
       inj = { weeks: rng.int(10, 22), label: rng.pick(["手首の手術", "膝の手術", "股関節の手術", "腰椎のヘルニア", "足首の靭帯断裂", "肘の手術"]), sev: 3 };
+      const before = Object.assign({}, p.attrs);
       for (const k of ["speed", "stamina", "power"]) p.attrs[k] = clamp(p.attrs[k] - rng.int(1, 3), 25, 99);
       p.attrs.durability = clamp(p.attrs.durability - 2, 25, 99);
+      inj.loss = {};
+      for (const k of ["speed", "stamina", "power", "durability"]) if (before[k] !== p.attrs[k]) inj.loss[k] = Math.round(p.attrs[k] - before[k]);
       if (a >= 30) for (const k of PHYS) p.attrs[k] = clamp(p.attrs[k] - 1, 25, 99);
       if (p.isHuman && a >= 30 && !state.human.limitAsked) {
         state.human.limitAsked = true;
@@ -994,10 +997,17 @@
     if (p.isHuman && assetsOf(state).medical && inj.sev >= 2) inj.weeks = Math.max(1, Math.round(inj.weeks * 0.8));
     p.injury = inj;
     p.injuredAt = state.t;
-    if (p.isHuman) { state.human.injuryLog = state.human.injuryLog || []; state.human.injuryLog.push({ year: state.year, week: state.week, label: inj.label, weeks: inj.weeks, sev: inj.sev }); }
+    if (p.isHuman) { state.human.injuryLog = state.human.injuryLog || []; state.human.injuryLog.push({ year: state.year, week: state.week, label: inj.label, weeks: inj.weeks, sev: inj.sev, where: T ? T.name : "練習中" }); }
     if (p.isHuman || (p.rank && p.rank <= 10) || p.isRival || inj.sev === 3 && p.rank && p.rank <= 50) news(state, `${p.name} が ${inj.label} で ${inj.weeks}週間の離脱${T ? "（" + T.name + "）" : "（練習中）"}`);
   }
 
+  // rehab and medical bills per injured week; top players pay for specialists, lower-ranked
+  // players use federation and public care; the medical contract halves them
+  function rehabWeekly(state) {
+    const h = human(state), sev = h.injury ? h.injury.sev || 2 : 0, r = h.rank || 9999;
+    const rehabScale = r <= 50 ? 1 : r <= 200 ? 0.4 : 0.2;
+    return sev ? Math.round((sev === 3 ? 10 : sev === 2 ? 5 : 2) * rehabScale * (assetsOf(state).medical ? 0.5 : 1) * sponsorPerks(state).rehab * 10) / 10 : 0;
+  }
   function money(k) { return k >= 1000 ? "$" + (k / 1000).toFixed(2) + "M" : "$" + Math.round(k) + "k"; }
   function news(state, text) {
     state.history.news.push({ t: state.t, year: state.year, week: state.week, text });
@@ -1714,10 +1724,7 @@
     const tax = Math.round((prize + fee + signing + bonusPay + (extra + rankSponsor + contracts) * diff(state).income) * TAX * 10) / 10;
     const agentFee = staffOf(state).agent ? Math.round((fee + signing + bonusPay + (extra + rankSponsor + contracts) * diff(state).income) * AGENT_CUT * 10) / 10 : 0;
     // rehab and medical bills while injured; the medical contract halves them
-    const sev = h.injury ? h.injury.sev || 2 : 0;
-    // top players pay for specialists; lower-ranked players use federation and public care
-    const rehabScale = r <= 50 ? 1 : r <= 200 ? 0.4 : 0.2;
-    const rehab = sev ? Math.round((sev === 3 ? 10 : sev === 2 ? 5 : 2) * rehabScale * (assetsOf(state).medical ? 0.5 : 1) * sponsorPerks(state).rehab * 10) / 10 : 0;
+    const rehab = rehabWeekly(state);
     const assetsCost = Math.round(assetsWeekly(state) * 10) / 10;
     const purchase = state.human.pendingPurchase || 0;
     state.human.pendingPurchase = 0;
@@ -2373,5 +2380,5 @@
     return s;
   }
 
-  TL.World = { aiTraitList, TRAIT_LV, TRAIT_COST, traitLevels, traitLevel, traitList, traitSlots, traitEffectText, traitReq, dropTrait, bigTimeline, strengthOf, cashOf, fundingOptions, useFunding, setBudget, JOBS, forcedRetire, TRAIN_SLOTS, TRAIN_CATS, allocOf, allocShare, autoAlloc, allocSummary, TRAITS, hasTrait, traitReqOk, learnTrait, DEV_STYLES, INTENSITY, devOf, styleGap, autoFocus, trainRate, STRATEGIES, sharpBonus, sharpLabel, confLabel, sponsorsOf, brandOf, sponsorOffer, sponsorUnlocked, activeContracts, signSponsor, releaseSponsor, sponsorTerminationFee, sponsorPerks, sponsorWeekly, ASSETS, TAX, AGENT_CUT, assetsOf, assetUnlocked, buyAsset, assetsWeekly, DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
+  TL.World = { rehabWeekly, aiTraitList, TRAIT_LV, TRAIT_COST, traitLevels, traitLevel, traitList, traitSlots, traitEffectText, traitReq, dropTrait, bigTimeline, strengthOf, cashOf, fundingOptions, useFunding, setBudget, JOBS, forcedRetire, TRAIN_SLOTS, TRAIN_CATS, allocOf, allocShare, autoAlloc, allocSummary, TRAITS, hasTrait, traitReqOk, learnTrait, DEV_STYLES, INTENSITY, devOf, styleGap, autoFocus, trainRate, STRATEGIES, sharpBonus, sharpLabel, confLabel, sponsorsOf, brandOf, sponsorOffer, sponsorUnlocked, activeContracts, signSponsor, releaseSponsor, sponsorTerminationFee, sponsorPerks, sponsorWeekly, ASSETS, TAX, AGENT_CUT, assetsOf, assetUnlocked, buyAsset, assetsWeekly, DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
 })(typeof globalThis !== "undefined" ? globalThis : window);

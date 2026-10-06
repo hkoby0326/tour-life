@@ -393,3 +393,15 @@ tr.flash-me td{animation:flashMe .45s} tr.flash-op td{animation:flashOp .45s}
 .wdots i.on{background:var(--accent)}
 .sharecard canvas{width:100%;max-width:360px;border-radius:12px;display:block;margin:8px auto}
 @media(max-width:800px){.wrapped{min-height:60vh;padding:22px 16px}.wrapped .big{font-size:44px}.trophies{grid-template-columns:repeat(3,1fr)}}
+
+/* v2.9 injury popup */
+.injpop{text-align:center}
+.injpop .injic{font-size:44px;line-height:1;margin:4px 0 6px}
+.injpop .injk{font-size:12px;font-weight:700;letter-spacing:.08em;color:var(--red)}
+.injpop h2{margin:4px 0 2px;font-size:22px;justify-content:center;border-bottom:0;padding-bottom:0}
+.injpop h2::before{display:none}
+.injpop .kpi{margin:12px 0}
+.injpop .injlist{text-align:left;margin:8px auto 0;max-width:460px;padding-left:18px;line-height:1.7}
+.injpop.sev3 .injic{animation:injshake .5s ease 1}
+@keyframes injshake{0%,100%{transform:none}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+@media (prefers-reduced-motion: reduce){.injpop.sev3 .injic{animation:none}}

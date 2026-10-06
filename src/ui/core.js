@@ -5,7 +5,7 @@
     W, D, S: null, tab: "home", modal: null, planSel: null, planWeekT: -1, runLog: null, running: false, screens: {},
     SAVE_KEY: "tourlife_v1", SETTINGS_KEY: "tourlife_settings_v1", HOF_KEY: "tourlife_hof_v1",
     DEFAULT_SETTINGS: { stopTournament: true, stopMilestone: true, stopInjury: true, stopSeason: true, stopEvent: true, stopRival: true, watchEnabled: true, watchGs: true, watchFinals: true, watchRival: true, watchTop10: true, watchTitle: true, watchSpeed: 300, sound: false, volume: 0.5, reduceMotion: false, slot: 1, introSeen: false, hints: {}, hintsAlways: false },
-    VERSION: "v2.8.1",
+    VERSION: "v2.9",
   });
   U.ATTRL = W.ATTR_LABEL;
   U.ORIGINS = {
@@ -144,6 +144,7 @@
     const bg = document.getElementById("modalbg");
     bg.onclick = (e) => { if (e.target === bg && !(S && S.human.event)) U.closeModal(); };
     layer.querySelectorAll("[data-close]").forEach((b) => b.onclick = () => U.closeModal());
+    layer.querySelectorAll("[data-heal]").forEach((b) => b.onclick = () => { U.modal = null; U.renderModal(); const me = U.human(); if (me.injury) U.runWeeks(Array.from({ length: me.injury.weeks + 1 }, () => ({ type: "rest" })), { untilHealed: true }); });
     layer.querySelectorAll("[data-goto]").forEach((g) => g.onclick = () => { U.tab = g.dataset.goto; U.modal = null; U.render(); });
     layer.querySelectorAll("[data-confirm-new]").forEach((b) => b.onclick = U.resetGame);
     layer.querySelectorAll("[data-slot-copy-confirm]").forEach((b) => b.onclick = () => U.copyToSlot(parseInt(b.dataset.slotCopyConfirm, 10)));
@@ -165,7 +166,30 @@
   };
   U.openModal = (html, wide, keepDirty) => { U.modal = html; U.modalWide = !!wide; if (!keepDirty) U.modalDirty = false; U.renderModal(); };
   // closing re-renders the screen only when the modal changed game state (an event choice)
-  U.closeModal = () => { U.modal = null; U.modalWide = false; if (U.modalDirty) { U.modalDirty = false; U.render(); } else U.renderModal(); };
+  // v2.9: injury popup — what happened, how long, what it costs, what changes after return
+  U.injuryHtml = function () {
+    const S = U.S, me = U.human(), inj = me.injury, { esc, money } = U;
+    if (!inj) return "";
+    const log = (S.human.injuryLog || []).slice(-1)[0] || {};
+    const sev = inj.sev || 2;
+    let w = S.week + inj.weeks, y = U.cal();
+    while (w > 52) { w -= 52; y++; }
+    const sharpNow = me.sharp === undefined ? 65 : me.sharp;
+    const sharpAfter = Math.max(10, Math.round(sharpNow - 10 * inj.weeks));
+    const lost = (me.results || []).filter((r) => r.t + 52 > S.t && r.t + 52 <= S.t + inj.weeks).reduce((a, r) => a + (r.pts || 0), 0);
+    const rehab = W.rehabWeekly(S);
+    const loss = inj.loss && Object.keys(inj.loss).length ? Object.entries(inj.loss).map(([k, v]) => `${U.ATTRL[k]} ${v}`).join("・") : "";
+    return `<div class="injpop sev${sev}"><div class="injic">${sev === 3 ? "🚑" : "🩹"}</div>
+      <div class="injk">怪我 ・ ${["", "軽傷", "中程度", "重傷"][sev]}</div><h2>${esc(inj.label)}</h2>
+      <p class="muted small">${esc(log.where || "")}${log.where ? "で負傷" : ""}</p>
+      <div class="kpi"><div class="card"><div class="v red">${inj.weeks}週</div><div class="l">離脱</div></div><div class="card"><div class="v">${y}年 第${w}週</div><div class="l">復帰見込み</div></div><div class="card"><div class="v">${rehab ? money(rehab) : "-"}</div><div class="l">リハビリ費 / 週</div></div><div class="card"><div class="v">${lost ? "-" + lost : 0}pt</div><div class="l">離脱中に失効</div></div></div>
+      <ul class="small injlist"><li>離脱中は休養に固定され、予定していた大会は欠場になる</li><li>復帰時の試合勘は約${sharpAfter}（${W.sharpLabel(sharpAfter)}）。試合をこなすと戻る</li>${loss ? `<li class="red">手術の影響で能力が低下: ${esc(loss)}</li>` : ""}${sev === 3 ? "<li>大怪我の後は再発しやすい。復帰直後の連戦は避けたい</li>" : ""}</ul>
+      <div class="row" style="gap:8px;justify-content:center;margin-top:12px"><button class="primary" data-heal>治るまで進める</button><button data-close>閉じる</button></div></div>`;
+  };
+  U.closeModal = () => {
+    if (U.pendingInjury && U.S && !U.S.human.event && U.human().injury) { U.pendingInjury = false; U.modal = U.injuryHtml(); U.modalWide = false; if (U.sfx) U.sfx("injury"); U.renderModal(); return; }
+    U.pendingInjury = false;
+    U.modal = null; U.modalWide = false; if (U.modalDirty) { U.modalDirty = false; U.render(); } else U.renderModal(); };
 
   // ---------- onboarding (UI-9): first-season hints per screen, replayable from settings ----------
   U.HINTS = {
@@ -293,7 +317,7 @@
   };
   U.finishRun = function (log) {
     const S = U.S;
-    U.save(); U.runLog = log; U.planSel = null; U.planWeekTab = 0;
+    U.save(); U.runLog = log; U.planSel = null; U.planWeekTab = 0; U.pendingInjury = false;
     const seasonRep = log.find((r) => r.season);
     if (seasonRep) U.modal = U.seasonHtml(seasonRep.season);
     if (S.human.careerOver) { U.pushHof(S.human.epilogue); U.modal = `<h2>引退</h2>${U.epilogueHtml()}<button data-close>閉じる</button>`; }
@@ -303,6 +327,11 @@
       if (r.human && r.human.humanRound === "優勝") { U.toast(`🏆 ${U.esc(r.human.T.name)} 優勝！ +${r.human.humanPts}pt`, "gold"); fanfare = true; }
     }
     if (fanfare && U.sfx) U.sfx("milestone");
+    // injury this run and nothing more important on screen → popup
+    // (a season report or event takes the screen first; the popup follows when it is closed)
+    if (!S.human.careerOver && U.human().injury && log.some((r) => r.stops.includes("injury"))) {
+      if (!U.modal && !S.human.event) { U.modal = U.injuryHtml(); if (U.sfx) U.sfx("injury"); } else U.pendingInjury = true;
+    }
     U.tab = "report"; U.render();
   };
 
