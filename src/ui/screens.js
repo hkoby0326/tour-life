@@ -36,6 +36,35 @@
     const label = auto0.type === "enter" ? `${flag(autoT.country)} ${esc(autoT.name)} にエントリー` : auto0.type === "rest" ? "休養" : auto0.type === "camp" ? "オフシーズン合宿" : auto0.type === "blocked" ? "大会2週目（移動・調整）" : `練習（${ATTRL[S.human.focus[0]]}・${ATTRL[S.human.focus[1]]}）`;
     return { auto0, autoT, label };
   }
+  // v2.11: what the coming season's decline looks like, and the three levers against it
+  function declineBlock(me) {
+    const S = U.S, a = W.age(S, me);
+    if (a < 29) return "";
+    const e = W.declineEstimate(S, me), m = W.declineMods(S), al = W.allocOf(S), dev = W.devOf(S);
+    const on = (b) => (b ? '<b class="green">ON</b>' : '<span class="muted">OFF</span>');
+    return `<div class="card" style="margin-top:10px"><h3>衰えとの向き合い方 <span class="muted small">${a}歳</span></h3>
+      ${e.ga >= 30 ? `<p class="small">来季の衰えの見込み: 身体（スピード・スタミナ・パワー）<b class="red">−${e.body}</b>/年${e.body < e.raw ? ` <span class="muted">（対策なしなら −${e.raw}）</span>` : ""} ・ 技術 約<b class="red">−${e.tech}</b>/年</p>` : '<p class="small muted">衰えは来季から始まる。</p>'}
+      <ul class="small" style="margin:6px 0 0 18px;line-height:1.8">
+        <li>身体を守る: 練習配分のフィジカル ${al.physical || 0}コマ → 身体の衰え −${Math.round(Math.min(0.5, (al.physical || 0) * 0.1) * 100)}%（1コマ −10%、最大 −50%）</li>
+        <li>スタイルを変える（29歳〜）: 目標スタイル「ベテランの技巧」 ${on(dev.style === "veteran")} → 技術の衰え −50%、確立でサーブ +2.5・勝負所 +8</li>
+        <li>出場を絞る（30歳〜）: 方針「厳選（ベテラン）」 ${on(S.human.strategy === "veteran")} → GS・マスターズでサーブ・リターン +1.5、怪我 ×0.75、身体の衰え −15%</li></ul>
+      <p class="tiny muted" style="margin-top:4px">現在の倍率: 身体 ×${m.body.toFixed(2)}、技術 ×${m.tech.toFixed(2)}</p></div>`;
+  }
+  function goalsCard() {
+    const G = W.goalsView(U.S);
+    return `<div class="panel"><h2>今季の目標 <span class="muted small">${cal(G.year)}年</span></h2><div class="goals">${G.list.map((g) => `<div class="goal ${g.done ? "done" : ""}"><span class="gk">${g.done ? "✓" : "○"}</span><div><b>${esc(g.label)}</b><div class="tiny muted">${g.done ? "達成" : esc(g.cur)}${g.type === "rank" && !g.done ? " ・ 年末に判定" : ""} ・ 成長pt +${g.gp}</div></div></div>`).join("")}</div><div class="tiny muted" style="margin-top:6px">3つとも達成でスポンサーから ${money(G.bonus)}</div></div>`;
+  }
+  function legacyCard() {
+    const L = W.legacyView(U.S);
+    const chase = L.records.filter((r) => r.mine > 0 && !r.mineIsRecord).sort((a, b) => (a.record - a.mine) - (b.record - b.mine))[0];
+    const held = L.records.filter((r) => r.mineIsRecord);
+    return `<div class="panel"><h2>レガシー <span class="muted small">最終目標は殿堂入り</span></h2>
+      <div class="row between"><div><span style="font-size:26px;font-weight:800" class="${L.hof ? "gold" : ""}">${L.total}</span><span class="muted small"> / 殿堂ライン ${L.line}</span></div><button class="small" data-legacy>詳しく</button></div>
+      <div class="lgbar big"><i style="width:${Math.min(100, (L.total / L.line) * 100)}%"></i></div>
+      <div class="small" style="margin-top:6px">${L.hof ? '<b class="gold">殿堂入りラインに到達</b>' : `殿堂まで ${esc(L.gapText)}`}</div>
+      <div class="small muted" style="margin-top:4px">この世界の歴代 ${L.rank ? `<b>${L.rank}位</b> / ${L.of}人` : "-"}${L.next ? ` ・ 次は <span data-player="${L.next.id}" class="accent">${esc(L.next.name)}</span>（${L.next.v}pt）まで あと${L.next.gap}` : ""}</div>
+      ${held.length ? `<div class="small gold" style="margin-top:4px">記録保持: ${held.map((r) => `${esc(r.label)} ${r.mine}${r.unit}`).join("、")}</div>` : chase ? `<div class="small muted" style="margin-top:4px">記録まで: ${esc(chase.label)} ${chase.mine}/${chase.record}${chase.unit}（${esc(chase.holder)}）</div>` : ""}</div>`;
+  }
   U.screens.home = function (c) {
     const S = U.S, me = human(), rv = rival();
     if (S.human.careerOver) { c.innerHTML = `<div class="panel"><h2>キャリア終了</h2>${U.epilogueHtml()}<button class="danger" id="newgame">新しいキャリアを始める</button></div>`; document.getElementById("newgame").onclick = U.newGame; return; }
@@ -75,7 +104,7 @@
     c.innerHTML = `<div class="grid2" style="grid-template-columns:1.25fr .75fr">
       <div>
         <div class="card hero" style="padding:16px 18px"><h3>今週の決断 ・ ${cal()}年 第${S.week}週</h3><div style="font-size:22px;font-weight:800;margin:4px 0 6px">${label}</div><p class="small muted" style="margin:0 0 6px">${esc(auto0.reason || "")}</p>
-          <label class="small" style="display:block;margin:0 0 10px">方針 <select data-strategy-home>${Object.entries(W.STRATEGIES).map(([k, v]) => `<option value="${k}" ${(S.human.strategy || "big") === k ? "selected" : ""}>${v.label}</option>`).join("")}</select></label>
+          <label class="small" style="display:block;margin:0 0 10px">方針 <select data-strategy-home>${Object.entries(W.STRATEGIES).filter(([k]) => W.strategyOk(S, k) || S.human.strategy === k).map(([k, v]) => `<option value="${k}" ${(S.human.strategy || "big") === k ? "selected" : ""}>${v.label}</option>`).join("")}</select></label>
           <div class="row actions"><button class="primary bigbtn" data-go-auto>この判断で1週進める</button><button data-go="plan">4週プランを組む</button><button data-auto>自動進行（停止条件まで）</button></div></div>
         ${nextCard}
         <div class="panel"><h2>シーズン ・ ${cal()}年</h2>${seasonStrip(me)}<div class="row between small muted"><span>今季 ${seasonT}大会（目安 ${guide}）</span><span class="loadmeter">直近8週の負荷 <span class="bar"><div style="width:${Math.min(100, (load8 / maxLoad) * 100)}%;background:${load8 >= maxLoad ? "var(--red)" : load8 >= maxLoad - 1 ? "var(--gold)" : "var(--green)"}"></div></span> ${load8}/${maxLoad}</span></div></div>
@@ -87,7 +116,8 @@
           <div class="small muted">${W.sharpLabel(me.sharp || 0)} ・ 自信: ${W.confLabel(me.conf || 0)}${(me.sharp || 0) < 55 ? ' <span class="gold">（試合に出ると戻る）</span>' : ""}</div>
           <div class="small muted" style="margin-top:6px">試合プラン: ${TL.PLANS[S.human.plan].label} ・ 練習: ${esc(W.allocSummary(W.devOf(S).auto ? W.autoAlloc(S, me) : W.allocOf(S)))} ・ 方針: ${W.STRATEGIES[S.human.strategy || "big"].label}</div></div></div>
       </div>
-      <div>${rivalCard}<div class="panel"><h2>受信箱</h2><div class="inbox">${items.join("")}</div></div></div></div>`;
+      <div>${goalsCard()}${legacyCard()}${rivalCard}<div class="panel"><h2>受信箱</h2><div class="inbox">${items.join("")}</div></div></div></div>`;
+    const lgb = c.querySelector("[data-legacy]"); if (lgb) lgb.onclick = () => U.openModal(U.legacyHtml(), true);
     c.querySelector("[data-go-auto]").onclick = () => U.runWeeks([auto0.type === "blocked" ? { type: "blocked" } : { type: "auto" }]);
     const gf = c.querySelector("[data-goto-finance]"); if (gf) gf.onclick = (e) => { e.preventDefault(); U.tab = "finance"; U.render(); };
     const sh = c.querySelector("[data-strategy-home]"); if (sh) sh.onchange = () => { S.human.strategy = sh.value; U.save(); U.render(); };
@@ -134,7 +164,7 @@
       <div class="row" style="gap:16px;margin-top:10px">
       <span class="small">練習配分: <b>${esc(W.allocSummary(W.devOf(S).auto ? W.autoAlloc(S, me) : W.allocOf(S)))}</b>${W.devOf(S).auto ? "（コーチ）" : ""}</span>
       <label class="small">試合プラン <select data-plan>${Object.entries(TL.PLANS).map(([k, p]) => `<option value="${k}" ${S.human.plan === k ? "selected" : ""}>${p.label}</option>`).join("")}</select></label>
-      <label class="small">自動の方針 <select data-strategy>${Object.entries(W.STRATEGIES).map(([k, v]) => `<option value="${k}" ${(S.human.strategy || "big") === k ? "selected" : ""}>${v.label}</option>`).join("")}</select></label>
+      <label class="small">自動の方針 <select data-strategy>${Object.entries(W.STRATEGIES).filter(([k]) => W.strategyOk(S, k) || S.human.strategy === k).map(([k, v]) => `<option value="${k}" ${(S.human.strategy || "big") === k ? "selected" : ""}>${v.label}</option>`).join("")}</select></label>
       <label class="small">セット間 <select data-rule><option value="none" ${S.human.switchRule === "none" ? "selected" : ""}>切り替えない</option><option value="behind" ${S.human.switchRule === "behind" ? "selected" : ""}>セットを落としたら攻撃的に</option></select></label></div>
       <p class="small muted" style="margin:8px 0 0">${esc(W.STRATEGIES[S.human.strategy || "big"].desc)}</p>
       <p class="small muted" style="margin:4px 0 0">育成計画: ${W.devOf(S).style ? W.DEV_STYLES[W.devOf(S).style].label + (W.devOf(S).established ? "（確立）" : "") : "スタイル未設定"} ・ 強度 ${W.INTENSITY[W.devOf(S).intensity].label}${W.devOf(S).auto ? " ・ 重点はコーチ任せ" : ""} <a href="#" data-goto-player class="accent">選手タブで変更</a></p></div>`;
@@ -361,7 +391,7 @@
     }).join("");
     return `<div class="panel"><h2>育成計画 <span class="muted small">どんな選手に育てるか</span></h2>
       <div class="row" style="gap:14px;flex-wrap:wrap">
-        <label class="small">目標スタイル <select data-dev-style><option value="">決めない</option>${Object.entries(W.DEV_STYLES).map(([k, v]) => `<option value="${k}" ${dev.style === k ? "selected" : ""}>${v.label}</option>`).join("")}</select></label>
+        <label class="small">目標スタイル <select data-dev-style><option value="">決めない</option>${Object.entries(W.DEV_STYLES).filter(([k]) => W.devStyleOk(S, k) || dev.style === k).map(([k, v]) => `<option value="${k}" ${dev.style === k ? "selected" : ""}>${v.label}</option>`).join("")}</select></label>
         <label class="small">練習強度 <select data-dev-int>${Object.entries(W.INTENSITY).map(([k, v]) => `<option value="${k}" ${dev.intensity === k ? "selected" : ""}>${v.label}</option>`).join("")}</select></label>
         <label class="small" style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-dev-auto style="width:auto;margin:0" ${dev.auto ? "checked" : ""}> 練習配分はコーチに任せる</label></div>
       <p class="small muted" style="margin:6px 0">${st ? esc(st.desc) + `。キー能力（${st.keys.map((k) => ATTRL[k]).join("・")}）の練習効果 ×1.15。` : "スタイルを決めると、キー能力の練習効果が上がり、確立すると試合で効果が出る。"} ${esc(W.INTENSITY[dev.intensity].desc)}。</p>
@@ -369,7 +399,7 @@
       <div class="alloc">${Object.entries(W.TRAIN_CATS).map(([c, v]) => `<div class="arow"><div><b>${v.label}</b><div class="tiny muted">${esc(v.desc)}</div></div><div class="actl">${dev.auto ? "" : `<button class="small" data-alloc="${c}:-1" ${alloc[c] ? "" : "disabled"}>−</button>`}<span class="num">${alloc[c] || 0}</span>${dev.auto ? "" : `<button class="small" data-alloc="${c}:1" ${Object.values(alloc).reduce((a, b) => a + b, 0) < W.TRAIN_SLOTS ? "" : "disabled"}>＋</button>`}</div><div class="abar"><div style="width:${(alloc[c] || 0) * 10}%"></div></div></div>`).join("")}</div>
       ${st ? `<div class="attr" style="grid-template-columns:110px 1fr 70px"><span class="small">スタイル確立度</span><div class="bar"><div style="width:${Math.max(0, Math.min(100, (gap / 5) * 100))}%;background:${dev.established ? "var(--gold)" : "var(--accent)"}"></div></div><span class="num small">${dev.established ? '<b class="gold">確立</b>' : `${gap.toFixed(1)}/5`}</span></div><p class="small muted" style="margin:2px 0 8px">キー能力の平均が他の能力の平均より 5 以上高くなると確立（3 を割ると解除）。</p>` : ""}
       <div class="tscroll"><table class="small"><tr><th>能力</th><th class="num">現在</th><th class="num">練習1週</th><th>${st && !dev.established ? "確立の目安" : ""}</th></tr>${rows}</table></div>
-      <p class="small muted" style="margin-top:6px">練習1週あたりの期待値（年齢・伸びしろ・コーチ・スタッフ・強度・方針込み）。直近12週の練習は ${trainWks}週${S.human.strategy === "develop" ? "（育成重視: 練習効果 ×1.2）" : ""}。試合でも少しずつ伸びる。天井より 6 以上高い能力は伸びが鈍る。</p></div>`;
+      <p class="small muted" style="margin-top:6px">練習1週あたりの期待値（年齢・伸びしろ・コーチ・スタッフ・強度・方針込み）。直近12週の練習は ${trainWks}週${S.human.strategy === "develop" ? "（育成重視: 練習効果 ×1.2）" : ""}。試合でも少しずつ伸びる。天井より 6 以上高い能力は伸びが鈍る。</p>${declineBlock(me)}</div>`;
   };
   U.traitsPanelHtml = function () {
     const S = U.S, H = S.human;

@@ -5,7 +5,7 @@
     W, D, S: null, tab: "home", modal: null, planSel: null, planWeekT: -1, runLog: null, running: false, screens: {},
     SAVE_KEY: "tourlife_v1", SETTINGS_KEY: "tourlife_settings_v1", HOF_KEY: "tourlife_hof_v1",
     DEFAULT_SETTINGS: { stopTournament: true, stopMilestone: true, stopInjury: true, stopSeason: true, stopEvent: true, stopRival: true, watchEnabled: true, watchGs: true, watchFinals: true, watchRival: true, watchTop10: true, watchTitle: true, watchSpeed: 300, sound: false, volume: 0.5, reduceMotion: false, slot: 1, introSeen: false, hints: {}, hintsAlways: false },
-    VERSION: "v2.10",
+    VERSION: "v2.11",
   });
   U.ATTRL = W.ATTR_LABEL;
   U.ORIGINS = {
@@ -112,6 +112,7 @@
         <div class="identity">${U.avatar(me)}<div><div class="name">${esc(me.name)}</div><div class="sub">${U.cal()}年 第${S.week}週 ・ ${W.age(S, me)}歳 ・ ${U.ORIGINS[S.config.origin].name}${S.human.retireYear && S.year === S.human.retireYear ? ' ・ <span class="gold">ラストシーズン</span>' : ""}</div></div></div>
         <div class="statrow">
         <div class="stat"><span class="l">Ranking</span><span class="v">${me.rank ? me.rank + "位" : "ランク外"}</span><span class="d">${me.points}pt ${delta > 0 ? `<span class="green">▲${delta}</span>` : delta < 0 ? `<span class="red">▼${-delta}</span>` : ""}</span></div>
+        ${(() => { const L = W.legacyView(S); return `<div class="stat" data-goto-legacy style="cursor:pointer" title="レガシー（キャリア評価）"><span class="l">Legacy</span><span class="v ${L.hof ? "gold" : ""}">${L.total}<span class="small muted">pt</span></span><span class="d"><span class="lgbar"><i style="width:${Math.min(100, (L.total / L.line) * 100)}%"></i></span>${L.hof ? '<span class="gold">殿堂ライン到達</span>' : `殿堂まで ${L.gap}`}</span></div>`; })()}
         <div class="stat"><span class="l">Money</span><span class="v ${S.human.money < 0 ? "red" : ""}">${money(S.human.money)}</span><span class="d">${S.human.ledger && S.human.ledger.length ? (S.human.ledger[S.human.ledger.length - 1].net >= 0 ? '<span class="green">+' : '<span class="red">') + money(S.human.ledger[S.human.ledger.length - 1].net) + "/週</span>" : ""}</span></div>
         <div class="stat"><span class="l">Fatigue ${Math.round(me.fatigue)}</span><div class="gauge"><div style="width:${me.fatigue}%;background:${me.fatigue > 60 ? "var(--red)" : me.fatigue > 40 ? "var(--gold)" : "var(--green)"}"></div></div></div>
         <div class="stat"><span class="l">Record</span><span class="v small">${me.stats.w}勝${me.stats.l}敗</span><span class="d">タイトル ${me.stats.titles}</span></div>
@@ -120,6 +121,7 @@
         ${inj}
         </div></header><div class="content" id="content"></div></div></div>`;
     app.querySelectorAll(".rail .nav[data-tab]").forEach((b) => b.onclick = () => { U.tab = b.dataset.tab; U.render(); });
+    app.querySelectorAll("[data-goto-legacy]").forEach((b) => b.onclick = () => U.openModal(U.legacyHtml(), true));
     const more = app.querySelector("[data-more]");
     if (more) more.onclick = () => U.openModal(`<h2>メニュー</h2><div class="grid2" style="grid-template-columns:repeat(2,1fr)">${U.TABS.filter(([k]) => !U.PRIMARY.includes(k)).map(([k, l]) => `<button class="${U.tab === k ? "primary" : ""}" data-goto="${k}" style="display:flex;gap:8px;align-items:center;justify-content:flex-start">${U.icon(k)} ${l}</button>`).join("")}</div><div style="margin-top:10px"><button data-close>閉じる</button></div>`);
     U.bindPlayerLinks(app);
@@ -167,6 +169,20 @@
   U.openModal = (html, wide, keepDirty) => { U.modal = html; U.modalWide = !!wide; if (!keepDirty) U.modalDirty = false; U.renderModal(); };
   // closing re-renders the screen only when the modal changed game state (an event choice)
   // v2.9: injury popup — what happened, how long, what it costs, what changes after return
+  // v2.11: legacy — the career score, the Hall of Fame line, the all-time table and records
+  U.legacyHtml = function () {
+    const S = U.S, { esc, flag } = U, L = W.legacyView(S);
+    const parts = Object.entries(L.parts).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td>${W.LEGACY_LABEL[k]}</td><td class="num">${v}</td></tr>`).join("") || '<tr><td colspan="2" class="muted">まだ加点なし</td></tr>';
+    const rule = Object.entries(W.LEGACY).map(([k, v]) => `${W.LEGACY_LABEL[k]} ${v}${k === "no1Week" ? "/週" : k.startsWith("ye") ? "/回" : ""}`).join(" ・ ");
+    return `<h2>レガシー <span class="muted small">キャリアの評価点</span></h2>
+      <div class="kpi"><div class="card"><div class="v ${L.hof ? "gold" : ""}">${L.total}</div><div class="l">レガシー</div></div><div class="card"><div class="v">${L.line}</div><div class="l">殿堂ライン</div></div><div class="card"><div class="v">${L.rank ? L.rank + "位" : "-"}</div><div class="l">この世界の歴代</div></div></div>
+      <div class="lgbar big"><i style="width:${Math.min(100, (L.total / L.line) * 100)}%"></i></div><p class="small">${L.hof ? '<b class="gold">殿堂入りラインに到達済み。</b>' : `殿堂入りまで ${esc(L.gapText)}`}</p>
+      <div class="grid2"><div><h3>内訳</h3><table class="small">${parts}</table></div>
+      <div><h3>歴代レガシー（この世界）</h3><table class="small">${L.top.map((x, i) => `<tr class="${x.me ? "me" : ""}"><td class="num">${i + 1}</td><td><span data-player="${x.id}" class="accent">${flag(x.country)} ${esc(x.name)}</span>${x.retired ? ' <span class="muted tiny">引退</span>' : ""}</td><td class="num">${x.v}</td></tr>`).join("")}${L.rank && L.rank > 10 ? `<tr class="me"><td class="num">${L.rank}</td><td>${esc(U.human().name)}</td><td class="num">${L.total}</td></tr>` : ""}</table></div></div>
+      <h3>記録への挑戦</h3><table class="small">${L.records.map((r) => `<tr><td>${esc(r.label)}</td><td class="num ${r.mineIsRecord ? "gold" : ""}">${r.mine}${r.unit}</td><td class="muted">${r.holder ? `最多 ${r.record}${r.unit}（${esc(r.holder)}）` : "-"}</td><td class="small">${r.mineIsRecord ? '<b class="gold">記録保持</b>' : r.record ? `あと ${r.record - r.mine + 1}` : ""}</td></tr>`).join("")}</table>
+      <p class="tiny muted" style="margin-top:8px">配点: ${rule}。ゲーム開始以降のこの世界の成績で数える（開始時のベテランの過去の実績は含まない）。</p>
+      <button data-close>閉じる</button>`;
+  };
   U.injuryHtml = function () {
     const S = U.S, me = U.human(), inj = me.injury, { esc, money } = U;
     if (!inj) return "";
@@ -195,7 +211,7 @@
 
   // ---------- onboarding (UI-9): first-season hints per screen, replayable from settings ----------
   U.HINTS = {
-    home: ["ホームの読み方", "「今週の決断」は自動方針の提案。そのまま1週進めるか、「4週プラン」で大会・練習・休養を自分で組む。受信箱には選択肢つきのイベントとニュースが届く。"],
+    home: ["ホームの読み方", "右の「今季の目標」は毎シーズン3つ。達成すると成長ポイント、全達成でボーナス。「レガシー」はキャリアの評価点で、殿堂ラインを越えるのが最終目標。「今週の決断」は自動方針の提案。そのまま1週進めるか、「4週プラン」で大会・練習・休養を自分で組む。受信箱には選択肢つきのイベントとニュースが届く。"],
     plan: ["4週プランの組み方", "「自動の方針」で大会選びの考え方（ビッグイベント優先／ポイント重視／育成重視／移動最小）を決められる。各週は 自動／大会／練習／休養／合宿 から選ぶ。大会カードの点はエントリー見込み（緑=本戦、黄=予選、赤=カットオフ外）。負荷メーターが赤なら休養を。重要試合は観戦モードになる。"],
     report: ["結果の見方", "試合ごとのスコアと、練習で伸びた能力が週単位で出る。「ドロー表」で本戦の全試合を確認できる。"],
     sponsor: ["スポンサー契約", "ラケット・ウエア・シューズは各1社、その他は2社まで。ブランドはランキングで解放され、週給は契約時のランキングで決まって期間中固定。用具には試合やコンディションへの効果、優勝ボーナス条項もある。"],
@@ -270,6 +286,8 @@
       <div class="kpi"><div class="card"><div class="v">${z.rank ? z.rank + "位" : "-"}</div><div class="l">年末ランキング</div></div><div class="card"><div class="v">${z.w}-${z.l}</div><div class="l">年間成績</div></div><div class="card"><div class="v">${z.tournaments || "-"}</div><div class="l">出場大会</div></div><div class="card"><div class="v">${z.titles.length}</div><div class="l">タイトル</div></div><div class="card"><div class="v">${money(z.prize)}</div><div class="l">年間賞金</div></div><div class="card"><div class="v ${z.money < 0 ? "red" : ""}">${money(z.money)}</div><div class="l">資金残高</div></div></div>
       ${z.titles.length ? `<p><b class="gold">優勝:</b> ${z.titles.map(esc).join("、")}</p>` : ""}
       <p><b>ベストマッチ:</b> ${esc(z.bestWin)}</p><p><b>サーフェス別:</b> ${surf || "-"}</p>
+      ${z.goals ? `<p><b>シーズン目標:</b> ${z.goals.list.map((g) => `<span class="${g.ok ? "green" : "muted"}">${g.ok ? "✓" : "✗"} ${esc(g.label)}</span>`).join(" ・ ")}${z.goals.all ? ` <span class="gold">全達成ボーナス ${money(z.goals.bonus)}</span>` : ""}</p>` : ""}
+      ${z.legacy !== undefined ? `<p><b>レガシー:</b> ${z.legacy}pt <span class="muted small">（殿堂ライン ${W.HOF_LINE}）</span></p>` : ""}
       ${z.rivalH2H ? `<p><b>宿敵 ${esc(z.rivalH2H.name)}:</b> 今季の対戦 ${z.rivalH2H.w}勝${z.rivalH2H.l}敗 ・ 相手は${z.rivalH2H.rank ? z.rivalH2H.rank + "位" : "ランク外"}、今季${z.rivalH2H.titles}勝${z.rivalH2H.label ? ` ・ 関係「${z.rivalH2H.label}」` : ""}</p>` : ""}
       <p><b>今季の成長:</b> ${(z.attrDelta || []).map(([k, v]) => `<span class="${v > 0 ? "green" : "red"}">${ATTRL[k]} ${signed(v)}</span>`).join(" ・ ") || "—"}</p>
       <p><b>来季の防衛ポイント:</b> 1-3月 ${z.defend[0]} / 4-6月 ${z.defend[1]} / 7-9月 ${z.defend[2]} / 10-12月 ${z.defend[3]}</p>
@@ -325,7 +343,7 @@
     if (S.human.careerOver) { U.pushHof(S.human.epilogue); U.modal = `<h2>引退</h2>${U.epilogueHtml()}<button data-close>閉じる</button>`; }
     let fanfare = false;
     for (const r of log) {
-      for (const it of r.items) if (it.type === "milestone") { U.toast(`🏅 ${U.esc(it.text)}`, "gold"); fanfare = true; }
+      for (const it of r.items) if (it.type === "milestone") { U.toast(`🏅 ${U.esc(it.text)}`, "gold"); fanfare = true; } else if (it.type === "goal") { U.toast(`🎯 ${U.esc(it.text)}`, "gold"); fanfare = true; }
       if (r.human && r.human.humanRound === "優勝") { U.toast(`🏆 ${U.esc(r.human.T.name)} 優勝！ +${r.human.humanPts}pt`, "gold"); fanfare = true; }
     }
     if (fanfare && U.sfx) U.sfx("milestone");
@@ -359,7 +377,7 @@
       <p class="small muted">ポテンシャル（能力の天井）はプレイヤーには見えません。コーチのコメントと同年代との比較から推測してください。約10%で「世代の才能」を引きます。出自で天井は変わらず、どの出自からでもNo.1を狙えます。</p>
       <button class="primary" id="start" style="padding:10px 22px;font-size:15px">キャリアを始める</button></div>
       ${[1, 2, 3].some((n) => U.slotInfo(n)) ? `<div class="panel"><h2>セーブデータ</h2>${U.slotsHtml(true)}</div>` : ""}
-      ${hof.length ? `<div class="panel"><h2>殿堂ギャラリー</h2>${hof.map((e) => `<div class="card"><div class="row between"><div><b>${flag(e.country)} ${esc(e.name)}</b> <span class="muted small">${U.ORIGINS[e.origin] ? U.ORIGINS[e.origin].name : ""} ・ ${e.seasons || "-"}シーズン ・ ${e.date || ""}</span><div class="${e.hof ? "gold" : "muted"}" style="font-weight:700">「${esc(e.tag)}」${e.hof ? " 🏛 殿堂入り" : ""}${e.academy ? " 🎓" : ""}</div></div><div class="small muted" style="text-align:right">最高${e.bestRank || "-"}位 ・ ${e.titles}勝（GS${e.gs}）<br>No.1 ${e.weeksNo1}週 ・ ${e.w}-${e.l} ・ ${U.money(e.prize || 0)}</div></div>${e.timeline && e.timeline.length ? `<div class="timeline" style="margin-top:8px">${e.timeline.map((z) => `<div class="yr"><div class="muted">${z.y}<br><span class="tiny">${z.age}歳</span></div><div class="r ${z.rank && z.rank <= 10 ? "top10" : z.rank && z.rank <= 50 ? "top50" : ""}">${z.rank || "-"}</div><div>${z.w}-${z.l}</div>${z.titles ? `<div class="t">🏆×${z.titles}</div>` : ""}</div>`).join("")}</div>` : ""}</div>`).join("")}</div>` : ""}
+      ${hof.length ? `<div class="panel"><h2>殿堂ギャラリー</h2>${hof.map((e) => `<div class="card"><div class="row between"><div><b>${flag(e.country)} ${esc(e.name)}</b> <span class="muted small">${U.ORIGINS[e.origin] ? U.ORIGINS[e.origin].name : ""} ・ ${e.seasons || "-"}シーズン ・ ${e.date || ""}</span><div class="${e.hof ? "gold" : "muted"}" style="font-weight:700">「${esc(e.tag)}」${e.hof ? " 🏛 殿堂入り" : ""}${e.academy ? " 🎓" : ""}</div></div><div class="small muted" style="text-align:right">最高${e.bestRank || "-"}位 ・ ${e.titles}勝（GS${e.gs}）<br>${e.legacy !== undefined ? `レガシー ${e.legacy} ・ ` : ""}No.1 ${e.weeksNo1}週 ・ ${e.w}-${e.l} ・ ${U.money(e.prize || 0)}</div></div>${e.timeline && e.timeline.length ? `<div class="timeline" style="margin-top:8px">${e.timeline.map((z) => `<div class="yr"><div class="muted">${z.y}<br><span class="tiny">${z.age}歳</span></div><div class="r ${z.rank && z.rank <= 10 ? "top10" : z.rank && z.rank <= 50 ? "top50" : ""}">${z.rank || "-"}</div><div>${z.w}-${z.l}</div>${z.titles ? `<div class="t">🏆×${z.titles}</div>` : ""}</div>`).join("")}</div>` : ""}</div>`).join("")}</div>` : ""}
     </div>`;
     app.querySelectorAll(".origin").forEach((el) => el.onclick = () => { window._origin = el.dataset.o; window._name = document.getElementById("name").value; window._country = document.getElementById("country").value; window._diff = document.getElementById("diff").value; U.renderSetup(); });
     document.getElementById("start").onclick = () => {

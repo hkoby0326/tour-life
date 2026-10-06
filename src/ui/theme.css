@@ -421,3 +421,13 @@ tr.flash-me td{animation:flashMe .45s} tr.flash-op td{animation:flashOp .45s}
   .modal.injury h2{font-size:28px}
 }
 @media (prefers-reduced-motion: reduce){.modal-bg.injury,.modal.injury .injic{animation:none}}
+
+/* v2.11 legacy + season goals */
+.lgbar{display:inline-block;width:64px;height:5px;border-radius:3px;background:var(--panel3);overflow:hidden;vertical-align:middle;margin-right:6px}
+.lgbar i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--gold))}
+.lgbar.big{display:block;width:100%;height:8px;margin-top:8px}
+.goals{display:flex;flex-direction:column;gap:8px}
+.goal{display:flex;gap:10px;align-items:flex-start}
+.goal .gk{width:22px;height:22px;border-radius:50%;border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;font-size:12px;flex:none;color:var(--muted)}
+.goal.done .gk{background:var(--green);border-color:var(--green);color:#04130a;font-weight:800}
+.goal.done b{color:var(--green)}
