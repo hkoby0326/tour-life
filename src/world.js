@@ -255,11 +255,11 @@
     // human
     const o = state.config.origin;
     let spec;
-    if (o === "junior") spec = { overall: 56, birthYear: START_YEAR - 16, potential: 80 + rng.int(0, 12), money: 60, sponsor: 1.5, sponsorWeeks: 156, pts: 30, wcBoost: 104, style: "all" };
+    if (o === "junior") spec = { overall: 56, birthYear: START_YEAR - 16, potential: 76 + rng.int(0, 12), money: 60, sponsor: 1.5, sponsorWeeks: 156, pts: 30, wcBoost: 104, style: "all" };
     // sponsor = 週あたりの支援（k$）。叩き上げは地元の後援会、大学経由は協会支援という設定
     // v2.8: どの出自も同じポテンシャル帯。開始能力・ポイントは「ジュニア王者がその年齢で届いている水準」に揃え、出自で天井や確率が変わらないようにする
-    else if (o === "college") spec = { overall: 73, birthYear: START_YEAR - 21, potential: 80 + rng.int(0, 12), money: 25, sponsor: 0.6, sponsorWeeks: 104, pts: 300, wcBoost: 0, growth: rng.chance(0.5) ? "late" : "normal", style: "baseline" };
-    else spec = { overall: 62, birthYear: START_YEAR - 18, potential: 80 + rng.int(0, 12), money: 12, sponsor: 0.5, sponsorWeeks: 156, pts: 120, wcBoost: 0, style: "grinder" };
+    else if (o === "college") spec = { overall: 73, birthYear: START_YEAR - 21, potential: 76 + rng.int(0, 12), money: 25, sponsor: 0.6, sponsorWeeks: 104, pts: 300, wcBoost: 0, growth: rng.chance(0.5) ? "late" : "normal", style: "baseline" };
+    else spec = { overall: 62, birthYear: START_YEAR - 18, potential: 76 + rng.int(0, 12), money: 12, sponsor: 0.5, sponsorWeeks: 156, pts: 120, wcBoost: 0, style: "grinder" };
     const generational = rng.chance(0.10);
     if (generational) spec.potential = Math.max(spec.potential, 90 + rng.int(0, 6));
     spec.potential = clamp(spec.potential + diff(state).pot, 60, 97);
