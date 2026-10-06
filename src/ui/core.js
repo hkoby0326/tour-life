@@ -5,13 +5,13 @@
     W, D, S: null, tab: "home", modal: null, planSel: null, planWeekT: -1, runLog: null, running: false, screens: {},
     SAVE_KEY: "tourlife_v1", SETTINGS_KEY: "tourlife_settings_v1", HOF_KEY: "tourlife_hof_v1",
     DEFAULT_SETTINGS: { stopTournament: true, stopMilestone: true, stopInjury: true, stopSeason: true, stopEvent: true, stopRival: true, watchEnabled: true, watchGs: true, watchFinals: true, watchRival: true, watchTop10: true, watchTitle: true, watchSpeed: 300, sound: false, volume: 0.5, reduceMotion: false, slot: 1, introSeen: false, hints: {}, hintsAlways: false },
-    VERSION: "v2.7",
+    VERSION: "v2.8",
   });
   U.ATTRL = W.ATTR_LABEL;
   U.ORIGINS = {
-    junior: { name: "ジュニア王者", age: 16, desc: "ITFジュニア1位相当。資金$60k・スポンサー付き・ホーム大会のWCが有力。ポテンシャル帯は高いが、親の支援は3年で切れる。", diff: "標準", icon: "🏆" },
-    grinder: { name: "叩き上げ", age: 18, desc: "ITF M15の予選から。資金$12k、後援会から週$0.5k。耐久性・メンタルが高く怪我に強い。最初の2年はチャレンジャーにも届かない。", diff: "高", icon: "🧗" },
-    college: { name: "大学経由", age: 21, desc: "米大学テニス出身。能力の完成度が高く即戦力。協会支援2年。ピークまでの時間が短く、天井は低め。", diff: "中（短期決戦）", icon: "🎓" },
+    junior: { name: "ジュニア王者", age: 16, desc: "ITFジュニア1位相当。資金$60k・スポンサー付き・ホーム大会のWCが有力。キャリアが最も長い（タイトルを積み上げる時間がある）が、親の支援は3年で切れる。", diff: "長期戦", icon: "🏆" },
+    grinder: { name: "叩き上げ", age: 18, desc: "ITF下部大会から。資金$12k、後援会から週$0.5k。耐久性・メンタルが高く怪我に強い。最初の数年は資金繰りとの戦い。", diff: "資金難", icon: "🧗" },
+    college: { name: "大学経由", age: 21, desc: "米大学テニス出身。能力の完成度が高く即戦力。協会支援2年。キャリアは短いぶん、勝負の時期がすぐ来る。", diff: "短期決戦", icon: "🎓" },
   };
   const ISO = { JPN: "JP", USA: "US", ESP: "ES", FRA: "FR", ITA: "IT", GBR: "GB", AUS: "AU", GER: "DE", ARG: "AR", SRB: "RS", CHN: "CN", BRA: "BR", CAN: "CA", SUI: "CH", NED: "NL", CZE: "CZ", RUS: "RU", GRE: "GR", NOR: "NO", DEN: "DK", POL: "PL", BUL: "BG", CRO: "HR", AUT: "AT", BEL: "BE", POR: "PT", HUN: "HU", KAZ: "KZ", CHI: "CL", COL: "CO", MEX: "MX", KOR: "KR", IND: "IN", RSA: "ZA", QAT: "QA", UAE: "AE", MAR: "MA", MON: "MC", SWE: "SE", FIN: "FI", ROU: "RO", BIH: "BA", TPE: "TW", HKG: "HK", NZL: "NZ", TUN: "TN", EGY: "EG", TUR: "TR", PER: "PE", URU: "UY", ECU: "EC" };
   U.flag = (c) => { const iso = ISO[c]; if (!iso) return c; return String.fromCodePoint(...[...iso].map((ch) => 0x1f1e6 + ch.charCodeAt(0) - 65)); };
@@ -322,8 +322,8 @@
         <p class="small muted" style="margin-top:8px">所属国はホーム大会のワイルドカード確率・デビスカップ・スポンサーに影響。ホームATP大会がない国は実質ハードモード。</p>
         <p class="small muted" id="diffdesc">${Object.entries(W.DIFFICULTY).map(([k, d]) => `<b>${d.label}</b>: ${d.desc}`).join(" ／ ")}</p></div>
       <div class="panel"><h2>出自を選ぶ</h2>
-      <div class="grid3">${Object.entries(U.ORIGINS).map(([k, o]) => `<div class="card origin ${sel === k ? "sel" : ""}" data-o="${k}"><div style="font-size:26px">${o.icon}</div><h3>${o.name} <span class="muted small">${o.age}歳スタート</span></h3><p class="small">${o.desc}</p><p class="small muted">難易度: ${o.diff}</p></div>`).join("")}</div>
-      <p class="small muted">ポテンシャル（能力の天井）はプレイヤーには見えません。コーチのコメントと同年代との比較から推測してください。約10%で「世代の才能」を引きます。</p>
+      <div class="grid3">${Object.entries(U.ORIGINS).map(([k, o]) => `<div class="card origin ${sel === k ? "sel" : ""}" data-o="${k}"><div style="font-size:26px">${o.icon}</div><h3>${o.name} <span class="muted small">${o.age}歳スタート</span></h3><p class="small">${o.desc}</p><p class="small muted">特徴: ${o.diff}</p></div>`).join("")}</div>
+      <p class="small muted">ポテンシャル（能力の天井）はプレイヤーには見えません。コーチのコメントと同年代との比較から推測してください。約10%で「世代の才能」を引きます。出自で天井は変わらず、どの出自からでもNo.1を狙えます。</p>
       <button class="primary" id="start" style="padding:10px 22px;font-size:15px">キャリアを始める</button></div>
       ${[1, 2, 3].some((n) => U.slotInfo(n)) ? `<div class="panel"><h2>セーブデータ</h2>${U.slotsHtml(true)}</div>` : ""}
       ${hof.length ? `<div class="panel"><h2>殿堂ギャラリー</h2>${hof.map((e) => `<div class="card"><div class="row between"><div><b>${flag(e.country)} ${esc(e.name)}</b> <span class="muted small">${U.ORIGINS[e.origin] ? U.ORIGINS[e.origin].name : ""} ・ ${e.seasons || "-"}シーズン ・ ${e.date || ""}</span><div class="${e.hof ? "gold" : "muted"}" style="font-weight:700">「${esc(e.tag)}」${e.hof ? " 🏛 殿堂入り" : ""}${e.academy ? " 🎓" : ""}</div></div><div class="small muted" style="text-align:right">最高${e.bestRank || "-"}位 ・ ${e.titles}勝（GS${e.gs}）<br>No.1 ${e.weeksNo1}週 ・ ${e.w}-${e.l} ・ ${U.money(e.prize || 0)}</div></div>${e.timeline && e.timeline.length ? `<div class="timeline" style="margin-top:8px">${e.timeline.map((z) => `<div class="yr"><div class="muted">${z.y}<br><span class="tiny">${z.age}歳</span></div><div class="r ${z.rank && z.rank <= 10 ? "top10" : z.rank && z.rank <= 50 ? "top50" : ""}">${z.rank || "-"}</div><div>${z.w}-${z.l}</div>${z.titles ? `<div class="t">🏆×${z.titles}</div>` : ""}</div>`).join("")}</div>` : ""}</div>`).join("")}</div>` : ""}
