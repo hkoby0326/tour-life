@@ -405,3 +405,19 @@ tr.flash-me td{animation:flashMe .45s} tr.flash-op td{animation:flashOp .45s}
 .injpop.sev3 .injic{animation:injshake .5s ease 1}
 @keyframes injshake{0%,100%{transform:none}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
 @media (prefers-reduced-motion: reduce){.injpop.sev3 .injic{animation:none}}
+/* v2.9.1 injury: full screen, the moment it happens */
+.modal-bg.injury{background:radial-gradient(circle at 50% 40%,rgba(127,29,29,.55),rgba(3,6,10,.92) 70%);animation:injbg .5s ease}
+.modal.injury{max-width:680px;border:2px solid var(--red);box-shadow:0 0 0 1px rgba(248,113,113,.25),0 0 80px rgba(248,113,113,.35);padding:30px 26px}
+.modal.injury .injic{font-size:76px;margin:0 0 10px}
+.modal.injury .injk{font-size:14px}
+.modal.injury h2{font-size:34px;margin:8px 0 4px}
+.modal.injury .kpi .v{font-size:21px;white-space:nowrap}
+.modal.injury .injic{animation:injpulse 1.2s ease 2}
+@keyframes injbg{from{background-color:rgba(248,113,113,.6)}to{background-color:transparent}}
+@keyframes injpulse{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
+@media (max-width:720px){
+  .modal-bg.injury{align-items:stretch}
+  .modal.injury{max-height:none;height:100dvh;border-radius:0;border-width:0 0 0 0;display:flex;flex-direction:column;justify-content:center;padding:24px 16px calc(24px + env(safe-area-inset-bottom))}
+  .modal.injury h2{font-size:28px}
+}
+@media (prefers-reduced-motion: reduce){.modal-bg.injury,.modal.injury .injic{animation:none}}

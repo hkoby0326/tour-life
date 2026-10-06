@@ -5,7 +5,7 @@
     W, D, S: null, tab: "home", modal: null, planSel: null, planWeekT: -1, runLog: null, running: false, screens: {},
     SAVE_KEY: "tourlife_v1", SETTINGS_KEY: "tourlife_settings_v1", HOF_KEY: "tourlife_hof_v1",
     DEFAULT_SETTINGS: { stopTournament: true, stopMilestone: true, stopInjury: true, stopSeason: true, stopEvent: true, stopRival: true, watchEnabled: true, watchGs: true, watchFinals: true, watchRival: true, watchTop10: true, watchTitle: true, watchSpeed: 300, sound: false, volume: 0.5, reduceMotion: false, slot: 1, introSeen: false, hints: {}, hintsAlways: false },
-    VERSION: "v2.9",
+    VERSION: "v2.9.1",
   });
   U.ATTRL = W.ATTR_LABEL;
   U.ORIGINS = {
@@ -140,11 +140,11 @@
     if (!layer) { layer = document.createElement("div"); layer.id = "modal-layer"; document.body.appendChild(layer); }
     if (!U.modal) { layer.innerHTML = ""; U.modalWide = false; return; }
     const S = U.S, { esc } = U;
-    layer.innerHTML = `<div class="modal-bg" id="modalbg"><div class="modal ${U.modalWide ? "wide" : ""}">${U.modal}</div></div>`;
+    layer.innerHTML = `<div class="modal-bg ${U.modalClass || ""}" id="modalbg"><div class="modal ${U.modalWide ? "wide" : ""} ${U.modalClass || ""}">${U.modal}</div></div>`;
     const bg = document.getElementById("modalbg");
-    bg.onclick = (e) => { if (e.target === bg && !(S && S.human.event)) U.closeModal(); };
+    bg.onclick = (e) => { if (e.target === bg && !(S && S.human.event) && U.modalClass !== "injury") U.closeModal(); };
     layer.querySelectorAll("[data-close]").forEach((b) => b.onclick = () => U.closeModal());
-    layer.querySelectorAll("[data-heal]").forEach((b) => b.onclick = () => { U.modal = null; U.renderModal(); const me = U.human(); if (me.injury) U.runWeeks(Array.from({ length: me.injury.weeks + 1 }, () => ({ type: "rest" })), { untilHealed: true }); });
+    layer.querySelectorAll("[data-heal]").forEach((b) => b.onclick = () => { U.modal = null; U.modalClass = null; U.renderModal(); const me = U.human(); if (me.injury) U.runWeeks(Array.from({ length: me.injury.weeks + 1 }, () => ({ type: "rest" })), { untilHealed: true }); });
     layer.querySelectorAll("[data-goto]").forEach((g) => g.onclick = () => { U.tab = g.dataset.goto; U.modal = null; U.render(); });
     layer.querySelectorAll("[data-confirm-new]").forEach((b) => b.onclick = U.resetGame);
     layer.querySelectorAll("[data-slot-copy-confirm]").forEach((b) => b.onclick = () => U.copyToSlot(parseInt(b.dataset.slotCopyConfirm, 10)));
@@ -184,11 +184,13 @@
       <p class="muted small">${esc(log.where || "")}${log.where ? "で負傷" : ""}</p>
       <div class="kpi"><div class="card"><div class="v red">${inj.weeks}週</div><div class="l">離脱</div></div><div class="card"><div class="v">${y}年 第${w}週</div><div class="l">復帰見込み</div></div><div class="card"><div class="v">${rehab ? money(rehab) : "-"}</div><div class="l">リハビリ費 / 週</div></div><div class="card"><div class="v">${lost ? "-" + lost : 0}pt</div><div class="l">離脱中に失効</div></div></div>
       <ul class="small injlist"><li>離脱中は休養に固定され、予定していた大会は欠場になる</li><li>復帰時の試合勘は約${sharpAfter}（${W.sharpLabel(sharpAfter)}）。試合をこなすと戻る</li>${loss ? `<li class="red">手術の影響で能力が低下: ${esc(loss)}</li>` : ""}${sev === 3 ? "<li>大怪我の後は再発しやすい。復帰直後の連戦は避けたい</li>" : ""}</ul>
-      <div class="row" style="gap:8px;justify-content:center;margin-top:12px"><button class="primary" data-heal>治るまで進める</button><button data-close>閉じる</button></div></div>`;
+      <div class="row" style="gap:8px;justify-content:center;margin-top:12px">${U.modalQueue && U.modalQueue.length ? "" : '<button class="primary" data-heal>治るまで進める</button>'}<button data-close>閉じる</button></div></div>`;
   };
   U.closeModal = () => {
-    if (U.pendingInjury && U.S && !U.S.human.event && U.human().injury) { U.pendingInjury = false; U.modal = U.injuryHtml(); U.modalWide = false; if (U.sfx) U.sfx("injury"); U.renderModal(); return; }
-    U.pendingInjury = false;
+    U.modalClass = null;
+    // something was waiting behind the injury screen (season report etc.)
+    if (U.modalQueue && U.modalQueue.length) { const q = U.modalQueue.shift(); U.modal = q.html; U.modalWide = q.wide; U.renderModal(); return; }
+    if (U.S && U.S.human.event) U.modalDirty = true;
     U.modal = null; U.modalWide = false; if (U.modalDirty) { U.modalDirty = false; U.render(); } else U.renderModal(); };
 
   // ---------- onboarding (UI-9): first-season hints per screen, replayable from settings ----------
@@ -279,7 +281,7 @@
   U.epilogueHtml = () => { const e = U.S.human.epilogue; if (!e) return ""; return `${U.S.human.retireReason ? `<p class="small muted">${U.esc(U.S.human.retireReason)}</p>` : ""}<h1 class="gold">「${U.esc(e.tag)}」</h1><p>${e.lines.map(U.esc).join("<br>")}</p><p class="small muted">殿堂ギャラリー（スタート画面）に記録されました。</p>`; };
 
   // ---------- run loop ----------
-  U.shouldStop = (rep) => { const st = rep.stops, s = U.settings; return (st.includes("injury") && s.stopInjury) || (st.includes("season") && s.stopSeason) || (st.includes("event") && s.stopEvent) || (st.includes("rival") && s.stopRival); };
+  U.shouldStop = (rep) => { const st = rep.stops, s = U.settings; return st.includes("injury") || (st.includes("season") && s.stopSeason) || (st.includes("event") && s.stopEvent) || (st.includes("rival") && s.stopRival); };
   U.advanceInteractive = (action) => new Promise((resolve) => {
     const gen = W.advanceWeekGen(U.S, Object.assign({}, action, { watch: U.watchOpts() }));
     const pump = () => { let r = gen.next(); while (!r.done && r.value.type !== "match") r = gen.next(); if (r.done) { resolve(r.value); return; } U.showMatchViewer(r.value, pump); };
@@ -317,7 +319,7 @@
   };
   U.finishRun = function (log) {
     const S = U.S;
-    U.save(); U.runLog = log; U.planSel = null; U.planWeekTab = 0; U.pendingInjury = false;
+    U.save(); U.runLog = log; U.planSel = null; U.planWeekTab = 0; U.modalQueue = [];
     const seasonRep = log.find((r) => r.season);
     if (seasonRep) U.modal = U.seasonHtml(seasonRep.season);
     if (S.human.careerOver) { U.pushHof(S.human.epilogue); U.modal = `<h2>引退</h2>${U.epilogueHtml()}<button data-close>閉じる</button>`; }
@@ -328,9 +330,11 @@
     }
     if (fanfare && U.sfx) U.sfx("milestone");
     // injury this run and nothing more important on screen → popup
-    // (a season report or event takes the screen first; the popup follows when it is closed)
+    // the injury comes first, full screen; anything else (season report) waits behind it, events after
     if (!S.human.careerOver && U.human().injury && log.some((r) => r.stops.includes("injury"))) {
-      if (!U.modal && !S.human.event) { U.modal = U.injuryHtml(); if (U.sfx) U.sfx("injury"); } else U.pendingInjury = true;
+      if (U.modal) U.modalQueue.push({ html: U.modal, wide: U.modalWide });
+      U.modal = U.injuryHtml(); U.modalWide = false; U.modalClass = "injury";
+      if (U.sfx) U.sfx("injury");
     }
     U.tab = "report"; U.render();
   };
