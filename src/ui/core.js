@@ -5,7 +5,7 @@
     W, D, S: null, tab: "home", modal: null, planSel: null, planWeekT: -1, runLog: null, running: false, screens: {},
     SAVE_KEY: "tourlife_v1", SETTINGS_KEY: "tourlife_settings_v1", HOF_KEY: "tourlife_hof_v1",
     DEFAULT_SETTINGS: { stopTournament: true, stopMilestone: true, stopInjury: true, stopSeason: true, stopEvent: true, stopRival: true, watchEnabled: true, watchGs: true, watchFinals: true, watchRival: true, watchTop10: true, watchTitle: true, watchSpeed: 300, sound: false, volume: 0.5, reduceMotion: false, slot: 1, introSeen: false, hints: {}, hintsAlways: false },
-    VERSION: "v2.9.1",
+    VERSION: "v2.10",
   });
   U.ATTRL = W.ATTR_LABEL;
   U.ORIGINS = {
@@ -214,8 +214,8 @@
   U.introHtml = () => `<div class="intro"><h2>Tour Life の遊び方</h2>
     <div class="steps">
       <div class="step"><div class="n">1</div><div><b>1週＝1ターン</b><div class="small muted">大会に出る・練習する・休む。4週まとめてプランを組み、「進める」で時間が進む。迷ったら「今週の決断」に任せてよい。</div></div></div>
-      <div class="step"><div class="n">2</div><div><b>試合は観るもの</b><div class="small muted">グランドスラムや宿敵戦などの重要試合はポイント単位の観戦モードに。セット間に試合プランを変えられる。</div></div></div>
-      <div class="step"><div class="n">3</div><div><b>伸びしろは見えない</b><div class="small muted">コーチのコメントと同年代比較から才能を推測する。宿敵はあなたと同い年のライバルで、物語はランキングの交差や対戦で動く。</div></div></div>
+      <div class="step"><div class="n">2</div><div><b>試合は観るもの</b><div class="small muted">グランドスラムやトップ10戦などの重要試合はポイント単位の観戦モードに。セット間に試合プランを変えられる。</div></div></div>
+      <div class="step"><div class="n">3</div><div><b>伸びしろは見えない</b><div class="small muted">コーチのコメントと同年代比較から才能を推測する。</div></div></div>
       <div class="step"><div class="n">4</div><div><b>自動進行と停止条件</b><div class="small muted">自動進行は大会終了・怪我・ランキングの節目・イベントで止まる。条件はプラン画面の下で変えられる。</div></div></div>
     </div><p class="small muted">最初のシーズンは各画面の上にヒントが出ます（設定からいつでも再表示できます）。</p>
     <button class="primary bigbtn" data-close>キャリアを始める</button></div>`;

@@ -278,9 +278,9 @@
     // rival: same age, similar ceiling
     const rc = rng.pick(["ESP", "FRA", "ITA", "USA", "ARG", "GER", "AUS", "CZE", "BRA", "GBR"]);
     const rv = newPlayer(state, { name: randomName(rng, rc), country: rc, birthYear: spec.birthYear, overall: spec.overall + rng.gauss(1, 2), potential: clamp(spec.potential + rng.gauss(0, 4), 60, 97) });
-    rv.isRival = true;
+    if (RIVALS) rv.isRival = true;
     state.players.push(rv);
-    state.rivalId = rv.id;
+    state.rivalId = RIVALS ? rv.id : null;
     seedResults(state, rv, Math.max(0, spec.pts + rng.int(-10, 30)));
 
     recomputeRanking(state);
@@ -435,6 +435,9 @@
 
   // ---------- events with choices ----------
   // ---------- rivalry story ----------
+  // v2.10: the rival feature is switched off (it did not add much). The same-age player is still
+  // created (keeps the RNG stream) but is an ordinary AI player; flip this to bring it back.
+  const RIVALS = false;
   // heat 0-100: how charged the rivalry is. Rises with head-to-heads, rank crossings and media;
   // cools with friendly choices and time. High heat makes rival matches swing more on big points.
   function rivalryLabel(heat) { return heat >= 70 ? "因縁" : heat >= 45 ? "ライバル" : heat >= 25 ? "意識" : "友好"; }
@@ -1501,6 +1504,7 @@
     return state.players.find((p) => p.id === state.humanId);
   }
   function rival(state) {
+    if (!RIVALS || state.rivalId === null || state.rivalId === undefined) return null;
     return state.players.find((p) => p.id === state.rivalId);
   }
 
@@ -1624,7 +1628,7 @@
       if (rep.humanPlayed) {
         report.human = rep;
         report.stops.push("tournament");
-        const rvMs = rep.humanMatches.filter((m) => m.oppId === state.rivalId);
+        const rvMs = rival(state) ? rep.humanMatches.filter((m) => m.oppId === state.rivalId) : [];
         if (rvMs.length) { report.stops.push("rival"); for (const m of rvMs) rivalMeet(state, run.T, m); }
         const tq = travelQuote(state, run.T);
         travel = tq.cost;
@@ -2355,6 +2359,7 @@
     H.actLog = H.actLog || [];
     cashOf(s); H.cash.jobCooldown = H.cash.jobCooldown || {};
     backfillBig(s);
+    if (!RIVALS && s.rivalId !== null) { s.rivalId = null; for (const p of s.players) if (p.isRival) delete p.isRival; }
     if (!H.aiTraitsInit) { H.aiTraitsInit = true; for (const p of s.players) if (!p.isHuman && !p.retired) assignAiTraits(s, p); }
     allocOf(s);
     // v2.4: the old default (serve 5 / strokes 5) built lopsided players; move untouched defaults to the balanced one
@@ -2380,5 +2385,5 @@
     return s;
   }
 
-  TL.World = { rehabWeekly, aiTraitList, TRAIT_LV, TRAIT_COST, traitLevels, traitLevel, traitList, traitSlots, traitEffectText, traitReq, dropTrait, bigTimeline, strengthOf, cashOf, fundingOptions, useFunding, setBudget, JOBS, forcedRetire, TRAIN_SLOTS, TRAIN_CATS, allocOf, allocShare, autoAlloc, allocSummary, TRAITS, hasTrait, traitReqOk, learnTrait, DEV_STYLES, INTENSITY, devOf, styleGap, autoFocus, trainRate, STRATEGIES, sharpBonus, sharpLabel, confLabel, sponsorsOf, brandOf, sponsorOffer, sponsorUnlocked, activeContracts, signSponsor, releaseSponsor, sponsorTerminationFee, sponsorPerks, sponsorWeekly, ASSETS, TAX, AGENT_CUT, assetsOf, assetUnlocked, buyAsset, assetsWeekly, DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
+  TL.World = { RIVALS, rehabWeekly, aiTraitList, TRAIT_LV, TRAIT_COST, traitLevels, traitLevel, traitList, traitSlots, traitEffectText, traitReq, dropTrait, bigTimeline, strengthOf, cashOf, fundingOptions, useFunding, setBudget, JOBS, forcedRetire, TRAIN_SLOTS, TRAIN_CATS, allocOf, allocShare, autoAlloc, allocSummary, TRAITS, hasTrait, traitReqOk, learnTrait, DEV_STYLES, INTENSITY, devOf, styleGap, autoFocus, trainRate, STRATEGIES, sharpBonus, sharpLabel, confLabel, sponsorsOf, brandOf, sponsorOffer, sponsorUnlocked, activeContracts, signSponsor, releaseSponsor, sponsorTerminationFee, sponsorPerks, sponsorWeekly, ASSETS, TAX, AGENT_CUT, assetsOf, assetUnlocked, buyAsset, assetsWeekly, DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
 })(typeof globalThis !== "undefined" ? globalThis : window);
