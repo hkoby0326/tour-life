@@ -191,6 +191,26 @@
     }
     return Math.round((ovr + comp * 0.5 + extra) * 10) / 10;
   }
+  // ---------- height (v2.14) ----------
+  // Tall: bigger serve and power, a little net; slower, weaker return, a little less durable.
+  // Per 10 cm against 186 cm; roughly neutral on the overall rating (it moves where you are strong).
+  const HEIGHT_BASE = 186;
+  // (the cost sits mostly in movement: on fast courts serve and return weigh together, so taking it
+  // out of the return would cancel the serve and the surface would not matter)
+  const HEIGHT_FX = { serve: 2.6, power: 1.5, net: 0.6, return: -0.6, speed: -2.6, stamina: -0.6, bh: -0.6, fh: -0.5, durability: -1.0 };
+  const STYLE_HEIGHT = { server: 194, big: 193, grass: 190, all: 186, young: 186, mental: 185, baseline: 185, clay: 183, grinder: 181, counter: 180 };
+  // AI heights follow the style (their ratings already reflect it); deterministic, no RNG
+  function heightOf(state, p) {
+    if (p.height) return p.height;
+    const u = (k) => (TL.RNG.hash(`${state.seed}:height:${p.id}:${k}`) % 10000) / 10000;
+    const g = (u(1) + u(2) + u(3) - 1.5) * 2; // ~N(0,1)
+    p.height = clamp(Math.round((STYLE_HEIGHT[p.style] || HEIGHT_BASE) + g * 5), 168, 211);
+    return p.height;
+  }
+  function heightShift(p, k) { return p.isHuman && p.height ? ((HEIGHT_FX[k] || 0) * (p.height - HEIGHT_BASE)) / 10 : 0; }
+  // the point above which an attribute grows slowly; height moves it per attribute so the build lasts
+  function attrCeil(p, k) { return p.potential + 6 + heightShift(p, k); }
+  function heightEffects(cm) { const h = (cm - HEIGHT_BASE) / 10; return Object.fromEntries(Object.entries(HEIGHT_FX).map(([k, v]) => [k, Math.round(v * h * 10) / 10])); }
   function newPlayer(state, spec) {
     const rng = state.rng;
     const style = spec.style || rng.pick(["all", "server", "grinder", "clay", "grass", "mental", "baseline", "big", "counter", "all", "baseline"]);
@@ -263,10 +283,13 @@
     const generational = rng.chance(0.10);
     if (generational) spec.potential = Math.max(spec.potential, 90 + rng.int(0, 6));
     spec.potential = clamp(spec.potential + diff(state).pot, 60, 97);
+    const hcm = clamp(Math.round(cfg.height || HEIGHT_BASE), 170, 205);
     const h = newPlayer(state, { name: state.config.name, country: state.config.country, birthYear: spec.birthYear, overall: spec.overall, potential: spec.potential, style: spec.style, growth: spec.growth, isHuman: true });
     // v2.12: smaller on top of the age-matched start (grinders were winning ~twice as many Slams as the other origins)
     if (o === "grinder") { h.attrs.durability = clamp(h.attrs.durability + 6, 25, 99); h.attrs.clutch += 2; h.attrs.stamina += 2; }
     h.surf.hard += state.config.country === "JPN" ? 4 : 0;
+    h.height = hcm;
+    for (const [k, v] of Object.entries(HEIGHT_FX)) h.attrs[k] = clamp(h.attrs[k] + (v * (hcm - HEIGHT_BASE)) / 10, 25, 99);
     state.players.push(h);
     state.humanId = h.id;
     state.human.money = spec.money;
@@ -1744,7 +1767,7 @@
     const OVW = TL.OVERALL_W;
     const avg = ATTRS.reduce((a, k) => a + p.attrs[k], 0) / ATTRS.length;
     const pool = Object.keys(OVW).filter((k) => !keys || !keys.includes(k));
-    const val = (k) => OVW[k] * (p.attrs[k] > p.potential + 6 ? 0.4 : 1) * (1 + (avg - p.attrs[k]) / 40);
+    const val = (k) => OVW[k] * (p.attrs[k] > attrCeil(p, k) ? 0.4 : 1) * (1 + (avg - p.attrs[k]) / 40);
     pool.sort((a, b) => val(b) - val(a));
     return pool.slice(0, 2);
   }
@@ -1779,7 +1802,7 @@
       }
       if (dev.style && DEV_STYLES[dev.style].keys.includes(k)) f *= 1.15;
       // specialising has diminishing returns: an attribute well above the player's ceiling grows slowly
-      if (p.attrs[k] > p.potential + 6) f *= 0.4;
+      if (p.attrs[k] > attrCeil(p, k)) f *= 0.4;
     }
     return f * mult;
   }
@@ -2720,7 +2743,7 @@
     for (const k of Object.keys(p.surf)) surf[k] = clamp(Math.round(p.surf[k]) + noise("s" + k), 20, 85);
     const ovrEst = exact ? Math.round(TL.overall(p) * 10) / 10 : Math.round(TL.overall(p) + noise("ovr") / 2);
     const peers = state.players.filter((x) => !x.retired && x.rank && Math.abs(x.birthYear - p.birthYear) <= 1);
-    return { id: p.id, name: p.name, country: p.country, age: age(state, p), hand: p.hand, style: p.style, rank: p.rank, points: p.points, bestRank: p.stats.bestRank, traits: aiTraitList(p).map((t) => ({ id: t.id, label: t.label, l: exact || h2h.length ? t.l : null })), overall: ovrEst, strength: strengthOf(state, p, exact ? null : { overall: ovrEst, surf }), scout: { exact, amp, seen: h2h.length },
+    return { id: p.id, name: p.name, country: p.country, age: age(state, p), height: heightOf(state, p), hand: p.hand, style: p.style, rank: p.rank, points: p.points, bestRank: p.stats.bestRank, traits: aiTraitList(p).map((t) => ({ id: t.id, label: t.label, l: exact || h2h.length ? t.l : null })), overall: ovrEst, strength: strengthOf(state, p, exact ? null : { overall: ovrEst, surf }), scout: { exact, amp, seen: h2h.length },
       attrs, surf, w: p.stats.w, l: p.stats.l, titles: p.stats.titles, gs: p.stats.gs, m1000: p.stats.m1000, prize: p.stats.prize, injury: p.injury, fatigue: Math.round(p.fatigue), retired: p.retired,
       isHuman: p.isHuman, isRival: !!p.isRival, real: p.real, sharp: Math.round(p.sharp === undefined ? 65 : p.sharp), sharpLabel: sharpLabel(p.sharp === undefined ? 65 : p.sharp), conf: Math.round(p.conf || 0), confLabel: confLabel(p.conf || 0), h2hW: h2h.filter((m) => m.won).length, h2hL: h2h.filter((m) => !m.won).length, h2h: h2h.slice(-6).reverse(),
       titleList: titles.slice(-8).reverse(), tournaments52: new Set(seasonRes.map((r) => r.t)).size, peers: peers.length,
@@ -2766,6 +2789,7 @@
     H.actLog = H.actLog || [];
     cashOf(s); H.cash.jobCooldown = H.cash.jobCooldown || {};
     backfillBig(s);
+    { const hu = s.players.find((p) => p.isHuman); if (hu && !hu.height) hu.height = HEIGHT_BASE; }
     if (!H.legacyInit) {
       H.legacyInit = true;
       const byId = new Map(s.players.map((p) => [p.id, p]));
@@ -2800,5 +2824,5 @@
     return s;
   }
 
-  TL.World = { announceRetirement, isFarewell, farewellOf, coachTalk, LEGACY, LEGACY_LABEL, HOF_LINE, legacyOf, legacyView, goalsView, strategyOk, devStyleOk, declineMods, declineEstimate, RIVALS, rehabWeekly, aiTraitList, TRAIT_LV, TRAIT_COST, traitLevels, traitLevel, traitList, traitSlots, traitEffectText, traitReq, dropTrait, bigTimeline, strengthOf, cashOf, fundingOptions, useFunding, setBudget, JOBS, forcedRetire, TRAIN_SLOTS, TRAIN_CATS, allocOf, allocShare, autoAlloc, allocSummary, TRAITS, hasTrait, traitReqOk, learnTrait, DEV_STYLES, INTENSITY, devOf, styleGap, autoFocus, trainRate, STRATEGIES, sharpBonus, sharpLabel, confLabel, sponsorsOf, brandOf, sponsorOffer, sponsorUnlocked, activeContracts, signSponsor, releaseSponsor, sponsorTerminationFee, sponsorPerks, sponsorWeekly, ASSETS, TAX, AGENT_CUT, assetsOf, assetUnlocked, buyAsset, assetsWeekly, DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
+  TL.World = { HEIGHT_BASE, HEIGHT_FX, heightOf, heightEffects, attrCeil, announceRetirement, isFarewell, farewellOf, coachTalk, LEGACY, LEGACY_LABEL, HOF_LINE, legacyOf, legacyView, goalsView, strategyOk, devStyleOk, declineMods, declineEstimate, RIVALS, rehabWeekly, aiTraitList, TRAIT_LV, TRAIT_COST, traitLevels, traitLevel, traitList, traitSlots, traitEffectText, traitReq, dropTrait, bigTimeline, strengthOf, cashOf, fundingOptions, useFunding, setBudget, JOBS, forcedRetire, TRAIN_SLOTS, TRAIN_CATS, allocOf, allocShare, autoAlloc, allocSummary, TRAITS, hasTrait, traitReqOk, learnTrait, DEV_STYLES, INTENSITY, devOf, styleGap, autoFocus, trainRate, STRATEGIES, sharpBonus, sharpLabel, confLabel, sponsorsOf, brandOf, sponsorOffer, sponsorUnlocked, activeContracts, signSponsor, releaseSponsor, sponsorTerminationFee, sponsorPerks, sponsorWeekly, ASSETS, TAX, AGENT_CUT, assetsOf, assetUnlocked, buyAsset, assetsWeekly, DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
 })(typeof globalThis !== "undefined" ? globalThis : window);

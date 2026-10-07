@@ -5,7 +5,7 @@
     W, D, S: null, tab: "home", modal: null, planSel: null, planWeekT: -1, runLog: null, running: false, screens: {},
     SAVE_KEY: "tourlife_v1", SETTINGS_KEY: "tourlife_settings_v1", HOF_KEY: "tourlife_hof_v1",
     DEFAULT_SETTINGS: { stopTournament: true, stopMilestone: true, stopInjury: true, stopSeason: true, stopEvent: true, stopRival: true, watchEnabled: true, watchLowerFinal: true, watchGs: true, watchFinals: true, watchRival: true, watchTop10: true, watchTitle: true, watchSpeed: 300, sound: false, volume: 0.5, reduceMotion: false, slot: 1, introSeen: false, hints: {}, hintsAlways: false },
-    VERSION: "v2.13",
+    VERSION: "v2.14",
   });
   U.ATTRL = W.ATTR_LABEL;
   U.ORIGINS = {
@@ -272,7 +272,7 @@
     const bar = (v, cls) => `<div class="bar"><div style="width:${v}%;background:${cls || (v >= 80 ? "var(--gold)" : v >= 65 ? "var(--green)" : "var(--accent)")}"></div></div>`;
     const attrs = W.ATTRS.map((k) => `<div class="attr" style="grid-template-columns:84px 1fr 36px"><span>${ATTRL[k]}</span>${bar(p.attrs[k])}<span class="num">${p.attrs[k]}</span></div>`).join("");
     const surf = Object.keys(D.SURFACES).map((k) => `<div class="attr" style="grid-template-columns:84px 1fr 36px"><span>${D.SURFACES[k]}</span>${bar(p.surf[k], `var(--${k})`)}<span class="num">${p.surf[k]}</span></div>`).join("");
-    return `<div class="row between"><div class="identity">${U.avatar(p)}<div><div class="name">${esc(p.name)} ${p.isRival ? '<span class="pill rival">宿敵</span>' : ""}${p.isHuman ? '<span class="pill">自分</span>' : ""}</div><div class="sub">${p.age}歳 ・ ${D.COUNTRIES[p.country].name} ・ ${p.hand === "L" ? "左利き" : "右利き"} ・ ${W.STYLE_LABEL[p.style] || p.style}</div></div></div><div style="text-align:right"><div class="kpi .v" style="font-size:22px;font-weight:800">${p.retired ? "引退" : p.rank ? p.rank + "位" : "ランク外"}</div><div class="small muted">${p.points}pt ・ 最高${p.bestRank || "-"}位 ・ 総合 ${p.overall} ・ 実力 ${p.strength}${p.scout && !p.scout.exact ? `<span class="pill" style="margin-left:4px">推定 ±${p.scout.amp}</span>` : ""}</div></div></div>
+    return `<div class="row between"><div class="identity">${U.avatar(p)}<div><div class="name">${esc(p.name)} ${p.isRival ? '<span class="pill rival">宿敵</span>' : ""}${p.isHuman ? '<span class="pill">自分</span>' : ""}</div><div class="sub">${p.age}歳 ・ ${D.COUNTRIES[p.country].name} ・ ${p.height}cm ・ ${p.hand === "L" ? "左利き" : "右利き"} ・ ${W.STYLE_LABEL[p.style] || p.style}</div></div></div><div style="text-align:right"><div class="kpi .v" style="font-size:22px;font-weight:800">${p.retired ? "引退" : p.rank ? p.rank + "位" : "ランク外"}</div><div class="small muted">${p.points}pt ・ 最高${p.bestRank || "-"}位 ・ 総合 ${p.overall} ・ 実力 ${p.strength}${p.scout && !p.scout.exact ? `<span class="pill" style="margin-left:4px">推定 ±${p.scout.amp}</span>` : ""}</div></div></div>
       ${p.injury ? `<p class="small red">${esc(p.injury.label)} 残り${p.injury.weeks}週</p>` : ""}
       <p class="small muted">試合勘 ${p.sharp}（${p.sharpLabel}） ・ 自信: ${p.confLabel}${p.isHuman && W.traitList(U.S).length ? ` ・ 特性: ${W.traitList(U.S).map((t) => `${W.TRAITS[t].label} Lv${W.traitLevel(U.S, t)}`).join("・")}` : ""}${!p.isHuman && p.traits && p.traits.length ? ` ・ 特性: ${p.traits.map((t) => `<span title="${esc(t.l ? W.traitEffectText(t.id, t.l) : "対戦するか観察を重ねるとレベルが分かる")}">${esc(t.label)} Lv${t.l || "?"}</span>`).join("・")}` : ""}</p>
       <div class="grid2" style="margin-top:10px"><div>${U.radarSvg(p.attrs, p.isHuman ? null : U.human().attrs)}<div class="small muted" style="text-align:center;margin:-4px 0 8px"><span class="accent">■</span> ${esc(p.name)}${p.isHuman ? "" : ' <span class="red">■</span> 自分'}</div>${attrs}<h3 style="margin-top:8px">サーフェス</h3>${surf}</div>
@@ -378,6 +378,8 @@
           <label>難易度 <select id="diff">${Object.entries(W.DIFFICULTY).map(([k, d]) => `<option value="${k}" ${(window._diff || "normal") === k ? "selected" : ""}>${d.label}</option>`).join("")}</select></label>
           <label>怪我 <select id="inj"><option value="standard">標準</option><option value="low">低頻度</option></select></label>
           <label>シード <input id="seed" placeholder="空欄でランダム" style="width:120px"></label></div>
+        <div style="margin-top:12px"><label class="small">身長 <input type="range" id="height" min="170" max="205" step="1" value="${window._height || W.HEIGHT_BASE}" style="width:220px;vertical-align:middle"> <b id="hval">${window._height || W.HEIGHT_BASE}cm</b></label>
+          <div class="small muted" id="heff" style="margin-top:4px"></div></div>
         <p class="small muted" style="margin-top:8px">所属国はホーム大会のワイルドカード確率・デビスカップ・スポンサーに影響。ホームATP大会がない国は実質ハードモード。</p>
         <p class="small muted" id="diffdesc">${Object.entries(W.DIFFICULTY).map(([k, d]) => `<b>${d.label}</b>: ${d.desc}`).join(" ／ ")}</p></div>
       <div class="panel"><h2>出自を選ぶ</h2>
@@ -387,11 +389,16 @@
       ${[1, 2, 3].some((n) => U.slotInfo(n)) ? `<div class="panel"><h2>セーブデータ</h2>${U.slotsHtml(true)}</div>` : ""}
       ${hof.length ? `<div class="panel"><h2>殿堂ギャラリー</h2>${hof.map((e) => `<div class="card"><div class="row between"><div><b>${flag(e.country)} ${esc(e.name)}</b> <span class="muted small">${U.ORIGINS[e.origin] ? U.ORIGINS[e.origin].name : ""} ・ ${e.seasons || "-"}シーズン ・ ${e.date || ""}</span><div class="${e.hof ? "gold" : "muted"}" style="font-weight:700">「${esc(e.tag)}」${e.hof ? " 🏛 殿堂入り" : ""}${e.academy ? " 🎓" : ""}</div></div><div class="small muted" style="text-align:right">最高${e.bestRank || "-"}位 ・ ${e.titles}勝（GS${e.gs}）<br>${e.legacy !== undefined ? `レガシー ${e.legacy} ・ ` : ""}No.1 ${e.weeksNo1}週 ・ ${e.w}-${e.l} ・ ${U.money(e.prize || 0)}</div></div>${e.timeline && e.timeline.length ? `<div class="timeline" style="margin-top:8px">${e.timeline.map((z) => `<div class="yr"><div class="muted">${z.y}<br><span class="tiny">${z.age}歳</span></div><div class="r ${z.rank && z.rank <= 10 ? "top10" : z.rank && z.rank <= 50 ? "top50" : ""}">${z.rank || "-"}</div><div>${z.w}-${z.l}</div>${z.titles ? `<div class="t">🏆×${z.titles}</div>` : ""}</div>`).join("")}</div>` : ""}</div>`).join("")}</div>` : ""}
     </div>`;
+    const hIn = document.getElementById("height");
+    const hShow = () => { const cm = parseInt(hIn.value, 10); window._height = cm; document.getElementById("hval").textContent = cm + "cm"; const e = W.heightEffects(cm); const L = U.ATTRL;
+      const parts = Object.entries(e).filter(([, v]) => Math.abs(v) >= 0.1).map(([k, v]) => `<span class="${v > 0 ? "green" : "red"}">${L[k]} ${v > 0 ? "+" : ""}${v}</span>`);
+      document.getElementById("heff").innerHTML = (parts.length ? parts.join(" ・ ") : "平均的な身長（補正なし）") + `<br>${cm >= 193 ? "長身: サーブが武器。芝・室内で強いが、動きとリターンに難" : cm <= 178 ? "小柄: 足とリターンが武器。クレーで粘れるが、サーブで楽ができない" : "標準的: 大きな偏りはない"}。総合力はほぼ変わらず、強みの場所が変わる。能力の伸びる上限も同じだけずれる`; };
+    hIn.oninput = hShow; hShow();
     app.querySelectorAll(".origin").forEach((el) => el.onclick = () => { window._origin = el.dataset.o; window._name = document.getElementById("name").value; window._country = document.getElementById("country").value; window._diff = document.getElementById("diff").value; U.renderSetup(); });
     document.getElementById("start").onclick = () => {
       const name = document.getElementById("name").value.trim() || "名無しの選手";
       const seedStr = document.getElementById("seed").value.trim();
-      U.S = W.create({ name, country: document.getElementById("country").value, origin: sel, difficulty: document.getElementById("diff").value, injuryRealism: document.getElementById("inj").value, seed: seedStr ? (parseInt(seedStr, 10) || TL.RNG.hash(seedStr)) : undefined });
+      U.S = W.create({ name, height: parseInt(document.getElementById("height").value, 10) || W.HEIGHT_BASE, country: document.getElementById("country").value, origin: sel, difficulty: document.getElementById("diff").value, injuryRealism: document.getElementById("inj").value, seed: seedStr ? (parseInt(seedStr, 10) || TL.RNG.hash(seedStr)) : undefined });
       U.save(); U.tab = "home"; U.runLog = null; U.planSel = null; U.render();
       if (!U.settings.introSeen) { U.settings.introSeen = true; U.saveSettings(); U.openModal(U.introHtml()); }
     };

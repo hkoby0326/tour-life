@@ -391,7 +391,7 @@
     const rows = W.ATTRS.map((k) => {
       const isKey = st && st.keys.includes(k), isFocus = W.allocShare(alloc, k) > 0.04;
       const rate = W.trainRate(S, me, k, focus, 1, { session: true, alloc });
-      const capped = me.attrs[k] > me.potential + 6;
+      const capped = me.attrs[k] > W.attrCeil(me, k);
       let eta = "";
       if (isKey && !dev.established) {
         const target = Math.ceil(oa + 5.5);
@@ -463,7 +463,7 @@
     const top10 = S.history.matches.filter((m) => m.oppRank && m.oppRank <= 10);
     const titles = S.history.tournaments.filter((t) => t.winnerId === me.id);
     const curSeason = { age: W.age(S, me), rank: me.rank, w: S.history.matches.filter((m) => m.year === S.year && m.won).length, l: S.history.matches.filter((m) => m.year === S.year && !m.won).length };
-    c.innerHTML = `${U.devPanelHtml()}${U.traitsPanelHtml()}<div class="grid2"><div class="panel"><div class="identity" style="margin-bottom:12px">${U.avatar(me)}<div><div class="name">${esc(me.name)}</div><div class="sub">総合 ${ovr.toFixed(1)} ・ 実力 ${W.strengthOf(S, me).toFixed(1)} ・ ${me.hand === "L" ? "左利き" : "右利き"} ・ ${W.STYLE_LABEL[me.style] || ""} ・ ${esc(hint)}</div></div></div>
+    c.innerHTML = `${U.devPanelHtml()}${U.traitsPanelHtml()}<div class="grid2"><div class="panel"><div class="identity" style="margin-bottom:12px">${U.avatar(me)}<div><div class="name">${esc(me.name)}</div><div class="sub">総合 ${ovr.toFixed(1)} ・ 実力 ${W.strengthOf(S, me).toFixed(1)} ・ ${W.heightOf(S, me)}cm ・ ${me.hand === "L" ? "左利き" : "右利き"} ・ ${W.STYLE_LABEL[me.style] || ""} ・ ${esc(hint)}</div></div></div>
       ${U.radarSvg(me.attrs, rv && !rv.retired ? rv.attrs : null)}<div class="small muted" style="text-align:center;margin:-4px 0 10px"><span class="accent">■</span> 自分${rv && !rv.retired ? ` <span class="red">■</span> 宿敵 ${esc(rv.name)}` : ""}</div>
       <div class="attr" style="color:var(--muted);font-size:11px"><span></span><span></span><span class="num">値</span><span>4週</span><span>今季</span></div>${attrs}
       <h3 style="margin-top:12px">サーフェス適性</h3>${surf}${surfFitHtml(me)}
