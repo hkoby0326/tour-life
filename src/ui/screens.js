@@ -93,7 +93,8 @@
     const coachLine = hr > 20 ? "伸びしろはまだ大きい。土台を作る時期だ" : hr > 10 ? "まだ伸びる。弱点を一つずつ潰そう" : hr > 4 ? "完成が近い。勝ち方を覚える段階だ" : "技術はほぼ完成形。維持とスケジュール管理が課題";
     const items = [];
     if (S.human.event) items.push(`<div class="item event"><span class="when">今</span><div><b class="gold">${esc(S.human.event.title)}</b><div class="muted">${esc(S.human.event.text)}</div><button class="primary small" data-ev style="margin-top:4px">選択する</button></div></div>`);
-    items.push(`<div class="item coach"><span class="when">${S.human.coach ? esc(S.human.coach.name) : "コーチ"}</span><div>${esc(coachLine)}${me.fatigue > 45 ? "。疲労が溜まっている、無理はするな" : ""}</div></div>`);
+    const talk = W.coachTalk(S);
+    items.push(`<div class="item coach"><span class="when">${esc(talk.who)}<br><span class="tiny">${esc(talk.type)}</span></span><div>${talk.lines.map((l) => `「${esc(l)}」`).join("<br>")}</div></div>`);
     for (const n of S.history.news.slice().reverse().slice(0, 12)) items.push(`<div class="item"><span class="when">${cal(n.year)} W${n.week}</span><div>${esc(n.text)}</div></div>`);
     // rival card
     const h2h = S.history.matches.filter((m) => m.oppId === S.rivalId);

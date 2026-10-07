@@ -229,7 +229,7 @@
       config: { name: cfg.name || "選手", country: cfg.country || "JPN", origin: cfg.origin || "grinder", injuryRealism: cfg.injuryRealism || "standard", difficulty: DIFFICULTY[cfg.difficulty] ? cfg.difficulty : "normal" },
       rankSnaps: [], history: { tournaments: [], seasons: [], matches: [], news: [] }, lastReport: null,
       human: { money: 0, sponsorWeekly: 0, sponsorUntil: 0, wcBoostUntil: 0, lastRegion: null, focus: ["serve", "fh"], careerOver: false, epilogue: null, milestones: {},
-        coach: null, physio: false, coachOffers: [], plan: "balanced", switchRule: "none", event: null, lastEventT: -99, forceRest: false, riskWeek: -1, sponsor2: { weekly: 0, until: 0 }, pressureUntil: -1, attrHist: [], seasonStartAttrs: null, exhibitionYear: 0, rivalry: { heat: 25, log: [], flags: {}, lastCross: -99 }, rivalAhead: null, focusBoostUntil: -1, assets: { jet: false, medical: false, base: false, academy: false }, investment: null, pendingPurchase: 0, sponsors: { racket: null, apparel: null, shoes: null, other: [] }, sponsorsInit: true, pendingSigning: 0, pendingBonus: 0, strategy: "big", dev: { style: null, intensity: "normal", auto: false, established: false }, actLog: [], alloc: { serve: 3, stroke: 3, ret: 3, physical: 1, mental: 0, match: 0 }, allocV2: true, gp: 0, gpLog: [], traits: [], traitLv: {}, aiTraitsInit: true, legacyInit: true, cash: { budget: false, loan: 0, loanRate: 0, unpaid: 0, family: false, crowd: false, fedYear: 0, job: null, jobUntil: 0, jobCooldown: {}, crisisYear: 0, lowYear: 0 } },
+        coach: null, physio: false, coachOffers: [], plan: "balanced", switchRule: "none", event: null, lastEventT: -99, forceRest: false, riskWeek: -1, sponsor2: { weekly: 0, until: 0 }, pressureUntil: -1, attrHist: [], seasonStartAttrs: null, exhibitionYear: 0, rivalry: { heat: 25, log: [], flags: {}, lastCross: -99 }, rivalAhead: null, focusBoostUntil: -1, assets: { jet: false, medical: false, base: false, academy: false }, investment: null, pendingPurchase: 0, sponsors: { racket: null, apparel: null, shoes: null, other: [] }, sponsorsInit: true, pendingSigning: 0, pendingBonus: 0, strategy: "big", dev: { style: null, intensity: "normal", auto: false, established: false }, actLog: [], alloc: { serve: 3, stroke: 3, ret: 2, physical: 2, mental: 0, match: 0 }, allocV2: true, gp: 0, gpLog: [], traits: [], traitLv: {}, aiTraitsInit: true, legacyInit: true, cash: { budget: false, loan: 0, loanRate: 0, unpaid: 0, family: false, crowd: false, fedYear: 0, job: null, jobUntil: 0, jobCooldown: {}, crisisYear: 0, lowYear: 0 } },
       cutoffs: {},
     };
     state.rng = new TL.RNG(seed);
@@ -258,7 +258,7 @@
     if (o === "junior") spec = { overall: 56, birthYear: START_YEAR - 16, potential: 76 + rng.int(0, 12), money: 60, sponsor: 1.5, sponsorWeeks: 156, pts: 30, wcBoost: 104, style: "all" };
     // sponsor = 週あたりの支援（k$）。叩き上げは地元の後援会、大学経由は協会支援という設定
     // v2.8: どの出自も同じポテンシャル帯。開始能力・ポイントは「ジュニア王者がその年齢で届いている水準」に揃え、出自で天井や確率が変わらないようにする
-    else if (o === "college") spec = { overall: 73, birthYear: START_YEAR - 21, potential: 76 + rng.int(0, 12), money: 25, sponsor: 0.6, sponsorWeeks: 104, pts: 300, wcBoost: 0, growth: rng.chance(0.5) ? "late" : "normal", style: "baseline" };
+    else if (o === "college") spec = { overall: 73, birthYear: START_YEAR - 21, potential: 76 + rng.int(0, 12), money: 25, sponsor: 0.6, sponsorWeeks: 104, pts: 300, wcBoost: 0, growthRoll: rng.chance(0.5), style: "baseline" };
     else spec = { overall: 62, birthYear: START_YEAR - 18, potential: 76 + rng.int(0, 12), money: 12, sponsor: 0.5, sponsorWeeks: 156, pts: 120, wcBoost: 0, style: "grinder" };
     const generational = rng.chance(0.10);
     if (generational) spec.potential = Math.max(spec.potential, 90 + rng.int(0, 6));
@@ -434,6 +434,116 @@
   }
 
   // ---------- events with choices ----------
+  // ---------- coach talk (v2.11.1) ----------
+  // What the coach says this week: built from the actual situation (injury, last result, the next
+  // big event, fatigue, form, goals, legacy, style, weak spot, age, money), worded by coach type,
+  // varied week to week. Deterministic (hash of seed + week), consumes no RNG.
+  function coachTalk(state) {
+    const H = state.human, h = human(state), coach = H.coach;
+    const type = coach ? coach.type : null;
+    const hv = (k) => TL.RNG.hash(`${state.seed}:coach:${state.t}:${k}`);
+    const pick = (arr, k) => arr[hv(k) % arr.length];
+    const c = []; // { p: priority, t: text }
+    const add = (p, arr, k) => c.push({ p, t: pick(arr, k || arr[0]) });
+    const r = h.rank || 9999, a = age(state, h);
+    // injury
+    if (h.injury) {
+      if (h.injury.sev >= 3) add(100, ["焦るな。今は治すことが仕事だ。戻る場所は空けておく", "長い離脱になる。ここで無理をすると全部を失う", "リハビリも練習のうちだ。毎日を積み上げよう"]);
+      else add(95, ["治るまでコートのことは忘れろ。" + h.injury.weeks + "週で戻れる", "軽く見るな。完治させてから戻る", "今週は身体を休める週だ。戻ったら試合勘を取り戻そう"]);
+    }
+    // last week
+    const last = h.results.filter((x) => x.t === state.t - 1 && x.round && D.CATS[x.cat]).pop();
+    if (last && !h.injury) {
+      const tier = D.CATS[last.cat].tier;
+      if (last.round === "優勝") add(90, [`${last.name}優勝、よくやった。だが浮かれるのは今夜だけだ`, `${last.name}のタイトルは自信にしていい。勝ち切る力がついてきた`, `優勝おめでとう。${tier >= 8 ? "この舞台で勝てたのは大きい" : "次はもう一つ上の大会で同じことをやろう"}`], "w");
+      else if (last.round === "準優勝") add(80, [`${last.name}は準優勝。決勝で何が足りなかったか、一緒に見直そう`, "決勝まで行けたのは実力だ。あと一歩を詰めよう"], "f");
+      else if (tier >= 8 && /R128|R64|予選/.test(last.round)) add(75, [`${last.name}は早く負けた。切り替えて次に行こう`, `大きな大会での早期敗退は痛い。${type === "mental" ? "気持ちが先走っていた" : type === "physical" ? "動きが重かった。調整の仕方を見直す" : "サーブの確率が落ちたところを突かれた"}`], "e");
+    }
+    // the next big event
+    for (let d = 1; d <= 2; d++) {
+      let wk = state.week + d, yr = state.year; if (wk > 52) { wk -= 52; yr++; }
+      const T = weekTournaments(state, wk, yr).find((T) => T.def.tier >= 8 && ["direct", "bubble", "qual"].includes(humanStatus(state, T).code));
+      if (T && !h.injury) { add(70 - d * 5, [`${d === 1 ? "来週" : "再来週"}は${T.name}だ。${h.fatigue > 30 ? "疲れを抜いて入ろう" : "いい状態で入れる"}`, `${T.name}に照準を合わせる。${T.surface === "clay" ? "クレーは我慢比べになる" : T.surface === "grass" ? "芝はサーブと最初の一歩が勝負だ" : "ハードはサーブから主導権を取ろう"}`], "b" + d); break; }
+    }
+    // body and form
+    if (h.fatigue > 60) add(85, ["休め。疲れた身体で勝てる相手はいない", "疲労が溜まりすぎている。今週は休養だ", "このままだと怪我をする。一度止まろう"]);
+    else if (h.fatigue > 45) add(50, ["疲れが見える。予定を一つ削ってもいい", "疲労が抜けきっていない。練習量を調整しよう"]);
+    if ((h.sharp || 65) < 40 && !h.injury) add(65, ["試合勘が鈍っている。勝ち負けより、まず試合数だ", "実戦から離れすぎた。出られる大会に出て感覚を戻そう"]);
+    if ((h.conf || 0) >= 5) add(40, ["今は自信がプレーに出ている。この流れを大事にしよう", "勝ち癖がついてきた。勝負所で迷うな"]);
+    else if ((h.conf || 0) <= -5) add(60, [type === "mental" ? "負けが続いて縮こまっている。結果じゃなく、一本一本に集中しよう" : "負けが込んでいる。小さな大会で勝つ感覚を取り戻すのも手だ", "自信が落ちている。良かった試合の映像を見返そう"]);
+    // goals and legacy
+    const G = H.goals && H.goals.year === state.year ? H.goals : null;
+    if (G) {
+      const left = 52 - state.week;
+      const rg = G.list.find((g) => g.type === "rank");
+      if (rg && !G.done.rank && h.rank && left <= 20) {
+        const gap = h.rank - rg.target;
+        if (gap <= 0) add(55, [`${rg.label.replace(/を守る$/, "")}の圏内にいる。あと${left}週、守り切ろう`, `今の順位なら目標の${rg.label}に届く。最後まで落とすな`], "g");
+        else if (gap <= Math.max(5, left * 2)) add(55, [`目標の${rg.label}まであと${gap}位。残り${left}週、まだ詰められる`, `${rg.label}まであと${gap}位。ポイントの取れる大会を選ぼう`], "g");
+        else if (left >= 6) add(30, [`${rg.label}までは${gap}位ある。厳しいが、取れるポイントは全部取ろう`], "g");
+      }
+      const open = G.list.filter((g) => !G.done[g.id] && g.type !== "rank");
+      if (open.length && state.week >= 26 && state.week <= 44) add(35, [`今季の目標「${open[0].label}」がまだ残っている。チャンスのある大会を選ぼう`], "g2");
+    }
+    const L = legacyOf(h).total;
+    if (L > 0 && L < HOF_LINE && HOF_LINE - L <= 100) add(45, [`殿堂ラインまであと${HOF_LINE - L}。GSをもう一つ取れば届く`, "殿堂入りが現実的な目標になってきた。大きな大会で勝とう"]);
+    // development
+    const dev = devOf(state);
+    if (dev.style && !dev.established) {
+      const gap = styleGap(h, dev.style), st = DEV_STYLES[dev.style];
+      const weakKey = st.keys.slice().sort((x, y) => h.attrs[x] - h.attrs[y])[0];
+      if (gap >= 3) add(42, [`「${st.label}」の確立まであと少し。${ATTR_LABEL[weakKey]}をもう一段上げよう`]);
+      else add(25, [`目指す「${st.label}」には${ATTR_LABEL[weakKey]}が足りない`]);
+    }
+    const W8 = ["serve", "return", "fh", "bh", "speed", "power", "focus"];
+    const weak = W8.slice().sort((x, y) => h.attrs[x] - h.attrs[y])[0];
+    // stamina hardly shows in the overall rating but decides five-set matches
+    const top4 = (h.attrs.serve + h.attrs.return + h.attrs.fh + h.attrs.bh) / 4;
+    if (h.attrs.stamina < top4 - 15 && r <= 150) add(46, [`スタミナが${Math.round(h.attrs.stamina)}しかない。GSの5セットでは最後に足が止まる。フィジカルの練習を増やそう`, "技術に比べて体力が足りない。5セットを戦い抜く身体を作ろう"], "stam");
+    const weakLines = {
+      tech: [`${ATTR_LABEL[weak]}が一番の弱点だ。相手はそこを突いてくる`, `技術的には${ATTR_LABEL[weak]}が課題だ。毎週少しずつ上げよう`],
+      physical: [weak === "speed" || weak === "power" ? `${ATTR_LABEL[weak]}が足りない。フィジカルで負けている場面がある` : `${ATTR_LABEL[weak]}が課題だが、まずは身体を作ることだ`],
+      mental: [`${ATTR_LABEL[weak]}が弱点なのは分かっている。だから大事な場面ほど得意な形で勝負しよう`],
+      none: [`${ATTR_LABEL[weak]}が弱い。誰か見てくれるコーチがほしい`, `コーチがいれば${ATTR_LABEL[weak]}の直し方を教われるのに`, `${ATTR_LABEL[weak]}を鍛えないと、上では通用しない`],
+    };
+    // the weak spot is a standing remark — mention it some weeks, not every week
+    if (hv("weakday") % 3 === 0) add(20, weakLines[type || "none"], "wk");
+    // age
+    if (a >= 30) {
+      const m = declineMods(state);
+      if (m.body > 0.85 && m.tech > 0.9 && H.strategy !== "veteran") add(48, ["身体能力は落ちていく年齢だ。何か手を打とう（選手タブの「衰えとの向き合い方」）", "昔と同じやり方では続かない。身体を守るか、スタイルを変えるか考えよう"]);
+      else add(22, ["経験は武器だ。若い選手が慌てる場面で落ち着いていよう", "今の準備の仕方で正しい。積み重ねよう"]);
+    } else if (a <= 19) add(15, ["若いうちは負けて覚えればいい。ただ、同じ負け方はするな", "今は土台作りの時期だ。焦らなくていい"]);
+    // money
+    if (H.money < 10) add(58, ["遠征費が苦しい。近場の大会を選ぶのも立派な作戦だ", "資金が尽きかけている。財務タブで手を打とう"]);
+    // headroom (fallback)
+    const hr = h.potential - TL.overall(h);
+    add(10, hr > 20 ? ["伸びしろはまだ大きい。土台を作る時期だ", "まだまだ伸びる。基本を繰り返そう"] : hr > 10 ? ["まだ伸びる。弱点を一つずつ潰そう", "成長の途中だ。焦らず積み上げよう"] : hr > 4 ? ["完成が近い。勝ち方を覚える段階だ", "能力はもう十分ある。あとは試合での使い方だ"] : ["技術はほぼ完成形。維持とスケジュール管理が課題だ", "これ以上大きくは伸びない。今ある武器をどう使うかだ"], "hr");
+    c.sort((x, y) => y.p - x.p || hv(x.t) % 7 - hv(y.t) % 7);
+    // the most pressing line, plus one more from the rest (rotates week to week)
+    const out = [c[0].t];
+    const rest = c.slice(1).filter((x) => x.p >= 20 || c.length <= 3);
+    if (rest.length) out.push(rest[hv("second") % Math.min(3, rest.length)].t);
+    return { who: coach ? coach.name : "自分", type: coach ? COACH_TYPES[coach.type].label : "コーチ不在", lines: out };
+  }
+  function seasonCoach(state, summary) {
+    const h = human(state), a = summary.age, prev = state.history.seasons.length ? state.history.seasons[state.history.seasons.length - 1].rank : null;
+    const hv = (k) => TL.RNG.hash(`${state.seed}:scoach:${state.year}:${k}`);
+    const pick = (arr, k) => arr[hv(k) % arr.length];
+    const parts = [];
+    if (summary.rank && prev && prev - summary.rank >= 30) parts.push(pick([`${prev}位から${summary.rank}位。大きく前進した一年だった`, "順位を大きく上げた。やってきたことは間違っていない"], 1));
+    else if (summary.rank && prev && summary.rank - prev >= 30) parts.push(pick([`${prev}位から${summary.rank}位に落ちた。原因を一緒に洗い出そう`, "苦しい一年だった。来季は立て直しから始めよう"], 2));
+    if (summary.titles.length >= 2) parts.push(`タイトル${summary.titles.length}つ。勝ち切れる選手になった`);
+    else if (summary.titles.length === 1) parts.push(`${summary.titles[0]}の優勝は今季の収穫だ`);
+    if (summary.goals) parts.push(summary.goals.all ? "目標は全部達成した。来季は一段上を狙おう" : summary.goals.list.filter((g) => g.ok).length === 0 ? "目標には一つも届かなかった。計画から見直そう" : `目標は${summary.goals.list.filter((g) => g.ok).length}つ達成。残りは来季に持ち越しだ`);
+    if (summary.injuries && summary.injuries.length >= 2) parts.push("怪我が多かった。スケジュールと身体のケアを見直そう");
+    const hr = h.potential - TL.overall(h);
+    if (a >= 30) parts.push(pick(["身体のケアを優先する時期に入っている", "経験で勝つ年齢だ。準備の質を上げよう"], 3));
+    else if (hr > 10) parts.push(pick(["まだ伸びる。来季も土台を積み上げよう", "伸びしろは残っている。弱点を一つずつ潰そう"], 4));
+    else if (hr <= 4) parts.push("能力はほぼ完成した。あとは戦い方とスケジュールだ");
+    return "コーチ: 「" + parts.slice(0, 3).join("。") + "」";
+  }
+
   // ---------- legacy (v2.11) ----------
   // One career score for everyone in the world, so "what am I playing for" has a number and a line.
   // Counted from this world's history (the starting roster's pre-game careers are not included).
@@ -1117,6 +1227,7 @@
     let f = state.config.injuryRealism === "low" ? 0.5 : 1;
     const a = age(state, p);
     if (a >= 33) f *= 1.8; else if (a >= 30) f *= 1.4;
+    else if (a <= 19 && p.isHuman) f *= 0.75; // v2.11.1: an early start (junior champion) no longer means more career-shortening injuries; human only, the AI world is unchanged
     if (p.fragile) f *= 1.3;
     if (p.isHuman && state.human.strategy === "veteran") f *= 0.75;
     if (p.isHuman) { f *= diff(state).injury * sponsorPerks(state).injury * traitOffCourt(state, "ironbody") || 1; if (assetsOf(state).medical) f *= 0.7; const st = staffOf(state); const away = onTour && cashOf(state).budget; if (st.physio && !away) f *= 0.7; if (st.fitness && !away) f *= 0.85; if (state.human.riskWeek === state.t) f *= 2; }
@@ -1423,7 +1534,7 @@
   function allocOf(state) {
     const H = state.human;
     if (!H.alloc) {
-      H.alloc = { serve: 3, stroke: 3, ret: 3, physical: 1, mental: 0, match: 0 };
+      H.alloc = { serve: 3, stroke: 3, ret: 2, physical: 2, mental: 0, match: 0 };
     }
     return H.alloc;
   }
@@ -2331,8 +2442,6 @@
     summary.overall = TL.overall(h);
     summary.age = age(state, h);
     const hr = h.potential - TL.overall(h);
-    summary.coach = hr > 20 ? "コーチ: 「伸びしろはまだ大きい。土台を作る年にしよう」" : hr > 10 ? "コーチ: 「まだ伸びる。弱点を一つずつ潰そう」" : hr > 4 ? "コーチ: 「完成が近い。勝ち方を覚える段階だ」" : "コーチ: 「技術はほぼ完成形。維持とスケジュール管理が課題」";
-    if (age(state, h) >= 30) summary.coach += " 身体のケアを優先する時期に入っている。";
     summary.no1 = state.players.filter((p) => p.rank === 1).map((p) => p.name)[0] || "-";
     summary.gsWinners = state.history.tournaments.filter((t) => t.year === yr && t.cat === "GS").map((t) => `${t.name}: ${t.winner}`);
     summary.ovrDelta = (h.stats.seasons.length ? summary.overall - h.stats.seasons[h.stats.seasons.length - 1].overall : null);
@@ -2348,6 +2457,7 @@
     // year-end top 10 / No.1 count towards everyone's legacy
     for (const p of state.players) if (!p.retired && p.rank && p.rank <= 10) { p.stats.ye10 = (p.stats.ye10 || 0) + 1; if (p.rank === 1) p.stats.ye1 = (p.stats.ye1 || 0) + 1; }
     summary.goals = settleGoals(state);
+    summary.coach = seasonCoach(state, summary);
     summary.legacy = legacyOf(h).total;
     state.history.seasons.push(summary);
 
@@ -2577,5 +2687,5 @@
     return s;
   }
 
-  TL.World = { LEGACY, LEGACY_LABEL, HOF_LINE, legacyOf, legacyView, goalsView, strategyOk, devStyleOk, declineMods, declineEstimate, RIVALS, rehabWeekly, aiTraitList, TRAIT_LV, TRAIT_COST, traitLevels, traitLevel, traitList, traitSlots, traitEffectText, traitReq, dropTrait, bigTimeline, strengthOf, cashOf, fundingOptions, useFunding, setBudget, JOBS, forcedRetire, TRAIN_SLOTS, TRAIN_CATS, allocOf, allocShare, autoAlloc, allocSummary, TRAITS, hasTrait, traitReqOk, learnTrait, DEV_STYLES, INTENSITY, devOf, styleGap, autoFocus, trainRate, STRATEGIES, sharpBonus, sharpLabel, confLabel, sponsorsOf, brandOf, sponsorOffer, sponsorUnlocked, activeContracts, signSponsor, releaseSponsor, sponsorTerminationFee, sponsorPerks, sponsorWeekly, ASSETS, TAX, AGENT_CUT, assetsOf, assetUnlocked, buyAsset, assetsWeekly, DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
+  TL.World = { coachTalk, LEGACY, LEGACY_LABEL, HOF_LINE, legacyOf, legacyView, goalsView, strategyOk, devStyleOk, declineMods, declineEstimate, RIVALS, rehabWeekly, aiTraitList, TRAIT_LV, TRAIT_COST, traitLevels, traitLevel, traitList, traitSlots, traitEffectText, traitReq, dropTrait, bigTimeline, strengthOf, cashOf, fundingOptions, useFunding, setBudget, JOBS, forcedRetire, TRAIN_SLOTS, TRAIN_CATS, allocOf, allocShare, autoAlloc, allocSummary, TRAITS, hasTrait, traitReqOk, learnTrait, DEV_STYLES, INTENSITY, devOf, styleGap, autoFocus, trainRate, STRATEGIES, sharpBonus, sharpLabel, confLabel, sponsorsOf, brandOf, sponsorOffer, sponsorUnlocked, activeContracts, signSponsor, releaseSponsor, sponsorTerminationFee, sponsorPerks, sponsorWeekly, ASSETS, TAX, AGENT_CUT, assetsOf, assetUnlocked, buyAsset, assetsWeekly, DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
 })(typeof globalThis !== "undefined" ? globalThis : window);
