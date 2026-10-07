@@ -218,7 +218,7 @@
     html += `<div class="grid2"><div class="panel"><h2>自動進行の停止条件</h2>
       ${[["stopTournament", "自分の大会が終わるごと"], ["stopMilestone", "ランキングの節目"], ["stopEvent", "イベント（選択肢）"], ["stopSeason", "シーズン終了"]].map(([k, l]) => `<label class="small" style="display:inline-block;margin-right:14px"><input type="checkbox" data-set="${k}" ${settings[k] ? "checked" : ""}> ${l}</label>`).join("")}</div>
     <div class="panel"><h2>観戦モード</h2><p class="small muted">重要試合はポイント単位で観戦し、セット間にプランを変えられる。</p>
-      ${[["watchEnabled", "観戦モードを使う"], ["watchGs", "グランドスラム"], ["watchFinals", "ATPファイナルズ"], ["watchTitle", "決勝と1000の準決勝"], ["watchTop10", "トップ10戦"]].map(([k, l]) => `<label class="small" style="display:inline-block;margin-right:14px"><input type="checkbox" data-set="${k}" ${settings[k] ? "checked" : ""}> ${l}</label>`).join("")}</div></div>`;
+      ${[["watchEnabled", "観戦モードを使う"], ["watchGs", "グランドスラム"], ["watchFinals", "ATPファイナルズ"], ["watchTitle", "ツアー大会の決勝と1000の準決勝"], ["watchLowerFinal", "チャレンジャー・ITFの決勝"], ["watchTop10", "トップ10戦"]].map(([k, l]) => `<label class="small" style="display:inline-block;margin-right:14px"><input type="checkbox" data-set="${k}" ${settings[k] ? "checked" : ""}> ${l}</label>`).join("")}</div></div>`;
     c.innerHTML = html;
     const gp = c.querySelector("[data-goto-player]"); if (gp) gp.onclick = (e) => { e.preventDefault(); U.tab = "player"; U.render(); };
     const stSel = c.querySelector("[data-strategy]"); if (stSel) stSel.onchange = () => { S.human.strategy = stSel.value; U.save(); U.render(); };

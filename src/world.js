@@ -550,7 +550,7 @@
   // Counted from this world's history (the starting roster's pre-game careers are not included).
   const LEGACY = { GS: 100, FINALS: 50, M1000: 30, A500: 15, A250: 8, CH: 1, no1Week: 3, ye10: 10, ye1: 40 };
   const LEGACY_LABEL = { GS: "グランドスラム", FINALS: "ATPファイナルズ", M1000: "マスターズ1000", A500: "ATP500", A250: "ATP250", CH: "チャレンジャー", no1Week: "No.1在位", ye10: "年末トップ10", ye1: "年末No.1", vow: "有言実行（ラストシーズン優勝）" };
-  const HOF_LINE = 250;
+  const HOF_LINE = 400; // v2.13: ~6% of careers (≈ two Slams, or one plus a long top-10 career)
   function titleKey(tier) { return tier === 10 ? "FINALS" : tier === 9 ? "GS" : tier === 8 ? "M1000" : tier === 7 ? "A500" : tier === 6 ? "A250" : tier >= 3 ? "CH" : null; }
   function countTitle(p, tier) { const k = titleKey(tier); if (!k) return; p.stats.tw = p.stats.tw || {}; p.stats.tw[k] = (p.stats.tw[k] || 0) + 1; }
   function legacyOf(p) {
@@ -600,7 +600,7 @@
   function checkLegacy(state, report) {
     const H = state.human, h = human(state), v = legacyView(state);
     H.legacyMarks = H.legacyMarks || {};
-    if (v.hof && !H.legacyMarks.hof) { H.legacyMarks.hof = state.t; report.items.push({ type: "milestone", text: `レガシー ${v.total}pt：殿堂入りラインに到達！` }); news(state, `${h.name} のレガシーが殿堂入りライン（${HOF_LINE}）に到達`); }
+    if (v.hof && (H.legacyMarks.hofLine || 0) < HOF_LINE) { H.legacyMarks.hof = state.t; H.legacyMarks.hofLine = HOF_LINE; report.items.push({ type: "milestone", text: `レガシー ${v.total}pt：殿堂入りラインに到達！` }); news(state, `${h.name} のレガシーが殿堂入りライン（${HOF_LINE}）に到達`); }
     if (v.rank && v.total > 0 && v.rank <= 20 && (H.legacyRank === undefined || H.legacyRank === null || v.rank < H.legacyRank)) {
       const passed = H.legacyRank ? legacyTable(state)[v.rank] : null;
       if (H.legacyRank) report.items.push({ type: "milestone", text: `歴代レガシー ${v.rank}位に浮上${passed ? `（${passed.p.name} を抜いた）` : ""}` });
@@ -1110,6 +1110,7 @@
     if (o.isRival && w.rival) return true;
     if (o.rank && o.rank <= 10 && w.top10) return true;
     if (label === "決勝" && T.def.tier >= 6 && w.titleMatch) return true;
+    if (label === "決勝" && T.def.tier < 6 && w.lowerFinal) return true; // v2.13: Challenger / ITF finals
     if (T.def.tier === 8 && label === "準決勝" && w.titleMatch) return true;
     return false;
   }
