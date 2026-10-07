@@ -5,7 +5,7 @@
     W, D, S: null, tab: "home", modal: null, planSel: null, planWeekT: -1, runLog: null, running: false, screens: {},
     SAVE_KEY: "tourlife_v1", SETTINGS_KEY: "tourlife_settings_v1", HOF_KEY: "tourlife_hof_v1",
     DEFAULT_SETTINGS: { stopTournament: true, stopMilestone: true, stopInjury: true, stopSeason: true, stopEvent: true, stopRival: true, watchEnabled: true, watchDepth: { gs: "all", m1000: "sf", tour: "final", lower: "final" }, watchLowerFinal: true, watchGs: true, watchFinals: true, watchRival: true, watchTop10: true, watchTitle: true, watchSpeed: 300, sound: false, volume: 0.5, reduceMotion: false, slot: 1, introSeen: false, hints: {}, hintsAlways: false },
-    VERSION: "v2.15",
+    VERSION: "v2.15.1",
   });
   U.ATTRL = W.ATTR_LABEL;
   U.ORIGINS = {
@@ -385,8 +385,8 @@
           <label>名前 <input id="name" value="${esc(window._name || "")}" placeholder="例: 佐藤 大和" style="width:180px"></label>
           <label>所属国 <select id="country">${D.PLAYABLE_COUNTRIES.map((c) => `<option value="${c}" ${(window._country || "JPN") === c ? "selected" : ""}>${flag(c)} ${D.COUNTRIES[c].name}</option>`).join("")}</select></label>
           <label>難易度 <select id="diff">${Object.entries(W.DIFFICULTY).map(([k, d]) => `<option value="${k}" ${(window._diff || "normal") === k ? "selected" : ""}>${d.label}</option>`).join("")}</select></label>
-          <label>怪我 <select id="inj"><option value="standard">標準</option><option value="low">低頻度</option></select></label>
-          <label>シード <input id="seed" placeholder="空欄でランダム" style="width:120px"></label></div>
+          <label>怪我 <select id="inj"><option value="standard">標準</option><option value="low" ${window._inj === "low" ? "selected" : ""}>低頻度</option></select></label>
+          <label>シード <input id="seed" value="${esc(window._seed || "")}" placeholder="空欄でランダム" style="width:120px"></label></div>
         <div style="margin-top:12px"><label class="small">身長 <input type="range" id="height" min="170" max="205" step="1" value="${window._height || W.HEIGHT_BASE}" style="width:220px;vertical-align:middle"> <b id="hval">${window._height || W.HEIGHT_BASE}cm</b></label>
           <div class="small muted" id="heff" style="margin-top:4px"></div></div>
         <p class="small muted" style="margin-top:8px">所属国はホーム大会のワイルドカード確率・デビスカップ・スポンサーに影響。ホームATP大会がない国は実質ハードモード。</p>
@@ -403,7 +403,7 @@
       const parts = Object.entries(e).filter(([, v]) => Math.abs(v) >= 0.1).map(([k, v]) => `<span class="${v > 0 ? "green" : "red"}">${L[k]} ${v > 0 ? "+" : ""}${v}</span>`);
       document.getElementById("heff").innerHTML = (parts.length ? parts.join(" ・ ") : "平均的な身長（補正なし）") + `<br>${cm >= 193 ? "長身: サーブが武器。芝・室内で強いが、動きとリターンに難" : cm <= 178 ? "小柄: 足とリターンが武器。クレーで粘れるが、サーブで楽ができない" : "標準的: 大きな偏りはない"}。総合力はほぼ変わらず、強みの場所が変わる。能力の伸びる上限も同じだけずれる`; };
     hIn.oninput = hShow; hShow();
-    app.querySelectorAll(".origin").forEach((el) => el.onclick = () => { window._origin = el.dataset.o; window._name = document.getElementById("name").value; window._country = document.getElementById("country").value; window._diff = document.getElementById("diff").value; U.renderSetup(); });
+    app.querySelectorAll(".origin").forEach((el) => el.onclick = () => { window._origin = el.dataset.o; window._name = document.getElementById("name").value; window._country = document.getElementById("country").value; window._diff = document.getElementById("diff").value; window._inj = document.getElementById("inj").value; window._seed = document.getElementById("seed").value; U.renderSetup(); });
     document.getElementById("start").onclick = () => {
       const name = document.getElementById("name").value.trim() || "名無しの選手";
       const seedStr = document.getElementById("seed").value.trim();
