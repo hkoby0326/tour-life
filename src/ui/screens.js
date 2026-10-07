@@ -218,7 +218,10 @@
     html += `<div class="grid2"><div class="panel"><h2>自動進行の停止条件</h2>
       ${[["stopTournament", "自分の大会が終わるごと"], ["stopMilestone", "ランキングの節目"], ["stopEvent", "イベント（選択肢）"], ["stopSeason", "シーズン終了"]].map(([k, l]) => `<label class="small" style="display:inline-block;margin-right:14px"><input type="checkbox" data-set="${k}" ${settings[k] ? "checked" : ""}> ${l}</label>`).join("")}</div>
     <div class="panel"><h2>観戦モード</h2><p class="small muted">重要試合はポイント単位で観戦し、セット間にプランを変えられる。</p>
-      ${[["watchEnabled", "観戦モードを使う"], ["watchGs", "グランドスラム"], ["watchFinals", "ATPファイナルズ"], ["watchTitle", "ツアー大会の決勝と1000の準決勝"], ["watchLowerFinal", "チャレンジャー・ITFの決勝"], ["watchTop10", "トップ10戦"]].map(([k, l]) => `<label class="small" style="display:inline-block;margin-right:14px"><input type="checkbox" data-set="${k}" ${settings[k] ? "checked" : ""}> ${l}</label>`).join("")}</div></div>`;
+      ${[["watchEnabled", "観戦モードを使う"], ["watchFinals", "ATPファイナルズ（全試合）"], ["watchTop10", "トップ10戦"]].map(([k, l]) => `<label class="small" style="display:inline-block;margin-right:14px"><input type="checkbox" data-set="${k}" ${settings[k] ? "checked" : ""}> ${l}</label>`).join("")}
+      <div class="row" style="gap:14px;flex-wrap:wrap;margin-top:8px">${(() => { const d = U.watchDepth(); const opt = (k, list) => list.map(([v, l]) => `<option value="${v}" ${d[k] === v ? "selected" : ""}>${l}</option>`).join("");
+        const F = [["off", "観戦しない"], ["final", "決勝のみ"], ["sf", "準決勝から"], ["qf", "準々決勝から"], ["all", "全試合"]];
+        return [["gs", "グランドスラム", F], ["m1000", "マスターズ1000・五輪", F.slice(0, 4)], ["tour", "ATP 500・250", F.slice(0, 3)], ["lower", "チャレンジャー・ITF", F.slice(0, 2)]].map(([k, l, list]) => `<label class="small">${l} <select data-wdepth="${k}">${opt(k, list)}</select></label>`).join(""); })()}</div></div></div>`;
     c.innerHTML = html;
     const gp = c.querySelector("[data-goto-player]"); if (gp) gp.onclick = (e) => { e.preventDefault(); U.tab = "player"; U.render(); };
     const stSel = c.querySelector("[data-strategy]"); if (stSel) stSel.onchange = () => { S.human.strategy = stSel.value; U.save(); U.render(); };
@@ -230,6 +233,7 @@
     c.querySelectorAll("[data-pick]").forEach((el) => el.onclick = (e) => { if (el.dataset.disabled || e.target.closest("[data-dbl]")) return; const idx = el.dataset.pick.indexOf(":"); const i = parseInt(el.dataset.pick.slice(0, idx), 10), tid = el.dataset.pick.slice(idx + 1); U.planSel[i].choice = U.planSel[i].choice === tid ? "auto" : tid; U.render(); });
     c.querySelectorAll("[data-dbl]").forEach((cb) => cb.onchange = () => { U.planSel[parseInt(cb.dataset.dbl, 10)].doubles = cb.checked; });
     c.querySelectorAll("[data-set]").forEach((cb) => cb.onchange = () => { settings[cb.dataset.set] = cb.checked; U.saveSettings(); });
+    c.querySelectorAll("[data-wdepth]").forEach((sel) => sel.onchange = () => { U.watchDepth()[sel.dataset.wdepth] = sel.value; U.saveSettings(); });
     c.querySelectorAll("[data-run]").forEach((b) => b.onclick = () => U.runWeeks(U.planSel.slice(0, parseInt(b.dataset.run, 10)).map(toAction)));
     c.querySelector("[data-auto]").onclick = () => U.autoRun(60);
     const sa = c.querySelector("[data-showall]"); if (sa) sa.onclick = () => { window._showAllTours = !showAll; U.render(); };
@@ -436,8 +440,24 @@
     return `<div class="panel"><h2>特性 <span class="muted small">成長ポイント <b class="accent">${H.gp || 0}</b> ・ スロット <b>${held.length}/${slots}</b></span></h2>
       <p class="small muted">各特性は Lv1〜5。強化コスト ${W.TRAIT_COST.join("→")}pt、効果は Lv1 の ${W.TRAIT_LV.slice(2).map((x) => "×" + x).join("・")}。持てるのは${slots}つまで（最高20位で+1、最高3位で+1）。外すと使ったポイントの半分が戻る。ポイントはタイトル（下部 1／250・500 2〜3／1000 4／GS・ファイナルズ 6）、トップ200以上の節目（2）、シーズン終了（1）で貯まる。</p>
       ${(H.gpLog || []).length ? `<p class="tiny muted">最近の獲得: ${(H.gpLog || []).slice(-4).reverse().map((g) => `${esc(g.why)} +${g.n}`).join("、")}</p>` : ""}
+      ${gpSinksHtml()}
       <div class="tgrid2">${ids.map(card).join("")}</div></div>`;
   };
+  // v2.15: other things growth points can buy
+  function gpSinksHtml() {
+    const S = U.S, H = S.human, me = human(), gp = H.gp || 0, K = W.GP_SINK;
+    const cd = Math.max(0, (H.drillUntil || 0) - S.t);
+    const opts = W.ATTRS.map((k) => `<option value="${k}">${ATTRL[k]} ${Math.round(me.attrs[k])}${me.attrs[k] > W.attrCeil(me, k) ? "（鈍化）" : ""}</option>`).join("");
+    return `<div class="card" style="margin:8px 0"><h3>ポイントの使い道 <span class="muted small">特性のほかに</span></h3>
+      <div class="gpsinks">
+        <div class="row between"><div><b>集中特訓</b> <span class="muted small">${K.drill}pt</span><div class="tiny muted">選んだ能力 +1.0（天井を超えている能力は +0.4）。${W.DRILL_COOLDOWN}週に1回</div></div>
+          <div class="row" style="gap:6px"><select data-drill-attr>${opts}</select><button class="small ${gp >= K.drill && !cd ? "primary" : ""}" data-drill ${gp >= K.drill && !cd ? "" : "disabled"}>${cd ? `あと${cd}週` : "特訓"}</button></div></div>
+        <div class="row between"><div><b>調整合宿</b> <span class="muted small">${K.prep}pt</span><div class="tiny muted">次に出る大会で勝負所 +2、入りの疲労 −8${H.prep ? '<span class="green"> ・ 準備済み（次の大会で効く）</span>' : ""}</div></div>
+          <button class="small ${gp >= K.prep && !H.prep ? "primary" : ""}" data-prep ${gp >= K.prep && !H.prep ? "" : "disabled"}>${H.prep ? "準備済み" : "組む"}</button></div>
+        <div class="row between"><div><b>特性スロット +1</b> <span class="muted small">${K.slot}pt</span><div class="tiny muted">一度だけ。${H.extraSlot ? '<span class="green">購入済み</span>' : "持てる特性が1つ増える"}</div></div>
+          <button class="small ${gp >= K.slot && !H.extraSlot ? "primary" : ""}" data-slot ${gp >= K.slot && !H.extraSlot ? "" : "disabled"}>${H.extraSlot ? "購入済み" : "増やす"}</button></div>
+      </div></div>`;
+  }
   U.bindDevPanel = function (c) {
     const S = U.S, dev = W.devOf(S);
     const ss = c.querySelector("[data-dev-style]"); if (ss) ss.onchange = () => { dev.style = ss.value || null; dev.established = false; U.save(); U.render(); };
@@ -445,6 +465,9 @@
     const sa = c.querySelector("[data-dev-auto]"); if (sa) sa.onchange = () => { dev.auto = sa.checked; if (!dev.auto) S.human.alloc = W.autoAlloc(S, human()); U.save(); U.render(); };
     c.querySelectorAll("[data-alloc]").forEach((b) => b.onclick = () => { const [cat, d] = b.dataset.alloc.split(":"); const a = W.allocOf(S); const tot = Object.values(a).reduce((x, y) => x + y, 0); const n = parseInt(d, 10); if (n > 0 && tot >= W.TRAIN_SLOTS) return; a[cat] = Math.max(0, (a[cat] || 0) + n); U.save(); U.render(); });
     c.querySelectorAll("[data-trait]").forEach((b) => b.onclick = () => { const id = b.dataset.trait; const T = W.TRAITS[id]; const l = W.traitLevel(S, id); U.openModal(`<h2>${esc(T.label)} ${l ? `Lv${l} → Lv${l + 1}` : "を習得"}</h2><p>${esc(W.traitEffectText(id, l + 1))}</p>${l ? `<p class="small muted">現在: ${esc(W.traitEffectText(id, l))}</p>` : ""}<p>成長ポイント ${W.TRAIT_COST[l]} を使いますか？（残り ${S.human.gp}）</p><div class="row"><button class="primary" data-trait-confirm="${id}">${l ? "強化する" : "習得する"}</button><button data-close>やめる</button></div>`); });
+    const dr = c.querySelector("[data-drill]"); if (dr) dr.onclick = () => { const k = c.querySelector("[data-drill-attr]").value; const g = W.gpDrill(S, k); if (g) { U.save(); U.toast(`集中特訓: ${ATTRL[k]} +${g.toFixed(1)}`, "gold"); U.render(); } };
+    const pr = c.querySelector("[data-prep]"); if (pr) pr.onclick = () => { if (W.gpPrep(S)) { U.save(); U.render(); } };
+    const sl = c.querySelector("[data-slot]"); if (sl) sl.onclick = () => { if (W.gpSlot(S)) { U.save(); U.render(); } };
     c.querySelectorAll("[data-trait-drop]").forEach((b) => b.onclick = () => { const id = b.dataset.traitDrop; const T = W.TRAITS[id]; const l = W.traitLevel(S, id); const back = Math.floor(W.TRAIT_COST.slice(0, l).reduce((a, x) => a + x, 0) / 2); U.openModal(`<h2>${esc(T.label)} を外す</h2><p>Lv${l} の特性を外してスロットを空けます。${back}pt が戻ります（使った分の半分）。</p><div class="row"><button class="danger" data-trait-drop-confirm="${id}">外す</button><button data-close>やめる</button></div>`); });
   };
   U.screens.player = function (c) {
@@ -471,7 +494,7 @@
       <p class="small muted">同年代（±1歳）${peers.length + 1}人中 ${me.rank ? myPos + "番目" : "ランク外"}。成長は年齢・隠れた天井・練習の重点・コーチで決まる。</p></div>
       <div><div class="panel"><div class="row between"><h2 style="margin:0;border:0;padding:0">キャリア</h2><button class="small" data-share>キャリアカードを保存</button></div><div class="kpi" style="margin-top:10px"><div class="card"><div class="v">${me.stats.bestRank || "-"}</div><div class="l">最高ランク</div></div><div class="card"><div class="v">${me.stats.titles}</div><div class="l">タイトル</div></div><div class="card"><div class="v">${me.stats.gs}</div><div class="l">GS</div></div><div class="card"><div class="v">${me.stats.m1000}</div><div class="l">1000</div></div><div class="card"><div class="v">${me.stats.weeksNo1}</div><div class="l">No.1週</div></div><div class="card"><div class="v">${money(me.stats.prize)}</div><div class="l">生涯賞金</div></div></div>
         <p class="small">試合勘 <b>${Math.round(me.sharp || 0)}</b>（${W.sharpLabel(me.sharp || 0)}） ・ 自信 <b>${(me.conf || 0) >= 0 ? "+" : ""}${Math.round(me.conf || 0)}</b>（${W.confLabel(me.conf || 0)}）</p>
-        <p class="small">対Top10: ${top10.filter((m) => m.won).length}勝${top10.filter((m) => !m.won).length}敗 ・ 通算 ${me.stats.w}勝${me.stats.l}敗 ・ 怪我 ${(S.human.injuryLog || []).length}回</p>
+        <p class="small">対Top10: ${top10.filter((m) => m.won).length}勝${top10.filter((m) => !m.won).length}敗 ・ 通算 ${me.stats.w}勝${me.stats.l}敗 ・ 怪我 ${(S.human.injuryLog || []).length}回${me.stats.oly ? ` ・ 五輪 🥇${me.stats.oly.g} 🥈${me.stats.oly.s} 🥉${me.stats.oly.b}` : ""}</p>
         ${U.careerStatsHtml(me)}
         <h3 style="margin-top:10px">年表</h3>${U.timelineHtml(S.history.seasons, curSeason)}
         <h3 style="margin-top:10px">トロフィーケース</h3>${U.trophyCase(titles)}</div>

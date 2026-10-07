@@ -4,8 +4,8 @@
   const U = (TL.UI = {
     W, D, S: null, tab: "home", modal: null, planSel: null, planWeekT: -1, runLog: null, running: false, screens: {},
     SAVE_KEY: "tourlife_v1", SETTINGS_KEY: "tourlife_settings_v1", HOF_KEY: "tourlife_hof_v1",
-    DEFAULT_SETTINGS: { stopTournament: true, stopMilestone: true, stopInjury: true, stopSeason: true, stopEvent: true, stopRival: true, watchEnabled: true, watchLowerFinal: true, watchGs: true, watchFinals: true, watchRival: true, watchTop10: true, watchTitle: true, watchSpeed: 300, sound: false, volume: 0.5, reduceMotion: false, slot: 1, introSeen: false, hints: {}, hintsAlways: false },
-    VERSION: "v2.14",
+    DEFAULT_SETTINGS: { stopTournament: true, stopMilestone: true, stopInjury: true, stopSeason: true, stopEvent: true, stopRival: true, watchEnabled: true, watchDepth: { gs: "all", m1000: "sf", tour: "final", lower: "final" }, watchLowerFinal: true, watchGs: true, watchFinals: true, watchRival: true, watchTop10: true, watchTitle: true, watchSpeed: 300, sound: false, volume: 0.5, reduceMotion: false, slot: 1, introSeen: false, hints: {}, hintsAlways: false },
+    VERSION: "v2.15",
   });
   U.ATTRL = W.ATTR_LABEL;
   U.ORIGINS = {
@@ -53,7 +53,16 @@
   U.loadSettings = () => { try { return Object.assign({}, U.DEFAULT_SETTINGS, JSON.parse(localStorage.getItem(U.SETTINGS_KEY) || "{}")); } catch (e) { return Object.assign({}, U.DEFAULT_SETTINGS); } };
   U.settings = U.loadSettings();
   U.saveSettings = () => { try { localStorage.setItem(U.SETTINGS_KEY, JSON.stringify(U.settings)); } catch (e) {} };
-  U.watchOpts = () => ({ enabled: U.settings.watchEnabled, gs: U.settings.watchGs, finals: U.settings.watchFinals, rival: U.settings.watchRival, top10: U.settings.watchTop10, titleMatch: U.settings.watchTitle, lowerFinal: U.settings.watchLowerFinal !== false });
+  U.watchOpts = () => ({ enabled: U.settings.watchEnabled, gs: U.settings.watchGs, finals: U.settings.watchFinals, rival: U.settings.watchRival, top10: U.settings.watchTop10, depth: U.watchDepth() });
+  // v2.15: per-tier depth; older boolean settings are mapped once
+  U.watchDepth = () => {
+    const s = U.settings;
+    if (!s.watchDepth || typeof s.watchDepth !== "object") {
+      s.watchDepth = { gs: s.watchGs === false ? (s.watchTitle === false ? "off" : "final") : "all", m1000: s.watchTitle === false ? "off" : "sf", tour: s.watchTitle === false ? "off" : "final", lower: s.watchLowerFinal === false ? "off" : "final" };
+      U.saveSettings();
+    }
+    return s.watchDepth;
+  };
   // save slots: slot 1 keeps the historical key so existing saves carry over
   U.slot = () => U.settings.slot || 1;
   U.saveKeyFor = (n) => (n === 1 ? U.SAVE_KEY : `${U.SAVE_KEY}_s${n}`);

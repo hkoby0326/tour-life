@@ -16,9 +16,10 @@
   const CAT_ICON = { GS: ["🏆", "gs", "グランドスラム"], FINALS: ["👑", "gs", "ATPファイナルズ"], M1000L: ["🥇", "m", "ATP 1000"], M1000S: ["🥇", "m", "ATP 1000"], A500L: ["🏅", "f", "ATP 500"], A500: ["🏅", "f", "ATP 500"], A250: ["🎖", "t", "ATP 250"], A250B: ["🎖", "t", "ATP 250"] };
   U.trophyCase = function (titles) {
     const groups = { gs: 0, m: 0, f: 0, t: 0, lower: 0 };
+    const oly = U.human().stats.oly;
     for (const t of titles) { const c = CAT_ICON[t.cat]; if (c) groups[c[1]]++; else groups.lower++; }
     const cell = (ic, n, l, cls) => `<div class="trophy ${cls} ${n ? "" : "empty"}"><div class="ic">${ic}</div><div class="n">${n}</div><div class="l">${l}</div></div>`;
-    return `<div class="trophies">${cell("🏆", groups.gs, "GS・Finals", "gs")}${cell("🥇", groups.m, "ATP 1000", "m")}${cell("🏅", groups.f, "ATP 500", "f")}${cell("🎖", groups.t, "ATP 250", "t")}${cell("🏵", groups.lower, "CH・ITF", "")}</div>
+    return `<div class="trophies">${cell("🏆", groups.gs, "GS・Finals", "gs")}${cell("🥇", groups.m, "ATP 1000", "m")}${cell("🏅", groups.f, "ATP 500", "f")}${cell("🎖", groups.t, "ATP 250", "t")}${cell("🏵", groups.lower, "CH・ITF", "")}${oly && (oly.g || oly.s || oly.b) ? cell("🥇🥈🥉", `${oly.g}/${oly.s}/${oly.b}`, "五輪 金/銀/銅", "gs") : ""}</div>
       ${titles.length ? `<div class="titlelist">${titles.slice().reverse().slice(0, 24).map((t) => `<span class="pill ${t.surface}">${U.cal(t.year)} ${esc(t.name)}</span>`).join("")}${titles.length > 24 ? `<span class="pill">+${titles.length - 24}</span>` : ""}</div>` : '<p class="small muted" style="margin-top:8px">まだタイトルがない</p>'}`;
   };
   U.timelineHtml = function (seasons, current) {

@@ -44,6 +44,9 @@
       points: [25, 16, 8, 3, 1, 0], qPts: 0, prize: [3.6, 2.1, 1.25, 0.73, 0.43, 0.26] },
     M15: { label: "ITF M15", short: "M15", tier: 1, draw: 32, q: 0, qRounds: 0, wc: 4, bo5: false, weeks: 1,
       points: [10, 6, 4, 2, 1, 0], qPts: 0, prize: [2.16, 1.27, 0.75, 0.44, 0.26, 0.16] },
+    // v2.15: the Olympics (every four years, week 30). No ranking points; medals count towards legacy.
+    OLY: { label: "オリンピック", short: "五輪", tier: 8, draw: 64, q: 0, qRounds: 0, wc: 0, bo5: false, weeks: 1, oly: true,
+      points: [0, 0, 0, 0, 0, 0, 0], qPts: 0, prize: [0, 0, 0, 0, 0, 0, 0], qPrize: 0 },
     FINALS: { label: "ATP Finals", short: "Finals", tier: 10, draw: 8, q: 0, qRounds: 0, wc: 0, bo5: false, weeks: 1,
       points: [1500], qPts: 0, prize: [4800] },
   };
@@ -51,6 +54,9 @@
   D.SURFACES = { hard: "ハード", clay: "クレー", grass: "芝", indoor: "インドア" };
 
   // region: OCE, ASIA, EU, NA, SA, MEA
+  // Olympic hosts by calendar year (rotates); [country, surface, city]
+  D.OLYMPICS = { week: 30, hosts: [["USA", "hard", "ロサンゼルス"], ["AUS", "hard", "ブリスベン"], ["ESP", "clay", "マドリード"], ["JPN", "hard", "東京"], ["FRA", "clay", "パリ"], ["GER", "hard", "ベルリン"]] };
+  D.olympicsFor = (calYear) => { if (calYear % 4 !== 0 || calYear < 2028) return null; const i = ((calYear - 2028) / 4) % D.OLYMPICS.hosts.length; const [country, surface, city] = D.OLYMPICS.hosts[i]; return { country, surface, city, calYear }; };
   D.COUNTRIES = {
     JPN: { name: "日本", region: "ASIA", ll: [35.7, 139.7] }, USA: { name: "アメリカ", region: "NA", ll: [40.7, -74.0] }, ESP: { name: "スペイン", region: "EU", ll: [40.4, -3.7] },
     FRA: { name: "フランス", region: "EU", ll: [48.9, 2.3] }, ITA: { name: "イタリア", region: "EU", ll: [41.9, 12.5] }, GBR: { name: "イギリス", region: "EU", ll: [51.5, -0.1] },
