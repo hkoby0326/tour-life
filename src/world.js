@@ -255,16 +255,17 @@
     // human
     const o = state.config.origin;
     let spec;
-    if (o === "junior") spec = { overall: 56, birthYear: START_YEAR - 16, potential: 76 + rng.int(0, 12), money: 60, sponsor: 1.5, sponsorWeeks: 156, pts: 30, wcBoost: 104, style: "all" };
+    if (o === "junior") spec = { overall: 56, birthYear: START_YEAR - 16, potential: 77 + rng.int(0, 12), money: 60, sponsor: 1.5, sponsorWeeks: 156, pts: 30, wcBoost: 104, style: "all" };
     // sponsor = 週あたりの支援（k$）。叩き上げは地元の後援会、大学経由は協会支援という設定
     // v2.8: どの出自も同じポテンシャル帯。開始能力・ポイントは「ジュニア王者がその年齢で届いている水準」に揃え、出自で天井や確率が変わらないようにする
-    else if (o === "college") spec = { overall: 73, birthYear: START_YEAR - 21, potential: 76 + rng.int(0, 12), money: 25, sponsor: 0.6, sponsorWeeks: 104, pts: 300, wcBoost: 0, growthRoll: rng.chance(0.5), style: "baseline" };
-    else spec = { overall: 62, birthYear: START_YEAR - 18, potential: 76 + rng.int(0, 12), money: 12, sponsor: 0.5, sponsorWeeks: 156, pts: 120, wcBoost: 0, style: "grinder" };
+    else if (o === "college") spec = { overall: 73, birthYear: START_YEAR - 21, potential: 77 + rng.int(0, 12), money: 25, sponsor: 0.6, sponsorWeeks: 104, pts: 300, wcBoost: 0, growthRoll: rng.chance(0.5), style: "baseline" };
+    else spec = { overall: 62, birthYear: START_YEAR - 18, potential: 77 + rng.int(0, 12), money: 12, sponsor: 0.5, sponsorWeeks: 156, pts: 120, wcBoost: 0, style: "grinder" };
     const generational = rng.chance(0.10);
     if (generational) spec.potential = Math.max(spec.potential, 90 + rng.int(0, 6));
     spec.potential = clamp(spec.potential + diff(state).pot, 60, 97);
     const h = newPlayer(state, { name: state.config.name, country: state.config.country, birthYear: spec.birthYear, overall: spec.overall, potential: spec.potential, style: spec.style, growth: spec.growth, isHuman: true });
-    if (o === "grinder") { h.attrs.durability = clamp(h.attrs.durability + 8, 25, 99); h.attrs.clutch += 5; h.attrs.stamina += 5; }
+    // v2.12: smaller on top of the age-matched start (grinders were winning ~twice as many Slams as the other origins)
+    if (o === "grinder") { h.attrs.durability = clamp(h.attrs.durability + 6, 25, 99); h.attrs.clutch += 2; h.attrs.stamina += 2; }
     h.surf.hard += state.config.country === "JPN" ? 4 : 0;
     state.players.push(h);
     state.humanId = h.id;
@@ -548,7 +549,7 @@
   // One career score for everyone in the world, so "what am I playing for" has a number and a line.
   // Counted from this world's history (the starting roster's pre-game careers are not included).
   const LEGACY = { GS: 100, FINALS: 50, M1000: 30, A500: 15, A250: 8, CH: 1, no1Week: 3, ye10: 10, ye1: 40 };
-  const LEGACY_LABEL = { GS: "グランドスラム", FINALS: "ATPファイナルズ", M1000: "マスターズ1000", A500: "ATP500", A250: "ATP250", CH: "チャレンジャー", no1Week: "No.1在位", ye10: "年末トップ10", ye1: "年末No.1" };
+  const LEGACY_LABEL = { GS: "グランドスラム", FINALS: "ATPファイナルズ", M1000: "マスターズ1000", A500: "ATP500", A250: "ATP250", CH: "チャレンジャー", no1Week: "No.1在位", ye10: "年末トップ10", ye1: "年末No.1", vow: "有言実行（ラストシーズン優勝）" };
   const HOF_LINE = 250;
   function titleKey(tier) { return tier === 10 ? "FINALS" : tier === 9 ? "GS" : tier === 8 ? "M1000" : tier === 7 ? "A500" : tier === 6 ? "A250" : tier >= 3 ? "CH" : null; }
   function countTitle(p, tier) { const k = titleKey(tier); if (!k) return; p.stats.tw = p.stats.tw || {}; p.stats.tw[k] = (p.stats.tw[k] || 0) + 1; }
@@ -558,6 +559,7 @@
     if (s.weeksNo1) parts.no1Week = s.weeksNo1 * LEGACY.no1Week;
     if (s.ye10) parts.ye10 = s.ye10 * LEGACY.ye10;
     if (s.ye1) parts.ye1 = s.ye1 * LEGACY.ye1;
+    if (s.vowBonus) parts.vow = s.vowBonus;
     return { total: Object.values(parts).reduce((a, b) => a + b, 0), parts };
   }
   function legacyTable(state) {
@@ -744,6 +746,45 @@
         return;
       }
     }
+    // farewell-season events are timed to the calendar, so they skip the usual spacing
+    if (isFarewell(state)) {
+      const F = farewellOf(state);
+      let nw = state.week + 1, ny = state.year; if (nw > 52) { nw = 1; ny++; }
+      const nextTs = ny === state.year ? weekTournaments(state, nw, ny) : [];
+      // a tournament wants to honour the player
+      if (!F.quiet && Object.keys(F.cer).length < 4) {
+        const T = nextTs.find((T) => !F.offered[T.tid] && farewellSpecial(state, T) && ["direct", "bubble", "qual", "wc"].includes(humanStatus(state, T).code));
+        if (T) {
+          F.offered[T.tid] = 1;
+          const why = farewellSpecial(state, T);
+          const ev = { id: "farewellcer", title: `${T.name}が引退セレモニーを企画`, tid: T.tid, wk: nw, yr: ny, text: `来週の${T.name}（${why}）が、最後の出場に合わせてセレモニーを用意したいと言ってきた。`, choices: [
+            { key: "accept", label: "受ける", desc: "大会中は観客の声援で勝負所 +3。出場ボーナス（ランクに応じて$）。来週はこの大会に出る" },
+            { key: "decline", label: "断って試合に集中する", desc: "集中力 +0.5" }] };
+          H.event = ev; H.lastEventT = state.t; report.event = ev; report.stops.push("event");
+          return;
+        }
+      }
+      // the last Grand Slam of the career
+      const gsNext = nextTs.find((T) => T.def.tier === 9);
+      if (gsNext && !F.lastGsAsked && !weekTournamentsAhead(state, nw + 1).some((T) => T.def.tier === 9)) {
+        F.lastGsAsked = true;
+        const ev = { id: "farewellgs", title: "最後のグランドスラム", tid: gsNext.tid, text: `来週の${gsNext.name}が、キャリア最後のグランドスラムになる。`, choices: [
+          { key: "all", label: "全てを懸ける", desc: "疲労 −20。この大会は勝負所 +4" },
+          { key: "enjoy", label: "楽しんでプレーする", desc: "自信 +3、集中力 +1。肩の力を抜いて臨む" }] };
+        H.event = ev; H.lastEventT = state.t; report.event = ev; report.stops.push("event");
+        return;
+      }
+      // a strong last season: "you can still play"
+      const yrTitles = h.results.filter((x) => x.year === state.year && x.round === "優勝" && D.CATS[x.cat] && D.CATS[x.cat].tier >= 6).length;
+      if (!F.unretired && !F.unretireAsked && state.week >= 42 && state.week <= 46 && ((h.rank && h.rank <= 30) || yrTitles >= 1)) {
+        F.unretireAsked = true;
+        const ev = { id: "unretire", title: "「まだやれる」", text: `${h.rank ? h.rank + "位" : "ランク外"}${yrTitles ? `、今季ツアー${yrTitles}勝` : ""}。周囲からも、自分の中からも「まだやれる」という声が聞こえる。撤回できるのは一度だけ。`, choices: [
+          { key: "keep", label: "予定どおり今季で引退する", desc: "決めた道を行く" },
+          { key: "extend", label: "撤回して、もう1年戦う", desc: "ラストシーズンを来季に延ばす（一度だけ）" }] };
+        H.event = ev; H.lastEventT = state.t; report.event = ev; report.stops.push("event");
+        return;
+      }
+    }
     if (state.t - H.lastEventT < 5) return;
     {
       const C = cashOf(state);
@@ -845,6 +886,15 @@
     let text = "";
     const c = ev.choices.find((x) => x.key === key) || ev.choices[0];
     switch (ev.id + ":" + c.key) {
+      case "farewellpress:thanks": h.attrs.focus = clamp(h.attrs.focus + 1, 25, 99); text = "感謝の言葉に、会場から拍手が起きた。"; break;
+      case "farewellpress:vow": h.conf = clamp((h.conf || 0) + 4, -10, 10); farewellOf(state).vow = true; text = "「最後にもう一度、タイトルを」。見出しはその一言で埋まった。"; break;
+      case "farewellpress:quiet": farewellOf(state).quiet = true; text = "短く挨拶して会見を終えた。"; break;
+      case "farewellcer:accept": { const F = farewellOf(state); F.cer[ev.tid] = 1; H.planNext = { tid: ev.tid, week: ev.wk, year: ev.yr }; text = "セレモニーを受けることにした。来週はその大会に出る。"; break; }
+      case "farewellcer:decline": h.attrs.focus = clamp(h.attrs.focus + 0.5, 25, 99); text = "丁重に断った。最後まで一人の選手として戦う。"; break;
+      case "farewellgs:all": h.fatigue = clamp(h.fatigue - 20, 0, 100); farewellOf(state).gsAll = ev.tid; text = "最後のグランドスラムに全てを懸ける。"; break;
+      case "farewellgs:enjoy": h.conf = clamp((h.conf || 0) + 3, -10, 10); h.attrs.focus = clamp(h.attrs.focus + 1, 25, 99); text = "最後の舞台を楽しむことにした。"; break;
+      case "unretire:keep": text = "決めた道を行く。残りの大会を噛みしめよう。"; break;
+      case "unretire:extend": { const F = farewellOf(state); F.unretired = true; H.retireYear = state.year + 1; F.offered = {}; F.lastGsAsked = false; F.unretireAsked = true; news(state, `${h.name} が引退を撤回。来季もツアーで戦う`); text = "引退を撤回した。もう1年、戦う。"; break; }
       case "veteran:body": { const al = allocOf(state); let need = 5 - (al.physical || 0); for (const k of ["stroke", "serve", "ret", "mental", "match"]) while (need > 0 && al[k] > 0) { al[k]--; need--; } al.physical = 5 - need; text = `練習配分をフィジカル${al.physical}コマに。`; break; }
       case "veteran:style": { const dev = devOf(state); dev.style = "veteran"; dev.established = false; text = "育成スタイルを「ベテランの技巧」に切り替えた。"; break; }
       case "veteran:schedule": H.strategy = "veteran"; text = "方針を「厳選（ベテラン）」に。大きな大会に照準を合わせる。"; break;
@@ -986,6 +1036,7 @@
     }
     const cut = expectedCut(state, T);
     if (r <= cut * 0.95) return { code: "direct", label: `本戦ダイレクトイン見込み（昨年の当落線 ${cut}位）` };
+    if (isFarewell(state) && T.cat !== "FINALS" && (h.stats.bestRank || 9999) <= 50) return { code: "wc", fw: true, label: "引退ツアーのワイルドカード（有力）" };
     if (r <= cut * 1.15) return { code: "bubble", label: `当落線上（本戦か予選、当落線 ${cut}位前後）` };
     if (T.def.q > 0 && r <= cut + qualReach(T)) return { code: "qual", label: "予選から" };
     if (T.def.tier <= 2) return { code: "wc", label: home ? "ワイルドカード確実（ホーム）" : T.cat === "M15" ? "ワイルドカード枠あり" : "ワイルドカード次第" };
@@ -1158,7 +1209,12 @@
     rules[idx] = H.switchRule || "none";
     if (H.coach && H.coach.type === "mental" && !cashOf(state).budget) clutch[idx] += 2; // a coach who stays home cannot help on court
     if (H.pressureUntil > state.t) clutch[idx] -= 3;
-    if (H.retireYear && state.year === H.retireYear) clutch[idx] += 2; // farewell season
+    if (H.retireYear && state.year === H.retireYear) {
+      clutch[idx] += 2; // farewell season
+      const F = H.farewell || {};
+      if (T && F.cer && F.cer[T.tid]) clutch[idx] += 3; // ceremony crowd
+      if (T && F.gsAll === T.tid) clutch[idx] += 4; // everything on the last Slam
+    }
     clutch[idx] -= sponsorPerks(state).focus * 3; // media obligations: slightly worse on big points
     const edge = [0, 0];
     const me = a.isHuman ? a : b, opp = a.isHuman ? b : a;
@@ -1407,7 +1463,7 @@
       addResult(state, p, T, pts, prize, round);
       recordBig(state, p, T, pl.won ? "W" : bigCodeFor(res.N / Math.pow(2, pl.roundIdx)));
       if (pl.won) { p.stats.titles++; if (def.tier === 9) p.stats.gs++; if (def.tier === 8) p.stats.m1000++; countTitle(p, def.tier); if (p.isHuman) { sponsorTitleBonus(state, T, report); awardGP(state, def.tier >= 6 ? GP_AWARD.title[def.tier] || 2 : GP_AWARD.lowerTitle, `${T.name} 優勝`, report); } }
-      if (p.isHuman) { report.humanPlayed = true; report.humanRound = round; report.humanPts = pts; report.humanPrize = prize; }
+      if (p.isHuman) { report.humanPlayed = true; report.humanRound = round; report.humanPts = pts; report.humanPrize = prize; farewellAfter(state, T, pl.won, report); }
       p.consec++;
       if (def.weeks === 2) p.blockedUntil = state.t + 1;
     }
@@ -1873,7 +1929,11 @@
       let rest = list.slice(D0 + Q);
       // wild cards
       const wcs = [];
-      if (humanIn && rest.includes(h)) {
+      // farewell tour: a former top-50 player gets a main-draw wild card at ATP events
+      if (humanIn && isFarewell(state) && T.def.tier >= 6 && T.cat !== "FINALS" && (h.stats.bestRank || 9999) <= 50 && (rest.includes(h) || qual.includes(h)) && rng.chance(T.def.tier === 9 ? 0.75 : 0.85)) {
+        wcs.push(h); rest = rest.filter((x) => x !== h); qual = qual.filter((x) => x !== h);
+        news(state, `${T.name}: 引退ツアーの ${h.name} に本戦ワイルドカード`);
+      } else if (humanIn && rest.includes(h)) {
         const home = T.country === h.country;
         let p = 0;
         if (T.def.tier <= 1) p = 1;
@@ -1907,6 +1967,7 @@
       report.tournaments.push(rep);
       if (rep.humanPlayed) {
         report.human = rep;
+        if (rep.items) { report.items.push(...rep.items); }
         report.stops.push("tournament");
         const rvMs = rival(state) ? rep.humanMatches.filter((m) => m.oppId === state.rivalId) : [];
         if (rvMs.length) { report.stops.push("rival"); for (const m of rvMs) rivalMeet(state, run.T, m); }
@@ -2350,6 +2411,13 @@
   function strategyOk(state, k) { const st = STRATEGIES[k]; return !!st && (!st.minAge || age(state, human(state)) >= st.minAge); }
   function autoAction(state, tours) {
     const h = human(state);
+    // a farewell ceremony the player accepted last week
+    const PN = state.human.planNext;
+    if (PN && PN.week === state.week && PN.year === state.year) {
+      state.human.planNext = null;
+      const T = tours.find((x) => x.tid === PN.tid);
+      if (T && !h.injury) return { type: "enter", tid: T.id, auto: true, reason: `${T.name}: 引退セレモニーが待っている` };
+    } else if (PN && (PN.year < state.year || (PN.year === state.year && PN.week < state.week))) state.human.planNext = null;
     if (tours.length === 0) return { type: "camp", focus: state.human.focus, reason: "オフシーズン。合宿で集中的に鍛える" };
     const r = rank6(state, h);
     const strat = STRATEGIES[state.human.strategy] ? state.human.strategy : "big";
@@ -2368,7 +2436,7 @@
     // qualifying is worth it for a Slam (points and prize money even when losing), for a Masters
     // only near the cut, for a home ATP event only inside the top 150
     const qualOk = (T) => (T.def.tier === 9 ? r <= 250 : T.def.tier === 8 ? r <= 90 : r <= 150);
-    const enterable = (x) => x.st.code === "direct" || x.st.code === "bubble" || (x.st.code === "qual" && qualOk(x.T)) || (x.st.code === "wc" && x.T.country === h.country && (r <= 250 || state.human.wcBoostUntil > state.t));
+    const enterable = (x) => x.st.code === "direct" || x.st.code === "bubble" || (x.st.code === "qual" && qualOk(x.T)) || (x.st.code === "wc" && x.st.fw) || (x.st.code === "wc" && x.T.country === h.country && (r <= 250 || state.human.wcBoostUntil > state.t));
     const big = ranked.filter((x) => prio(x.T) > 0 && enterable(x)).sort((a, b) => prio(b.T) - prio(a.T) || b.T.def.tier - a.T.def.tier)[0];
     const prioName = (T) => (T.def.tier === 9 ? "グランドスラム" : T.def.tier === 8 ? "マスターズ1000" : "自国のATP大会");
     if (big) {
@@ -2564,6 +2632,8 @@
         `最高ランキング ${s.bestRank || "-"}位、No.1在位 ${s.weeksNo1}週、トップ10在位 ${s.weeksTop10}週`,
         `生涯賞金 $${(s.prize / 1000).toFixed(2)}M`,
         `レガシー ${L.total}pt（殿堂ライン ${HOF_LINE}）・ この世界の歴代 ${lpos >= 0 ? lpos + 1 : "-"}位`,
+        ...(() => { const m = state.history.matches[state.history.matches.length - 1]; return m ? [`最後の試合: ${m.tour} ${m.round} vs ${m.opp}（${m.won ? "勝利" : "敗戦"} ${m.score}）`] : []; })(),
+        ...(state.human.farewell && state.human.farewell.cerDone && Object.keys(state.human.farewell.cerDone).length ? [`引退ツアー: ${Object.keys(state.human.farewell.cerDone).length}大会でセレモニー`] : []),
         hof ? "国際テニス殿堂に選出" : "殿堂入りには届かなかったが、記録はここに残る",
         ...(assetsOf(state).academy ? [`母国にアカデミーを設立。${state.players.filter((p) => p.academy).length}人の卒業生がツアーに出た`] : []),
       ],
@@ -2572,6 +2642,48 @@
   }
 
   // Voluntary retirement: ends the career now (season summary for the partial season is generated).
+  // ---------- farewell season (v2.12) ----------
+  function farewellOf(state) { const H = state.human; return H.farewell || (H.farewell = { cer: {}, offered: {}, quiet: false, unretired: false }); }
+  function isFarewell(state) { return !!state.human.retireYear && state.year === state.human.retireYear && !state.human.careerOver; }
+  // declare the last season: "this" season or the "next" one; opens the press conference
+  function announceRetirement(state, when) {
+    const H = state.human, h = human(state);
+    if (H.careerOver || H.retireYear) return false;
+    H.retireYear = when === "next" ? state.year + 1 : state.year;
+    const F = farewellOf(state); F.announced = state.t;
+    news(state, `${h.name} が${when === "next" ? "来季" : "今季"}限りでの現役引退を表明`);
+    if (!H.event) H.event = { id: "farewellpress", title: "引退会見", text: `${age(state, h)}歳。${when === "next" ? "来季" : "今季"}を最後のシーズンにすると発表する。会見で何を話す？ ラストシーズンは全試合で勝負所 +2（声援と覚悟）。`, choices: [
+      { key: "thanks", label: "支えてくれた人に感謝を伝える", desc: "集中力 +1。各地の大会が引退セレモニーを企画してくれる" },
+      { key: "vow", label: "「最後にもう一度タイトルを」", desc: "自信 +4。セレモニーも受けられる。宣言どおり優勝すればレガシー +20" },
+      { key: "quiet", label: "多くは語らず、静かに去る", desc: "セレモニーやイベントは辞退。勝負所 +2 だけを持って最後まで戦う" }] };
+    return true;
+  }
+  // after a tournament in the last season: the ceremony, and a promised title
+  function farewellAfter(state, T, won, report) {
+    if (!isFarewell(state)) return;
+    const F = farewellOf(state), H = state.human, h = human(state);
+    F.cerDone = F.cerDone || {};
+    if (F.cer[T.tid] && !F.cerDone[T.tid]) {
+      F.cerDone[T.tid] = state.t;
+      const r = h.rank || 9999, bonus = r <= 20 ? 50 : r <= 100 ? 20 : 8;
+      H.money += bonus; H.pendingBonus = (H.pendingBonus || 0) + bonus;
+      news(state, `${T.name}で${h.name}の引退セレモニー。スタンドが総立ちで送り出した（出場ボーナス $${bonus}k）`);
+      (report.items || (report.items = [])).push({ type: "milestone", text: `${T.name}の引退セレモニー：スタンディングオベーション` });
+    }
+    if (won && F.vow && !F.vowDone && T.def.tier >= 6) {
+      F.vowDone = true; h.stats.vowBonus = 20;
+      news(state, `有言実行。${h.name} がラストシーズンに${T.name}で優勝`);
+      (report.items || (report.items = [])).push({ type: "milestone", text: `有言実行：ラストシーズンの優勝（レガシー +20）` });
+    }
+  }
+  function weekTournamentsAhead(state, fromWeek) { const out = []; for (let w = fromWeek; w <= 52; w++) out.push(...weekTournaments(state, w, state.year)); return out; }
+  function farewellSpecial(state, T) {
+    const h = human(state);
+    if (T.def.tier === 9) return "グランドスラム";
+    if (T.def.tier >= 6 && T.country === h.country) return "ホームの大会";
+    if (state.history.tournaments.some((x) => x.winnerId === h.id && x.name === T.name)) return "優勝した思い出の大会";
+    return null;
+  }
   function retireNow(state) {
     const h = human(state);
     if (state.human.careerOver) return;
@@ -2687,5 +2799,5 @@
     return s;
   }
 
-  TL.World = { coachTalk, LEGACY, LEGACY_LABEL, HOF_LINE, legacyOf, legacyView, goalsView, strategyOk, devStyleOk, declineMods, declineEstimate, RIVALS, rehabWeekly, aiTraitList, TRAIT_LV, TRAIT_COST, traitLevels, traitLevel, traitList, traitSlots, traitEffectText, traitReq, dropTrait, bigTimeline, strengthOf, cashOf, fundingOptions, useFunding, setBudget, JOBS, forcedRetire, TRAIN_SLOTS, TRAIN_CATS, allocOf, allocShare, autoAlloc, allocSummary, TRAITS, hasTrait, traitReqOk, learnTrait, DEV_STYLES, INTENSITY, devOf, styleGap, autoFocus, trainRate, STRATEGIES, sharpBonus, sharpLabel, confLabel, sponsorsOf, brandOf, sponsorOffer, sponsorUnlocked, activeContracts, signSponsor, releaseSponsor, sponsorTerminationFee, sponsorPerks, sponsorWeekly, ASSETS, TAX, AGENT_CUT, assetsOf, assetUnlocked, buyAsset, assetsWeekly, DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
+  TL.World = { announceRetirement, isFarewell, farewellOf, coachTalk, LEGACY, LEGACY_LABEL, HOF_LINE, legacyOf, legacyView, goalsView, strategyOk, devStyleOk, declineMods, declineEstimate, RIVALS, rehabWeekly, aiTraitList, TRAIT_LV, TRAIT_COST, traitLevels, traitLevel, traitList, traitSlots, traitEffectText, traitReq, dropTrait, bigTimeline, strengthOf, cashOf, fundingOptions, useFunding, setBudget, JOBS, forcedRetire, TRAIN_SLOTS, TRAIN_CATS, allocOf, allocShare, autoAlloc, allocSummary, TRAITS, hasTrait, traitReqOk, learnTrait, DEV_STYLES, INTENSITY, devOf, styleGap, autoFocus, trainRate, STRATEGIES, sharpBonus, sharpLabel, confLabel, sponsorsOf, brandOf, sponsorOffer, sponsorUnlocked, activeContracts, signSponsor, releaseSponsor, sponsorTerminationFee, sponsorPerks, sponsorWeekly, ASSETS, TAX, AGENT_CUT, assetsOf, assetUnlocked, buyAsset, assetsWeekly, DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
 })(typeof globalThis !== "undefined" ? globalThis : window);

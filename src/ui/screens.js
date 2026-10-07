@@ -50,6 +50,13 @@
         <li>出場を絞る（30歳〜）: 方針「厳選（ベテラン）」 ${on(S.human.strategy === "veteran")} → GS・マスターズでサーブ・リターン +1.5、怪我 ×0.75、身体の衰え −15%</li></ul>
       <p class="tiny muted" style="margin-top:4px">現在の倍率: 身体 ×${m.body.toFixed(2)}、技術 ×${m.tech.toFixed(2)}</p></div>`;
   }
+  // v2.12: how the player's game travels across surfaces (style fit + surface affinity), vs an equal all-rounder
+  function surfEdge(p, s) { const f = TL.surfaceFit(p)[s] || 0, aff = ((p.surf[s] || 50) - 50) * 0.29; return { style: f, aff, total: f + aff }; }
+  function surfFitHtml(p) {
+    const sg = (v) => `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(0)}%`;
+    return `<table class="small" style="margin-top:6px"><tr><th></th><th class="num">プレースタイル</th><th class="num">適性値</th><th class="num">合計（目安）</th></tr>${Object.keys(D.SURFACES).map((s) => { const e = surfEdge(p, s); return `<tr><td>${D.SURFACES[s]}</td><td class="num">${sg(e.style)}</td><td class="num">${sg(e.aff)}</td><td class="num ${e.total >= 2 ? "green" : e.total <= -2 ? "red" : ""}"><b>${sg(e.total)}</b></td></tr>`; }).join("")}</table>
+      <p class="tiny muted">同じ総合力のオールラウンダーと戦ったときの勝率の差（目安）。芝・室内はサーブとリターン、クレーはラリーが効く。適性値は試合に出るたびに上がる。</p>`;
+  }
   function goalsCard() {
     const G = W.goalsView(U.S);
     return `<div class="panel"><h2>今季の目標 <span class="muted small">${cal(G.year)}年</span></h2><div class="goals">${G.list.map((g) => `<div class="goal ${g.done ? "done" : ""}"><span class="gk">${g.done ? "✓" : "○"}</span><div><b>${esc(g.label)}</b><div class="tiny muted">${g.done ? "達成" : esc(g.cur)}${g.type === "rank" && !g.done ? " ・ 年末に判定" : ""} ・ 成長pt +${g.gp}</div></div></div>`).join("")}</div><div class="tiny muted" style="margin-top:6px">3つとも達成でスポンサーから ${money(G.bonus)}</div></div>`;
@@ -63,6 +70,7 @@
       <div class="lgbar big"><i style="width:${Math.min(100, (L.total / L.line) * 100)}%"></i></div>
       <div class="small" style="margin-top:6px">${L.hof ? '<b class="gold">殿堂入りラインに到達</b>' : `殿堂まで ${esc(L.gapText)}`}</div>
       <div class="small muted" style="margin-top:4px">この世界の歴代 ${L.rank ? `<b>${L.rank}位</b> / ${L.of}人` : "-"}${L.next ? ` ・ 次は <span data-player="${L.next.id}" class="accent">${esc(L.next.name)}</span>（${L.next.v}pt）まで あと${L.next.gap}` : ""}</div>
+      ${!U.S.human.retireYear && W.age(U.S, U.human()) >= 30 ? '<div style="margin-top:8px"><button class="small" data-announce-open>今季限りで引退を表明…</button></div>' : ""}
       ${held.length ? `<div class="small gold" style="margin-top:4px">記録保持: ${held.map((r) => `${esc(r.label)} ${r.mine}${r.unit}`).join("、")}</div>` : chase ? `<div class="small muted" style="margin-top:4px">記録まで: ${esc(chase.label)} ${chase.mine}/${chase.record}${chase.unit}（${esc(chase.holder)}）</div>` : ""}</div>`;
   }
   U.screens.home = function (c) {
@@ -82,6 +90,7 @@
       const defend = me.results.filter((r) => r.tid === autoT.tid).reduce((s, r) => s + r.pts, 0);
       nextCard = `<div class="card"><h3>次の大会</h3><div class="row between"><div><b style="font-size:16px">${flag(autoT.country)} ${esc(autoT.name)}</b> ${catPill(autoT)}${autoT.country === me.country ? ' <span class="pill gold">ホーム</span>' : ""}</div><span class="small"><span class="sdot ${st.code}"></span>${esc(st.label)}</span></div>
         <div class="small muted" style="margin:6px 0">${autoT.def.draw}ドロー ・ 優勝 ${autoT.def.points[0]}pt / ${money(autoT.def.prize[0])} ・ 初戦敗退 ${money(autoT.def.prize[autoT.def.prize.length - 1])}${autoT.def.weeks === 2 ? " ・ 2週開催" : ""}${autoT.def.bo5 ? " ・ 5セット" : ""}${defend ? ` ・ <span class="gold">防衛 ${defend}pt</span>` : ""}</div>
+        ${(() => { const e = surfEdge(me, autoT.surface); return Math.abs(e.total) >= 1 ? `<div class="small ${e.total > 0 ? "green" : "red"}" style="margin-bottom:4px">${D.SURFACES[autoT.surface]}との相性 ${e.total > 0 ? "+" : "−"}${Math.abs(e.total).toFixed(0)}%（目安。選手タブで詳細）</div>` : ""; })()}
         ${heads.length ? `<div class="small">有力出場者: ${heads.map((p) => `<span data-player="${p.id}" class="accent">${esc(p.name)}</span><span class="muted">(${p.rank})</span>`).join("、")}</div>` : ""}</div>`;
     }
     // rank trend
@@ -104,6 +113,7 @@
       ${S.human.rivalry && S.human.rivalry.log.length ? `<div class="small muted" style="margin-top:6px">${S.human.rivalry.log.slice(-3).reverse().map((l) => `<div>${cal(l.year)} W${l.week} ・ ${esc(l.text)}</div>`).join("")}</div>` : ""}</div>` : "";
     c.innerHTML = `<div class="grid2" style="grid-template-columns:1.25fr .75fr">
       <div>
+        ${S.human.retireYear ? `<div class="card farewell"><b class="gold">${S.year === S.human.retireYear ? "ラストシーズン" : `${cal(S.human.retireYear)}年がラストシーズン`}</b> <span class="small muted">${S.year === S.human.retireYear ? `残り${53 - S.week}週 ・ 全試合で勝負所 +2` : "表明済み"}</span></div>` : ""}
         <div class="card hero" style="padding:16px 18px"><h3>今週の決断 ・ ${cal()}年 第${S.week}週</h3><div style="font-size:22px;font-weight:800;margin:4px 0 6px">${label}</div><p class="small muted" style="margin:0 0 6px">${esc(auto0.reason || "")}</p>
           <label class="small" style="display:block;margin:0 0 10px">方針 <select data-strategy-home>${Object.entries(W.STRATEGIES).filter(([k]) => W.strategyOk(S, k) || S.human.strategy === k).map(([k, v]) => `<option value="${k}" ${(S.human.strategy || "big") === k ? "selected" : ""}>${v.label}</option>`).join("")}</select></label>
           <div class="row actions"><button class="primary bigbtn" data-go-auto>この判断で1週進める</button><button data-go="plan">4週プランを組む</button><button data-auto>自動進行（停止条件まで）</button></div></div>
@@ -119,6 +129,7 @@
       </div>
       <div>${goalsCard()}${legacyCard()}${rivalCard}<div class="panel"><h2>受信箱</h2><div class="inbox">${items.join("")}</div></div></div></div>`;
     const lgb = c.querySelector("[data-legacy]"); if (lgb) lgb.onclick = () => U.openModal(U.legacyHtml(), true);
+    c.querySelectorAll("[data-announce-open]").forEach((b) => b.onclick = U.announceModal);
     c.querySelector("[data-go-auto]").onclick = () => U.runWeeks([auto0.type === "blocked" ? { type: "blocked" } : { type: "auto" }]);
     const gf = c.querySelector("[data-goto-finance]"); if (gf) gf.onclick = (e) => { e.preventDefault(); U.tab = "finance"; U.render(); };
     const sh = c.querySelector("[data-strategy-home]"); if (sh) sh.onchange = () => { S.human.strategy = sh.value; U.save(); U.render(); };
@@ -455,7 +466,7 @@
     c.innerHTML = `${U.devPanelHtml()}${U.traitsPanelHtml()}<div class="grid2"><div class="panel"><div class="identity" style="margin-bottom:12px">${U.avatar(me)}<div><div class="name">${esc(me.name)}</div><div class="sub">総合 ${ovr.toFixed(1)} ・ 実力 ${W.strengthOf(S, me).toFixed(1)} ・ ${me.hand === "L" ? "左利き" : "右利き"} ・ ${W.STYLE_LABEL[me.style] || ""} ・ ${esc(hint)}</div></div></div>
       ${U.radarSvg(me.attrs, rv && !rv.retired ? rv.attrs : null)}<div class="small muted" style="text-align:center;margin:-4px 0 10px"><span class="accent">■</span> 自分${rv && !rv.retired ? ` <span class="red">■</span> 宿敵 ${esc(rv.name)}` : ""}</div>
       <div class="attr" style="color:var(--muted);font-size:11px"><span></span><span></span><span class="num">値</span><span>4週</span><span>今季</span></div>${attrs}
-      <h3 style="margin-top:12px">サーフェス適性</h3>${surf}
+      <h3 style="margin-top:12px">サーフェス適性</h3>${surf}${surfFitHtml(me)}
       <h3 style="margin-top:12px">総合の推移（直近${Math.min(hist.length, 120)}週）</h3>${sparkline(hist.map((x) => x.ovr))}
       <p class="small muted">同年代（±1歳）${peers.length + 1}人中 ${me.rank ? myPos + "番目" : "ランク外"}。成長は年齢・隠れた天井・練習の重点・コーチで決まる。</p></div>
       <div><div class="panel"><div class="row between"><h2 style="margin:0;border:0;padding:0">キャリア</h2><button class="small" data-share>キャリアカードを保存</button></div><div class="kpi" style="margin-top:10px"><div class="card"><div class="v">${me.stats.bestRank || "-"}</div><div class="l">最高ランク</div></div><div class="card"><div class="v">${me.stats.titles}</div><div class="l">タイトル</div></div><div class="card"><div class="v">${me.stats.gs}</div><div class="l">GS</div></div><div class="card"><div class="v">${me.stats.m1000}</div><div class="l">1000</div></div><div class="card"><div class="v">${me.stats.weeksNo1}</div><div class="l">No.1週</div></div><div class="card"><div class="v">${money(me.stats.prize)}</div><div class="l">生涯賞金</div></div></div>
@@ -580,7 +591,9 @@
     c.innerHTML = `<div class="panel"><h2>セーブ</h2><p class="small muted">毎回自動保存（このブラウザのlocalStorage）。乱数はシード固定で、リロードしてやり直しても同じ結果になる。</p>
       <div class="row"><button data-export>エクスポート（JSON）</button><label>インポート <input type="file" id="imp" accept=".json"></label></div>
       <p class="small muted" style="margin-top:8px">シード: ${S.seed} ・ 出自: ${U.ORIGINS[S.config.origin].name} ・ 難易度: ${(W.DIFFICULTY[S.config.difficulty] || W.DIFFICULTY.normal).label} ・ 怪我: ${S.config.injuryRealism === "low" ? "低頻度" : "標準"}</p></div>
-      ${S.human.careerOver ? "" : `<div class="panel"><h2>引退</h2><p class="small muted">現役を退く。キャリアの総括と殿堂判定が行われ、殿堂ギャラリーに記録される。年齢だけで引退になることはない。シーズン終了時に「34歳以上で250位の外」または「38歳以上で100位の外」なら引退。32歳以降に順位を大きく落とすと「引退を考える」イベントが届く。${S.human.retireYear ? `<br><b class="gold">${cal(S.human.retireYear)}年がラストシーズン（表明済み）</b>` : ""}</p><button class="danger" id="retire">引退する</button></div>`}
+      ${S.human.careerOver ? "" : `<div class="panel"><h2>引退</h2><p class="small muted">現役を退く。キャリアの総括と殿堂判定が行われ、殿堂ギャラリーに記録される。年齢だけで引退になることはない。シーズン終了時に「34歳以上で250位の外」または「38歳以上で100位の外」なら引退。32歳以降に順位を大きく落とすと「引退を考える」イベントが届く。${S.human.retireYear ? `<br><b class="gold">${cal(S.human.retireYear)}年がラストシーズン（表明済み）</b>` : ""}</p>
+        <div class="row" style="gap:8px;flex-wrap:wrap">${S.human.retireYear ? "" : '<button class="primary" data-announce-open>今季限りで引退を表明…</button>'}<button class="danger" id="retire">今すぐ引退する</button></div>
+        <p class="tiny muted" style="margin-top:6px">表明するとラストシーズンに: 全試合で勝負所 +2、各地の大会の引退セレモニー、元トップ50なら本戦ワイルドカード、最後のGSの決意、好成績なら一度だけ撤回できる。</p></div>`}
       <div class="panel"><h2>セーブスロット</h2><p class="small muted">3つのキャリアを並行して持てる。殿堂ギャラリーは共通。</p>${U.slotsHtml(false)}</div>
       <div class="panel"><h2>表示とサウンド</h2>
         <label class="small" style="display:flex;gap:8px;align-items:center;margin:6px 0"><input type="checkbox" style="width:auto;margin:0" data-setting="sound" ${U.settings.sound ? "checked" : ""}> サウンド（観戦モードの効果音・節目のファンファーレ）</label>
@@ -599,6 +612,7 @@
     c.querySelector("[data-sound-test]").onclick = () => { if (!U.settings.sound) { U.toast("サウンドがオフです"); return; } U.sfx("win"); };
     c.querySelector("[data-hints-reset]").onclick = () => { U.settings.hints = {}; U.saveSettings(); U.toast("ヒントを再表示します"); };
     c.querySelector("[data-intro]").onclick = () => U.openModal(U.introHtml());
+    c.querySelectorAll("[data-announce-open]").forEach((b) => b.onclick = U.announceModal);
     const rb = document.getElementById("retire");
     if (rb) rb.onclick = () => { U.openModal(`<h2>引退する</h2><p>${esc(human().name)}（${W.age(S, human())}歳、${human().rank ? human().rank + "位" : "ランク外"}）は現役を退きますか？この操作は取り消せません。</p><div class="row"><button class="danger" data-confirm-retire>引退する</button><button data-close>やめる</button></div>`); };
   };

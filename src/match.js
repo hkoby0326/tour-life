@@ -7,9 +7,11 @@
 
   const SURF = {
     hard: { base: 0.63, k1: 0.0013, k2: 0.0010, netW: 0.10, rally: 4.8, ace: 1.0 },
-    clay: { base: 0.60, k1: 0.0010, k2: 0.0013, netW: 0.05, rally: 6.0, ace: 0.7 },
-    grass: { base: 0.66, k1: 0.0016, k2: 0.0008, netW: 0.18, rally: 3.8, ace: 1.35 },
-    indoor: { base: 0.65, k1: 0.0015, k2: 0.0009, netW: 0.12, rally: 4.3, ace: 1.15 },
+    // v2.12: serve vs rally weights spread further apart so the surface matters for the style
+    // (equal-overall big server vs baseliner: grass ~56%, clay ~43%; before ~51% / 46%)
+    clay: { base: 0.60, k1: 0.0007, k2: 0.0016, netW: 0.05, rally: 6.0, ace: 0.7 },
+    grass: { base: 0.66, k1: 0.0020, k2: 0.0004, netW: 0.18, rally: 3.8, ace: 1.35 },
+    indoor: { base: 0.65, k1: 0.0018, k2: 0.0006, netW: 0.12, rally: 4.3, ace: 1.15 },
   };
   TL.MATCH_SURF = SURF;
 
@@ -27,6 +29,19 @@
     return { serve, ret, rally, clutch: a.clutch, stamina: a.stamina };
   }
   TL.components = components;
+  // v2.12: style-vs-surface fit in match-win % against an equal-overall all-rounder (approximation of
+  // the point model; calibrated on big server vs baseliner). Surface affinity is not included.
+  function surfaceFit(p) {
+    const out = {};
+    const c = components(Object.assign({}, p, { surf: null, fatigue: 0 }), "hard");
+    const sr = (c.serve + c.ret) / 2 - c.rally; // >0 serve/return player, <0 rally player
+    for (const s of Object.keys(SURF)) {
+      const d = (SURF[s].k1 - SURF.hard.k1) - (SURF[s].k2 - SURF.hard.k2);
+      out[s] = Math.round(sr * d * 600 * 10) / 10;
+    }
+    return out;
+  }
+  TL.surfaceFit = surfaceFit;
   // Overall rating with the weights the match engine actually uses (v2.4). Derived from the point
   // model: serve and return components weigh k1 each, the rally component 2*k2 (hard court), and
   // each component is a mix of skills (see components()). Clutch (big points) and stamina (fatigue

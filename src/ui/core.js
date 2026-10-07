@@ -5,7 +5,7 @@
     W, D, S: null, tab: "home", modal: null, planSel: null, planWeekT: -1, runLog: null, running: false, screens: {},
     SAVE_KEY: "tourlife_v1", SETTINGS_KEY: "tourlife_settings_v1", HOF_KEY: "tourlife_hof_v1",
     DEFAULT_SETTINGS: { stopTournament: true, stopMilestone: true, stopInjury: true, stopSeason: true, stopEvent: true, stopRival: true, watchEnabled: true, watchGs: true, watchFinals: true, watchRival: true, watchTop10: true, watchTitle: true, watchSpeed: 300, sound: false, volume: 0.5, reduceMotion: false, slot: 1, introSeen: false, hints: {}, hintsAlways: false },
-    VERSION: "v2.11.1",
+    VERSION: "v2.12",
   });
   U.ATTRL = W.ATTR_LABEL;
   U.ORIGINS = {
@@ -146,6 +146,7 @@
     const bg = document.getElementById("modalbg");
     bg.onclick = (e) => { if (e.target === bg && !(S && S.human.event) && U.modalClass !== "injury") U.closeModal(); };
     layer.querySelectorAll("[data-close]").forEach((b) => b.onclick = () => U.closeModal());
+    layer.querySelectorAll("[data-announce]").forEach((b) => b.onclick = () => { W.announceRetirement(S, b.dataset.announce); U.save(); U.modal = null; U.render(); });
     layer.querySelectorAll("[data-heal]").forEach((b) => b.onclick = () => { U.modal = null; U.modalClass = null; U.renderModal(); const me = U.human(); if (me.injury) U.runWeeks(Array.from({ length: me.injury.weeks + 1 }, () => ({ type: "rest" })), { untilHealed: true }); });
     layer.querySelectorAll("[data-goto]").forEach((g) => g.onclick = () => { U.tab = g.dataset.goto; U.modal = null; U.render(); });
     layer.querySelectorAll("[data-confirm-new]").forEach((b) => b.onclick = U.resetGame);
@@ -182,6 +183,13 @@
       <h3>記録への挑戦</h3><table class="small">${L.records.map((r) => `<tr><td>${esc(r.label)}</td><td class="num ${r.mineIsRecord ? "gold" : ""}">${r.mine}${r.unit}</td><td class="muted">${r.holder ? `最多 ${r.record}${r.unit}（${esc(r.holder)}）` : "-"}</td><td class="small">${r.mineIsRecord ? '<b class="gold">記録保持</b>' : r.record ? `あと ${r.record - r.mine + 1}` : ""}</td></tr>`).join("")}</table>
       <p class="tiny muted" style="margin-top:8px">配点: ${rule}。ゲーム開始以降のこの世界の成績で数える（開始時のベテランの過去の実績は含まない）。</p>
       <button data-close>閉じる</button>`;
+  };
+  // v2.12: declare the last season
+  U.announceModal = function () {
+    const S = U.S, me = U.human(), { esc } = U, L = W.legacyView(S);
+    U.openModal(`<h2>引退を表明する</h2><p>${esc(me.name)}（${W.age(S, me)}歳、${me.rank ? me.rank + "位" : "ランク外"}、レガシー ${L.total}）。いつを最後のシーズンにする？</p>
+      <ul class="small" style="margin:6px 0 12px 18px;line-height:1.8"><li>ラストシーズンは全試合で勝負所 +2</li><li>GS・ホーム・優勝した大会がセレモニーを企画（受けると勝負所 +3、出場ボーナス）</li><li>元トップ50ならATP大会の本戦ワイルドカードが出やすい</li><li>最後のGSの前に決意を選ぶ。好成績なら一度だけ撤回できる</li></ul>
+      <div class="row" style="gap:8px;flex-wrap:wrap"><button class="primary" data-announce="this">今季限りで引退</button><button data-announce="next">来季限りで引退</button><button data-close>やめておく</button></div>`);
   };
   U.injuryHtml = function () {
     const S = U.S, me = U.human(), inj = me.injury, { esc, money } = U;
