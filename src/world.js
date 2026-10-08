@@ -510,7 +510,7 @@
       const open = G.list.filter((g) => !G.done[g.id] && g.type !== "rank");
       if (open.length && state.week >= 26 && state.week <= 44) add(35, [`今季の目標「${open[0].label}」がまだ残っている。チャンスのある大会を選ぼう`], "g2");
     }
-    const L = legacyOf(h).total;
+    const L = legacyOf(h, state).total;
     if (L > 0 && L < HOF_LINE && HOF_LINE - L <= 100) add(45, [`殿堂ラインまであと${HOF_LINE - L}。GSをもう一つ取れば届く`, "殿堂入りが現実的な目標になってきた。大きな大会で勝とう"]);
     // development
     const dev = devOf(state);
@@ -573,23 +573,24 @@
   // One career score for everyone in the world, so "what am I playing for" has a number and a line.
   // Counted from this world's history (the starting roster's pre-game careers are not included).
   const LEGACY = { GS: 100, FINALS: 50, M1000: 30, A500: 15, A250: 8, CH: 1, no1Week: 3, ye10: 10, ye1: 40, olyG: 60, olyS: 25, olyB: 12, davisW: 40, davisF: 15 };
-  const LEGACY_LABEL = { GS: "グランドスラム", FINALS: "ATPファイナルズ", M1000: "マスターズ1000", A500: "ATP500", A250: "ATP250", CH: "チャレンジャー", no1Week: "No.1在位", ye10: "年末トップ10", ye1: "年末No.1", vow: "有言実行（ラストシーズン優勝）", olyG: "五輪 金メダル", olyS: "五輪 銀メダル", olyB: "五輪 銅メダル", davisW: "デビスカップ優勝", davisF: "デビスカップ準優勝" };
+  const LEGACY_LABEL = { GS: "グランドスラム", FINALS: "ATPファイナルズ", M1000: "マスターズ1000", A500: "ATP500", A250: "ATP250", CH: "チャレンジャー", no1Week: "No.1在位", ye10: "年末トップ10", ye1: "年末No.1", vow: "有言実行（ラストシーズン優勝）", olyG: "五輪 金メダル", olyS: "五輪 銀メダル", olyB: "五輪 銅メダル", davisW: "デビスカップ優勝", davisF: "デビスカップ準優勝", mentor: "指導者として（教え子の実績）" };
   const HOF_LINE = 400; // v2.13: ~6% of careers (≈ two Slams, or one plus a long top-10 career)
   function titleKey(tier) { return tier === 10 ? "FINALS" : tier === 9 ? "GS" : tier === 8 ? "M1000" : tier === 7 ? "A500" : tier === 6 ? "A250" : tier >= 3 ? "CH" : null; }
   function countTitle(p, tier) { const k = titleKey(tier); if (!k) return; p.stats.tw = p.stats.tw || {}; p.stats.tw[k] = (p.stats.tw[k] || 0) + 1; }
-  function legacyOf(p) {
+  function legacyOf(p, state) {
     const s = p.stats, tw = s.tw || {}, parts = {};
     for (const k of ["GS", "FINALS", "M1000", "A500", "A250", "CH"]) if (tw[k]) parts[k] = tw[k] * LEGACY[k];
     if (s.weeksNo1) parts.no1Week = s.weeksNo1 * LEGACY.no1Week;
     if (s.ye10) parts.ye10 = s.ye10 * LEGACY.ye10;
     if (s.ye1) parts.ye1 = s.ye1 * LEGACY.ye1;
     if (s.vowBonus) parts.vow = s.vowBonus;
+    if (p.isHuman && state) { const m = mentorLegacy(state); if (m.total) parts.mentor = m.total; }
     if (s.davis) { if (s.davis.w) parts.davisW = s.davis.w * LEGACY.davisW; if (s.davis.f) parts.davisF = s.davis.f * LEGACY.davisF; }
     if (s.oly) { if (s.oly.g) parts.olyG = s.oly.g * LEGACY.olyG; if (s.oly.s) parts.olyS = s.oly.s * LEGACY.olyS; if (s.oly.b) parts.olyB = s.oly.b * LEGACY.olyB; }
     return { total: Object.values(parts).reduce((a, b) => a + b, 0), parts };
   }
   function legacyTable(state) {
-    return state.players.map((p) => ({ p, v: legacyOf(p).total })).filter((x) => x.v > 0).sort((a, b) => b.v - a.v);
+    return state.players.map((p) => ({ p, v: legacyOf(p, state).total })).filter((x) => x.v > 0).sort((a, b) => b.v - a.v);
   }
   // records the human can chase: the world's best marks, and where the human stands
   function legacyRecords(state) {
@@ -609,7 +610,7 @@
     });
   }
   function legacyView(state) {
-    const h = human(state), L = legacyOf(h), tab = legacyTable(state);
+    const h = human(state), L = legacyOf(h, state), tab = legacyTable(state);
     const pos = tab.findIndex((x) => x.p === h);
     const above = pos > 0 ? tab[pos - 1] : pos === -1 && tab.length ? tab[tab.length - 1] : null;
     const gap = Math.max(0, HOF_LINE - L.total);
@@ -2057,7 +2058,7 @@
   }
   function aiOffWeek(state, p) {
     const rng = state.rng;
-    const mult = ageMult(growthAge(state, p)) * headroomMult(p);
+    const mult = ageMult(growthAge(state, p)) * headroomMult(p) * (state.human.mentor && state.human.mentor.protege === p.id && !state.human.careerOver ? MENTOR_MULT : 1);
     // AI trains toward its weakest skills
     const weakest = ATTRS.slice().sort((a, b) => p.attrs[a] - p.attrs[b]).slice(0, 3);
     for (const k of ATTRS) {
@@ -2388,6 +2389,7 @@
     if (h.rank && (!h.stats.bestRank || h.rank < h.stats.bestRank)) h.stats.bestRank = h.rank;
     if (rv && rv.rank && (!rv.stats.bestRank || rv.rank < rv.stats.bestRank)) rv.stats.bestRank = rv.rank;
     if (report.human || state.t % 4 === 0) updateRival(state, report);
+    mentorWeekly(state, report);
     rivalWeekly(state, h, rival(state));
     for (const m of [300, 200, 100, 50, 20, 10, 5, 1]) {
       if (h.rank && h.rank <= m && !state.human.milestones[m]) {
@@ -2611,7 +2613,49 @@
     news(state, `${A.label} に $${(A.cost / 1000).toFixed(1)}M を投資`);
     return true;
   }
-  function assetsWeekly(state) { const as = assetsOf(state); let c = 0; for (const k of Object.keys(ASSETS)) if (as[k] && ASSETS[k].type === "weekly") c += ASSETS[k].cost; return c; }
+  function assetsWeekly(state) { const as = assetsOf(state); let c = 0; for (const k of Object.keys(ASSETS)) if (as[k] && ASSETS[k].type === "weekly") c += ASSETS[k].cost; if (mentorOf(state).protege) c += MENTOR_COST; return c; }
+  // ---------- mentoring (v2.20) ----------
+  // From the top 50 the player can take one young compatriot (or an academy graduate) under
+  // their wing: the protégé trains harder while the mentor is active, and what the protégés go
+  // on to achieve counts towards the mentor's legacy.
+  const MENTOR_COST = 1.9, MENTOR_MULT = 1.3, MENTOR_UNLOCK = 50;
+  function mentorOf(state) { return state.human.mentor || (state.human.mentor = { protege: null, since: 0, past: [] }); }
+  function mentorUnlocked(state) { return (human(state).stats.bestRank || 9999) <= MENTOR_UNLOCK; }
+  function mentorCandidates(state) {
+    const h = human(state), M = mentorOf(state);
+    return state.players.filter((p) => !p.isHuman && !p.retired && (p.academy || p.country === h.country) && age(state, p) <= 22 && !(M.past || []).some((x) => x.id === p.id))
+      .sort((a, b) => (a.rank || 9999) - (b.rank || 9999)).slice(0, 8);
+  }
+  function setProtege(state, id) {
+    const M = mentorOf(state), h = human(state);
+    if (M.protege) { const cur = state.players.find((p) => p.id === M.protege); if (cur) { M.past.push({ id: cur.id, name: cur.name, from: M.since, to: state.t }); cur.mentored = true; } }
+    M.protege = id || null; M.since = state.t;
+    if (id) { const p = state.players.find((x) => x.id === id); if (p) { p.mentored = true; p.mentorId = h.id; news(state, `${h.name} が ${p.name}（${age(state, p)}歳）を重点指導することに`); } }
+    return true;
+  }
+  // protégés' achievements, scored for the mentor: top 100 +10, top 20 +25, top 10 +40, each tour title +5, Slam +30 (cap 150)
+  function mentorLegacy(state) {
+    let v = 0; const lines = [];
+    for (const p of state.players) {
+      if (!p.mentored && !p.academy) continue;
+      const b = p.stats.bestRank || 9999, tw = p.stats.tw || {}, tour = (tw.A250 || 0) + (tw.A500 || 0) + (tw.M1000 || 0) + (tw.GS || 0) + (tw.FINALS || 0);
+      let x = 0; if (b <= 100) x += 10; if (b <= 20) x += 15; if (b <= 10) x += 15; x += tour * 5 + (tw.GS || 0) * 30;
+      if (x) { v += x; lines.push(`${p.name}（最高${b}位、ツアー${tour}勝）`); }
+    }
+    return { total: Math.min(150, v), lines };
+  }
+  // weekly: protégé milestones
+  function mentorWeekly(state, report) {
+    const M = mentorOf(state); if (!M.protege) return;
+    const p = state.players.find((x) => x.id === M.protege);
+    if (!p || p.retired) { setProtege(state, null); return; }
+    M.marks = M.marks || {};
+    const r = p.rank || 9999;
+    for (const m of [100, 20, 10]) if (r <= m && !M.marks[p.id + ":" + m]) { M.marks[p.id + ":" + m] = 1; news(state, `重点指導中の ${p.name} がトップ${m}入り`); if (report) { report.items.push({ type: "milestone", text: `教え子 ${p.name} がトップ${m}入り` }); awardGP(state, 1, `教え子 ${p.name} のトップ${m}入り`, report); } }
+    const t = p.results.find((x) => x.t === state.t && x.round === "優勝" && D.CATS[x.cat] && D.CATS[x.cat].tier >= 6);
+    if (t) { news(state, `重点指導中の ${p.name} がツアー初優勝（${T2name(t)}）`); if (report) report.items.push({ type: "milestone", text: `教え子 ${p.name} がツアー優勝` }); }
+  }
+  function T2name(r) { return r.name || r.tid; }
   // Travelling party: the player, the coach and the staff who travel.
   function partySize(state) {
     if (cashOf(state).budget) return 1; // budget mode: the player travels alone
@@ -2780,7 +2824,7 @@
     for (const p of state.players) if (!p.retired && p.rank && p.rank <= 10) { p.stats.ye10 = (p.stats.ye10 || 0) + 1; if (p.rank === 1) p.stats.ye1 = (p.stats.ye1 || 0) + 1; }
     summary.goals = settleGoals(state);
     summary.coach = seasonCoach(state, summary);
-    summary.legacy = legacyOf(h).total;
+    summary.legacy = legacyOf(h, state).total;
     state.history.seasons.push(summary);
 
     // aging, retirements, newcomers
@@ -2874,7 +2918,7 @@
     else tag = "夢を追い続けた男";
     const firstTitle = state.history.seasons.find((x) => x.titles.length > 0);
     const late = firstTitle && firstTitle.age >= 27 ? "遅咲きの" : "";
-    const L = legacyOf(h), lt = legacyTable(state), lpos = lt.findIndex((x) => x.p === h);
+    const L = legacyOf(h, state), lt = legacyTable(state), lpos = lt.findIndex((x) => x.p === h);
     const hof = L.total >= HOF_LINE;
     const byCat = {};
     for (const t of allTitles) byCat[t.cat] = (byCat[t.cat] || 0) + 1;
@@ -2890,6 +2934,7 @@
         ...(state.human.farewell && state.human.farewell.cerDone && Object.keys(state.human.farewell.cerDone).length ? [`引退ツアー: ${Object.keys(state.human.farewell.cerDone).length}大会でセレモニー`] : []),
         hof ? "国際テニス殿堂に選出" : "殿堂入りには届かなかったが、記録はここに残る",
         ...(assetsOf(state).academy ? [`母国にアカデミーを設立。${state.players.filter((p) => p.academy).length}人の卒業生がツアーに出た`] : []),
+        ...(() => { const m = mentorLegacy(state); return m.lines.length ? [`教え子: ${m.lines.slice(0, 4).join("、")}（指導者としてレガシー +${m.total}）`] : []; })(),
       ],
       academy: !!assetsOf(state).academy,
     };
@@ -3054,5 +3099,5 @@
     return s;
   }
 
-  TL.World = { davisField, rivalScores, RIVAL_MIN, GP_SINK, DRILL_COOLDOWN, gpDrill, gpPrep, gpSlot, olympicQuota, HEIGHT_BASE, HEIGHT_FX, heightOf, heightEffects, attrCeil, announceRetirement, isFarewell, farewellOf, coachTalk, LEGACY, LEGACY_LABEL, HOF_LINE, legacyOf, legacyView, goalsView, strategyOk, devStyleOk, declineMods, declineEstimate, RIVALS, rehabWeekly, aiTraitList, TRAIT_LV, TRAIT_COST, traitLevels, traitLevel, traitList, traitSlots, traitEffectText, traitReq, dropTrait, bigTimeline, strengthOf, cashOf, fundingOptions, useFunding, setBudget, JOBS, forcedRetire, TRAIN_SLOTS, TRAIN_CATS, allocOf, allocShare, autoAlloc, allocSummary, TRAITS, hasTrait, traitReqOk, learnTrait, DEV_STYLES, INTENSITY, devOf, styleGap, autoFocus, trainRate, STRATEGIES, sharpBonus, sharpLabel, confLabel, sponsorsOf, brandOf, sponsorOffer, sponsorUnlocked, activeContracts, signSponsor, releaseSponsor, sponsorTerminationFee, sponsorPerks, sponsorWeekly, ASSETS, TAX, AGENT_CUT, assetsOf, assetUnlocked, buyAsset, assetsWeekly, DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
+  TL.World = { MENTOR_COST, MENTOR_MULT, MENTOR_UNLOCK, mentorOf, mentorUnlocked, mentorCandidates, setProtege, mentorLegacy, davisField, rivalScores, RIVAL_MIN, GP_SINK, DRILL_COOLDOWN, gpDrill, gpPrep, gpSlot, olympicQuota, HEIGHT_BASE, HEIGHT_FX, heightOf, heightEffects, attrCeil, announceRetirement, isFarewell, farewellOf, coachTalk, LEGACY, LEGACY_LABEL, HOF_LINE, legacyOf, legacyView, goalsView, strategyOk, devStyleOk, declineMods, declineEstimate, RIVALS, rehabWeekly, aiTraitList, TRAIT_LV, TRAIT_COST, traitLevels, traitLevel, traitList, traitSlots, traitEffectText, traitReq, dropTrait, bigTimeline, strengthOf, cashOf, fundingOptions, useFunding, setBudget, JOBS, forcedRetire, TRAIN_SLOTS, TRAIN_CATS, allocOf, allocShare, autoAlloc, allocSummary, TRAITS, hasTrait, traitReqOk, learnTrait, DEV_STYLES, INTENSITY, devOf, styleGap, autoFocus, trainRate, STRATEGIES, sharpBonus, sharpLabel, confLabel, sponsorsOf, brandOf, sponsorOffer, sponsorUnlocked, activeContracts, signSponsor, releaseSponsor, sponsorTerminationFee, sponsorPerks, sponsorWeekly, ASSETS, TAX, AGENT_CUT, assetsOf, assetUnlocked, buyAsset, assetsWeekly, DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
 })(typeof globalThis !== "undefined" ? globalThis : window);

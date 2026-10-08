@@ -531,13 +531,28 @@
         <table><tr><th>プラン</th><th>効果</th></tr><tr><td>相手に合わせる</td><td class="small">試合ごとに相手のタイプ（サーブ型／ラリー型／カウンター型／オールラウンド型）を読み、コーチが対策プランを選ぶ。対策が噛み合うと全局面 +0.8（勝率 約+1.7%）。手動でも噛み合えば同じ効果。試合前の判断で決まり、セット間の切替では付かない</td></tr><tr><td>バランス</td><td class="small">標準</td></tr><tr><td>攻撃的</td><td class="small">サーブ ＋2.5、ラリー ＋1、リターン −2。タイブレーク勝負になりやすい</td></tr><tr><td>守備的</td><td class="small">リターン ＋2.5、ラリー ＋0.5、サーブ −2。試合が長くなり疲労 ×1.1</td></tr><tr><td>体力温存</td><td class="small">全体 −1.5、疲労 ×0.7。格下相手や連戦向け</td></tr></table>
         <div class="row" style="margin-top:8px"><label class="small">現在: <select data-plan>${Object.entries(TL.PLANS).map(([k, p]) => `<option value="${k}" ${H.plan === k ? "selected" : ""}>${p.label}</option>`).join("")}</select></label>
         <label class="small">セット間: <select data-rule><option value="none" ${H.switchRule === "none" ? "selected" : ""}>切り替えない</option><option value="behind" ${H.switchRule === "behind" ? "selected" : ""}>セットを落としたら攻撃的に</option></select></label></div></div>
+      ${mentorPanel()}
       <div class="panel"><h2>チームの効果</h2><ul class="small muted"><li>技術コーチ: 練習週の重点スキル</li><li>フィジカル: 練習週の身体系＋毎週の疲労回復</li><li>メンタル: クラッチ・集中の練習効果＋全試合のブレークポイント</li><li>クレー／芝の専門家: 練習週に適性が上がり、そのサーフェスの試合経験値が増える</li><li>スタッフ: フィジオ（怪我・回復）、トレーナー（身体系・回復・怪我）、ヒッティング（練習・経験値）、エージェント（スポンサー・アピアランスフィー・WC）、アナリスト（格上戦）</li></ul></div></div></div>`;
     c.querySelectorAll("[data-hire]").forEach((b) => b.onclick = () => { W.hireCoach(S, parseInt(b.dataset.hire, 10)); U.save(); U.render(); });
     const f = c.querySelector("[data-fire]"); if (f) f.onclick = () => { const fee = W.terminationFee(S); U.openModal(`<h2>契約解除</h2><p>${esc(H.coach.name)} との契約を解除しますか？残り期間の半額（上限26週）が違約金になります: <b>${money(fee)}</b></p><div class="row"><button class="danger" data-confirm-fire>解除する</button><button data-close>やめる</button></div>`); };
     c.querySelectorAll("[data-staff]").forEach((cb) => cb.onchange = () => { W.setStaff(S, cb.dataset.staff, cb.checked); U.save(); U.render(); });
     c.querySelector("[data-plan]").onchange = (e) => { H.plan = e.target.value; U.save(); };
     c.querySelector("[data-rule]").onchange = (e) => { H.switchRule = e.target.value; U.save(); };
+    c.querySelectorAll("[data-protege]").forEach((b) => b.onclick = () => { const id = parseInt(b.dataset.protege, 10) || null; W.setProtege(S, id); U.save(); U.render(); });
   };
+  // v2.20: mentoring panel
+  function mentorPanel() {
+    const S = U.S, M = W.mentorOf(S), me = human();
+    if (!W.mentorUnlocked(S)) return `<div class="panel"><h2>後進の育成</h2><p class="small muted">最高50位に入ると、若い同国の選手（またはアカデミーの卒業生）を1人、重点的に指導できる。教え子の実績はレガシーに加わる。</p></div>`;
+    const cur = M.protege ? S.players.find((p) => p.id === M.protege) : null;
+    const cands = W.mentorCandidates(S).filter((p) => !cur || p.id !== cur.id);
+    const row = (p) => `<tr><td><span data-player="${p.id}" class="accent">${esc(p.name)}</span>${p.academy ? ' <span class="pill">アカデミー</span>' : ""}</td><td class="num">${W.age(S, p)}歳</td><td class="num">${p.rank || "-"}位</td><td class="num">${p.stats.bestRank || "-"}位</td><td><button class="small" data-protege="${p.id}">${cur ? "替える" : "指導する"}</button></td></tr>`;
+    const ml = W.mentorLegacy(S);
+    return `<div class="panel"><h2>後進の育成 <span class="muted small">週 ${money(W.MENTOR_COST)}（指導中のみ）</span></h2>
+      ${cur ? `<div class="card"><div class="identity" data-player="${cur.id}">${U.avatar(cur)}<div><div class="name">${esc(cur.name)} <span class="pill gold">教え子</span>${cur.academy ? ' <span class="pill">アカデミー</span>' : ""}</div><div class="sub">${W.age(S, cur)}歳 ・ ${cur.rank ? cur.rank + "位" : "ランク外"} ・ 最高${cur.stats.bestRank || "-"}位 ・ タイトル${cur.stats.titles} ・ 指導${Math.floor((S.t - M.since) / 52)}年</div></div></div><p class="tiny muted" style="margin-top:4px">練習効果 ×${W.MENTOR_MULT}。トップ100・20・10入りで成長ポイント +1。<button class="small" data-protege="0" style="margin-left:6px">指導を終える</button></p></div>` : '<p class="small muted">いま指導している選手はいない。</p>'}
+      ${cands.length ? `<div class="tscroll"><table class="small"><tr><th>候補（同国の22歳以下・アカデミー卒）</th><th class="num">年齢</th><th class="num">順位</th><th class="num">最高</th><th></th></tr>${cands.map(row).join("")}</table></div>` : '<p class="tiny muted">候補がいない（同国の22歳以下の選手、またはアカデミー卒業生）。</p>'}
+      <p class="tiny muted" style="margin-top:6px">指導者としてのレガシー: <b>${ml.total}</b>（教え子・卒業生の最高100位 +10、20位 +15、10位 +15、ツアー優勝 +5、GS +30、上限150）${ml.lines.length ? ` ・ ${ml.lines.slice(0, 3).map(esc).join("、")}` : ""}</p></div>`;
+  }
 
   // ---------- 財務 ----------
   U.screens.finance = function (c) {
