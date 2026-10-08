@@ -5,7 +5,7 @@
     W, D, S: null, tab: "home", modal: null, planSel: null, planWeekT: -1, runLog: null, running: false, screens: {},
     SAVE_KEY: "tourlife_v1", SETTINGS_KEY: "tourlife_settings_v1", HOF_KEY: "tourlife_hof_v1",
     DEFAULT_SETTINGS: { stopTournament: true, stopMilestone: true, stopInjury: true, stopSeason: true, stopEvent: true, stopRival: true, watchEnabled: true, watchDepth: { gs: "all", m1000: "sf", tour: "final", lower: "final" }, watchLowerFinal: true, watchGs: true, watchFinals: true, watchRival: true, watchTop10: true, watchTitle: true, watchSpeed: 300, sound: false, volume: 0.5, reduceMotion: false, slot: 1, introSeen: false, hints: {}, hintsAlways: false },
-    VERSION: "v2.20",
+    VERSION: "v2.20.1",
   });
   U.ATTRL = W.ATTR_LABEL;
   U.ORIGINS = {
@@ -67,7 +67,19 @@
   U.slot = () => U.settings.slot || 1;
   U.saveKeyFor = (n) => (n === 1 ? U.SAVE_KEY : `${U.SAVE_KEY}_s${n}`);
   U.save = () => { try { localStorage.setItem(U.saveKeyFor(U.slot()), W.serialize(U.S)); } catch (e) { console.warn(e); } };
-  U.load = () => { try { const j = localStorage.getItem(U.saveKeyFor(U.slot())); U.S = j ? W.deserialize(j) : null; } catch (e) { console.warn(e); U.S = null; } };
+  U.load = () => { let j = null; try { j = localStorage.getItem(U.saveKeyFor(U.slot())); U.S = j ? W.deserialize(j) : null; U.loadError = null; } catch (e) { console.error(e); U.S = null; U.loadError = { e, raw: j }; } };
+  // v2.20.1: errors are shown on screen (with the save still exportable) instead of a blank page
+  U.fatalHtml = (e, title) => `<div class="panel fatal"><h2>${U.esc(title || "エラーが発生しました")}</h2><p class="small">${U.esc(String(e && e.message || e))}</p><pre class="tiny muted" style="white-space:pre-wrap;max-height:160px;overflow:auto">${U.esc(String(e && e.stack || "").split("\n").slice(0, 6).join("\n"))}</pre>
+    <p class="small muted">${U.VERSION} ・ まず再読み込み（スマホは一度タブを閉じて開き直す、PCは Shift+再読み込み）で古いファイルの混在が直ることがあります。直らなければ、この文面とエクスポートしたセーブを開発者に送ってください。</p>
+    <div class="row" style="gap:8px;flex-wrap:wrap"><button class="primary" data-fatal-reload>再読み込み</button><button data-fatal-export>セーブをエクスポート</button><button data-fatal-home>ホームへ</button><button class="danger" data-fatal-reset-settings>設定を初期化</button></div></div>`;
+  U.bindFatal = (root) => {
+    const q = (sel) => root.querySelector(sel);
+    const rl = q("[data-fatal-reload]"); if (rl) rl.onclick = () => location.reload(true);
+    const ex = q("[data-fatal-export]"); if (ex) ex.onclick = () => { try { const raw = (U.loadError && U.loadError.raw) || (U.S ? W.serialize(U.S) : localStorage.getItem(U.saveKeyFor(U.slot()))); const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([raw || "{}"], { type: "application/json" })); a.download = `tourlife-save-${Date.now()}.json`; a.click(); } catch (e2) { alert("エクスポートに失敗: " + e2.message); } };
+    const hm = q("[data-fatal-home]"); if (hm) hm.onclick = () => { U.tab = "home"; U.modal = null; U.render(); };
+    const rs = q("[data-fatal-reset-settings]"); if (rs) rs.onclick = () => { if (confirm("表示・観戦などの設定を初期化します（セーブは消えません）")) { try { localStorage.removeItem(U.SETTINGS_KEY); } catch (e2) {} location.reload(); } };
+  };
+  U.showFatal = (e, title) => { try { let box = document.getElementById("fatal"); if (!box) { box = document.createElement("div"); box.id = "fatal"; document.body.appendChild(box); } box.innerHTML = U.fatalHtml(e, title); U.bindFatal(box); } catch (e2) { alert((title || "エラー") + ": " + (e && e.message || e)); } };
   U.slotInfo = (n) => { try { const j = localStorage.getItem(U.saveKeyFor(n)); if (!j) return null; const s = JSON.parse(j); const h = s.players.find((p) => p.id === s.humanId); return { name: h.name, country: h.country, year: W.START_YEAR + s.year - 1, week: s.week, rank: h.rank, titles: h.stats.titles, age: W.START_YEAR + s.year - 1 - h.birthYear, over: !!s.human.careerOver, kb: Math.round(j.length / 1024) }; } catch (e) { return null; } };
   U.switchSlot = (n) => { if (U.S) U.save(); U.settings.slot = n; U.saveSettings(); U.modal = null; U.runLog = null; U.planSel = null; U.tab = "home"; U.load(); U.render(); };
   U.copyToSlot = (n) => { try { localStorage.setItem(U.saveKeyFor(n), W.serialize(U.S)); } catch (e) {} U.toast(`スロット${n}に保存した`); U.closeModal(); U.render(); };
@@ -135,7 +147,8 @@
     if (more) more.onclick = () => U.openModal(`<h2>メニュー</h2><div class="grid2" style="grid-template-columns:repeat(2,1fr)">${U.TABS.filter(([k]) => !U.PRIMARY.includes(k)).map(([k, l]) => `<button class="${U.tab === k ? "primary" : ""}" data-goto="${k}" style="display:flex;gap:8px;align-items:center;justify-content:flex-start">${U.icon(k)} ${l}</button>`).join("")}</div><div style="margin-top:10px"><button data-close>閉じる</button></div>`);
     U.bindPlayerLinks(app);
     const c = document.getElementById("content");
-    (U.screens[U.tab] || U.screens.home)(c);
+    try { (U.screens[U.tab] || U.screens.home)(c); }
+    catch (e) { console.error(e); c.innerHTML = U.fatalHtml(e, `画面「${U.TAB_LABEL[U.tab] || U.tab}」の描画でエラー`); U.bindFatal(c); }
     U.applyHints(c);
     U._renderedTab = U.tab;
     // same screen re-rendered (e.g. a plan pick): keep the reader's place instead of jumping to the top
