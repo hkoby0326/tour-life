@@ -1613,7 +1613,7 @@
       const bonus = { g: 100, s: 40, b: 20 }[kind];
       state.human.money += bonus; state.human.pendingBonus = (state.human.pendingBonus || 0) + bonus;
       awardGP(state, { g: 5, s: 3, b: 2 }[kind], `オリンピック${label}`, report);
-      report.items.push({ type: "milestone", text: `オリンピック${label}！ スポンサーから $${bonus}k` });
+      (report.items || (report.items = [])).push({ type: "milestone", text: `オリンピック${label}！ スポンサーから $${bonus}k` });
       if (kind === "g") { state.human.olyGold = (state.human.olyGold || 0) + 1; state.human.sponsor2 = { weekly: (state.human.sponsor2.weekly || 0) + 1, until: state.t + 52 }; }
     }
   }
