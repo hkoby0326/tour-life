@@ -33,7 +33,8 @@
       <div class="row" style="margin:8px 0"><button id="v-play" class="primary">▶ 再生</button><button id="v-point">1ポイント</button><button id="v-set">セット終了まで</button><button id="v-skip">スキップ</button>
         <label class="small">速度 <select id="v-speed"><option value="900" ${speed === 900 ? "selected" : ""}>ゆっくり</option><option value="450" ${speed === 450 || speed === 300 ? "selected" : ""}>普通</option><option value="120" ${speed === 120 || speed === 80 ? "selected" : ""}>速い</option></select></label>
         <button id="v-snd" class="small" title="サウンド">${U.settings.sound ? "🔊" : "🔇"}</button>
-        <label class="small">プラン <select id="v-planSel">${Object.entries(TL.PLANS).map(([k, p]) => `<option value="${k}" ${m.plans[hi] === k ? "selected" : ""}>${p.label}</option>`).join("")}</select></label></div>
+        <label class="small">プラン <select id="v-planSel">${Object.entries(TL.PLANS).filter(([, p]) => !p.auto).map(([k, p]) => `<option value="${k}" ${m.plans[hi] === k ? "selected" : ""}>${p.label}</option>`).join("")}</select></label></div>
+      ${y.tactic ? `<div class="small tactic"><span class="muted">相手は</span> <b>${esc(y.tactic.oppStyle)}</b> <span class="muted">→ コーチの推奨は</span> <b>${TL.PLANS[y.tactic.suggested].label}</b>${y.tactic.hit ? ' <span class="green">✓ 作戦が噛み合っている（全局面 +0.8）</span>' : ` <span class="gold">現在: ${TL.PLANS[y.tactic.plan].label}</span>`}<div class="tiny muted">${esc(y.tactic.why)}</div></div>` : ""}
       <div class="grid2"><div><h3>実況</h3><div id="v-feed" class="feed"></div></div><div><h3>スタッツ</h3><table class="small" id="v-stats"></table></div></div>
       <div class="row" style="margin-top:10px;justify-content:flex-end"><button id="v-done" class="primary" disabled>続ける</button></div></div>`;
     document.body.appendChild(bg);

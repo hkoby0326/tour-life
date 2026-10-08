@@ -251,7 +251,7 @@
       config: { name: cfg.name || "選手", country: cfg.country || "JPN", origin: cfg.origin || "grinder", injuryRealism: cfg.injuryRealism || "standard", difficulty: DIFFICULTY[cfg.difficulty] ? cfg.difficulty : "normal" },
       rankSnaps: [], history: { tournaments: [], seasons: [], matches: [], news: [] }, lastReport: null,
       human: { money: 0, sponsorWeekly: 0, sponsorUntil: 0, wcBoostUntil: 0, lastRegion: null, focus: ["serve", "fh"], careerOver: false, epilogue: null, milestones: {},
-        coach: null, physio: false, coachOffers: [], plan: "balanced", switchRule: "none", event: null, lastEventT: -99, forceRest: false, riskWeek: -1, sponsor2: { weekly: 0, until: 0 }, pressureUntil: -1, attrHist: [], seasonStartAttrs: null, exhibitionYear: 0, rivalry: { heat: 25, log: [], flags: {}, lastCross: -99 }, rivalAhead: null, focusBoostUntil: -1, assets: { jet: false, medical: false, base: false, academy: false }, investment: null, pendingPurchase: 0, sponsors: { racket: null, apparel: null, shoes: null, other: [] }, sponsorsInit: true, pendingSigning: 0, pendingBonus: 0, strategy: "big", dev: { style: null, intensity: "normal", auto: false, established: false }, actLog: [], alloc: { serve: 3, stroke: 3, ret: 2, physical: 2, mental: 0, match: 0 }, allocV2: true, gp: 0, gpLog: [], traits: [], traitLv: {}, aiTraitsInit: true, legacyInit: true, rivalV2: true, rivalCands: [], cash: { budget: false, loan: 0, loanRate: 0, unpaid: 0, family: false, crowd: false, fedYear: 0, job: null, jobUntil: 0, jobCooldown: {}, crisisYear: 0, lowYear: 0 } },
+        coach: null, physio: false, coachOffers: [], plan: "adaptive", switchRule: "none", event: null, lastEventT: -99, forceRest: false, riskWeek: -1, sponsor2: { weekly: 0, until: 0 }, pressureUntil: -1, attrHist: [], seasonStartAttrs: null, exhibitionYear: 0, rivalry: { heat: 25, log: [], flags: {}, lastCross: -99 }, rivalAhead: null, focusBoostUntil: -1, assets: { jet: false, medical: false, base: false, academy: false }, investment: null, pendingPurchase: 0, sponsors: { racket: null, apparel: null, shoes: null, other: [] }, sponsorsInit: true, pendingSigning: 0, pendingBonus: 0, strategy: "big", dev: { style: null, intensity: "normal", auto: false, established: false }, actLog: [], alloc: { serve: 3, stroke: 3, ret: 2, physical: 2, mental: 0, match: 0 }, allocV2: true, gp: 0, gpLog: [], traits: [], traitLv: {}, aiTraitsInit: true, legacyInit: true, rivalV2: true, rivalCands: [], cash: { budget: false, loan: 0, loanRate: 0, unpaid: 0, family: false, crowd: false, fedYear: 0, job: null, jobUntil: 0, jobCooldown: {}, crisisYear: 0, lowYear: 0 } },
       cutoffs: {},
     };
     state.rng = new TL.RNG(seed);
@@ -1229,7 +1229,7 @@
     mo.clutch = [0, 1].map((i) => ((mo.clutch && mo.clutch[i]) || 0) + ([a, b][i].conf || 0) * 0.2);
     if (hum && isImportant(state, T, label, a, b, qualifying)) {
       const m = TL.Match.create(a, b, mo);
-      yield { type: "match", match: m, T, round: label, a, b };
+      yield { type: "match", match: m, T, round: label, a, b, tactic: mo.tactic || null };
       return m.result || m.finish();
     }
     return TL.Match.play(a, b, mo);
@@ -1330,11 +1330,18 @@
       bonus[idx].serve += sb.serve || 0; bonus[idx].ret += sb.ret || 0; bonus[idx].rally += (sb.rally || 0) + (sb.clay && T && T.surface === "clay" ? sb.clay : 0);
       clutch[idx] += sb.clutch || 0;
     }
+    // v2.19: tactics against this opponent — "adaptive" picks the counter plan; any plan that
+    // counters the opponent's style gets a small edge, so reading the opponent pays
+    const read = TL.styleRead(opp, T ? T.surface : "hard");
+    let tactic = { oppStyle: read.label, suggested: read.plan, why: read.why, plan: plans[idx], auto: false, hit: false };
+    if (plans[idx] === "adaptive") { plans[idx] = read.plan; tactic.plan = read.plan; tactic.auto = true; }
+    if (plans[idx] === read.plan && read.plan !== "balanced") { tactic.hit = true; bonus[idx].serve += TL.TACTIC_EDGE; bonus[idx].ret += TL.TACTIC_EDGE; bonus[idx].rally += TL.TACTIC_EDGE; }
+    else if (plans[idx] === read.plan) tactic.hit = true;
     // veteran schedule: the season is built around the big events
     if (H.strategy === "veteran" && T && (T.def.tier >= 8 || T.cat === "FINALS")) { bonus[idx].serve += 1.5; bonus[idx].ret += 1.5; }
     // charged rivalry: big points swing more for both (clutch difference matters more)
     if (opp.isRival && H.rivalry && H.rivalry.heat >= 60) { const k = (H.rivalry.heat - 60) / 40; clutch[idx] += (me.attrs.clutch - opp.attrs.clutch) * 0.15 * k; }
-    return { plans, rules, clutch, edge, bonus, traits, tctx };
+    return { plans, rules, clutch, edge, bonus, traits, tctx, tactic };
   }
   // per-match consequences: stats, fatigue, xp, injury roll
   function afterMatch(state, w, l, res, T, label) {

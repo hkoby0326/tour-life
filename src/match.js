@@ -74,8 +74,38 @@
     aggressive: { label: "攻撃的", serve: 2.5, rally: 1.0, ret: -2.0, fat: 1 },
     defensive: { label: "守備的", serve: -2.0, rally: 0.5, ret: 2.5, fat: 1.1 },
     conserve: { label: "体力温存", serve: -1.5, rally: -1.5, ret: -1.5, fat: 0.7 },
+    adaptive: { label: "相手に合わせる（コーチ推奨）", serve: 0, rally: 0, ret: 0, fat: 1, auto: true }, // v2.19: resolved per match
   };
-  TL.PLANS = PLANS;
+  // v2.19: what kind of opponent this is, and the plan that counters it. Big servers are blunted
+  // by a return-first plan, grinders by shortening the points, all-rounders by playing it straight.
+  const READ = {
+    server: { label: "サーブ型", plan: "defensive", why: "サーブが武器。守備的に構えてリターンで崩す" },
+    big: { label: "サーブ型", plan: "defensive", why: "一撃の威力がある相手。守備的に構えて拾い、ミスを待つ" },
+    grass: { label: "サーブ型", plan: "defensive", why: "速い展開を好む相手。守備的に構えてリターンで崩す" },
+    grinder: { label: "ラリー型", plan: "aggressive", why: "ラリーで粘る相手。攻撃的に出てポイントを短くする" },
+    clay: { label: "ラリー型", plan: "aggressive", why: "長いラリーに強い相手。攻撃的に出て主導権を渡さない" },
+    baseline: { label: "ラリー型", plan: "aggressive", why: "ストロークで押してくる相手。先に仕掛けて短く終わらせる" },
+    counter: { label: "カウンター型", plan: "aggressive", why: "リターンが良い相手。自分のサービスゲームは攻めて主導権を取る" },
+    all: { label: "オールラウンド型", plan: "balanced", why: "穴のない相手。バランスで入り、流れを見て切り替える" },
+    mental: { label: "勝負強い型", plan: "balanced", why: "大事な場面で強い相手。バランスで入り、勝負所は集中する" },
+  };
+  function styleRead(p, surface) {
+    if (p.style && READ[p.style]) return Object.assign({ style: p.style }, READ[p.style]);
+    const c = components(Object.assign({}, p, { fatigue: 0 }), surface || "hard");
+    const sr = (c.serve + c.ret) / 2 - c.rally;
+    if (c.serve - c.ret >= 4 && sr >= 1) return Object.assign({ style: "server" }, READ.server);
+    if (sr <= -3) return Object.assign({ style: "grinder" }, READ.grinder);
+    if (c.ret - c.serve >= 4) return Object.assign({ style: "counter" }, READ.counter);
+    return Object.assign({ style: "all" }, READ.all);
+  }
+  TL.styleRead = styleRead;
+  const TACTIC_EDGE = 0.8; // all three components when the plan counters the opponent's style
+  TL.PLANS = PLANS; TL.TACTIC_EDGE = TACTIC_EDGE;
+  // v2.19: a plan also shapes the points. Attacking shortens them (the rally component matters
+  // less, the serve/return exchange more); defending lengthens them. Both players' plans apply,
+  // so the right plan shrinks the part of the game where the opponent is stronger.
+  const PLAN_SHAPE = { aggressive: { k1: 1.1, k2: 0.75 }, defensive: { k1: 0.78, k2: 1.18 } };
+  TL.PLAN_SHAPE = PLAN_SHAPE;
   function applyPlan(base, plan, clutchBonus) {
     const P = PLANS[plan] || PLANS.balanced;
     return { serve: base.serve + P.serve, ret: base.ret + P.ret, rally: base.rally + P.rally, clutch: base.clutch + (clutchBonus || 0), stamina: base.stamina, fat: P.fat };
@@ -146,7 +176,9 @@
     }
     function pPoint(sv, rt, ctx) {
       const A = comp[sv], B = comp[rt];
-      let p = S.base + S.k1 * (A.serve + form[sv] - (B.ret + form[rt])) + S.k2 * (A.rally + form[sv] - (B.rally + form[rt]));
+      const sa = PLAN_SHAPE[M.plans[sv]] || { k1: 1, k2: 1 }, sb = PLAN_SHAPE[M.plans[rt]] || { k1: 1, k2: 1 };
+      const k1 = S.k1 * sa.k1 * sb.k1, k2 = S.k2 * sa.k2 * sb.k2;
+      let p = S.base + k1 * (A.serve + form[sv] - (B.ret + form[rt])) + k2 * (A.rally + form[sv] - (B.rally + form[rt]));
       p += momentum[sv] - momentum[rt];
       const fat = (s) => Math.max(0, M.setNo) * 0.006 * (1 - comp[s].stamina / 100) * 2 * MAR[TR[s].get("marathon") || 0];
       p -= fat(sv) - fat(rt);

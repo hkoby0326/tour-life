@@ -442,3 +442,6 @@ tr.flash-me td{animation:flashMe .45s} tr.flash-op td{animation:flashOp .45s}
 
 /* v2.16 serve speed */
 .kind .kmh{display:inline-block;margin-left:8px;padding:1px 7px;border-radius:9px;background:var(--panel3);color:var(--text);font-size:11px;font-weight:600;letter-spacing:.02em}
+
+/* v2.19 tactics line in the viewer */
+.viewer .tactic{margin:6px 0 2px;padding:6px 10px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--panel2)}
