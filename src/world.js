@@ -572,8 +572,8 @@
   // ---------- legacy (v2.11) ----------
   // One career score for everyone in the world, so "what am I playing for" has a number and a line.
   // Counted from this world's history (the starting roster's pre-game careers are not included).
-  const LEGACY = { GS: 100, FINALS: 50, M1000: 30, A500: 15, A250: 8, CH: 1, no1Week: 3, ye10: 10, ye1: 40, olyG: 60, olyS: 25, olyB: 12 };
-  const LEGACY_LABEL = { GS: "グランドスラム", FINALS: "ATPファイナルズ", M1000: "マスターズ1000", A500: "ATP500", A250: "ATP250", CH: "チャレンジャー", no1Week: "No.1在位", ye10: "年末トップ10", ye1: "年末No.1", vow: "有言実行（ラストシーズン優勝）", olyG: "五輪 金メダル", olyS: "五輪 銀メダル", olyB: "五輪 銅メダル" };
+  const LEGACY = { GS: 100, FINALS: 50, M1000: 30, A500: 15, A250: 8, CH: 1, no1Week: 3, ye10: 10, ye1: 40, olyG: 60, olyS: 25, olyB: 12, davisW: 40, davisF: 15 };
+  const LEGACY_LABEL = { GS: "グランドスラム", FINALS: "ATPファイナルズ", M1000: "マスターズ1000", A500: "ATP500", A250: "ATP250", CH: "チャレンジャー", no1Week: "No.1在位", ye10: "年末トップ10", ye1: "年末No.1", vow: "有言実行（ラストシーズン優勝）", olyG: "五輪 金メダル", olyS: "五輪 銀メダル", olyB: "五輪 銅メダル", davisW: "デビスカップ優勝", davisF: "デビスカップ準優勝" };
   const HOF_LINE = 400; // v2.13: ~6% of careers (≈ two Slams, or one plus a long top-10 career)
   function titleKey(tier) { return tier === 10 ? "FINALS" : tier === 9 ? "GS" : tier === 8 ? "M1000" : tier === 7 ? "A500" : tier === 6 ? "A250" : tier >= 3 ? "CH" : null; }
   function countTitle(p, tier) { const k = titleKey(tier); if (!k) return; p.stats.tw = p.stats.tw || {}; p.stats.tw[k] = (p.stats.tw[k] || 0) + 1; }
@@ -584,6 +584,7 @@
     if (s.ye10) parts.ye10 = s.ye10 * LEGACY.ye10;
     if (s.ye1) parts.ye1 = s.ye1 * LEGACY.ye1;
     if (s.vowBonus) parts.vow = s.vowBonus;
+    if (s.davis) { if (s.davis.w) parts.davisW = s.davis.w * LEGACY.davisW; if (s.davis.f) parts.davisF = s.davis.f * LEGACY.davisF; }
     if (s.oly) { if (s.oly.g) parts.olyG = s.oly.g * LEGACY.olyG; if (s.oly.s) parts.olyS = s.oly.s * LEGACY.olyS; if (s.oly.b) parts.olyB = s.oly.b * LEGACY.olyB; }
     return { total: Object.values(parts).reduce((a, b) => a + b, 0), parts };
   }
@@ -933,10 +934,6 @@
       ev = { id: "rivalinjury", title: `${rv.name} が長期離脱`, text: `宿敵が${rv.injury.label}で${rv.injury.weeks}週の離脱。連絡を取るか、黙って差を広げるか。`, choices: [
         { key: "visit", label: "見舞いのメッセージを送る", desc: "集中力 ＋0.5、因縁 −20" },
         { key: "focus", label: "好機とみて練習に集中", desc: "4週間、練習効果 ＋25%、因縁 ＋10" }] };
-    } else if ((state.week === 4 || state.week === 36) && r <= 150 && topOfCountry && !h.injury) {
-      ev = { id: "daviscup", title: `デビスカップ ${countryName}代表に招集`, text: "代表戦は国の期待を背負う。経験は得られるが、翌週の大会に疲労を持ち越す。", choices: [
-        { key: "accept", label: "受ける", desc: "疲労＋15、クラッチ＋0.8、国内スポンサー ＋$0.3k/週（1年）" },
-        { key: "decline", label: "辞退する", desc: h.country === "JPN" ? "国内メディアに批判される（スポンサー収入 −$0.2k/週、半年）" : "特に影響なし" }] };
     } else if (state.week >= 48 && state.week <= 50 && r <= 60 && H.exhibitionYear !== state.year && rng.chance(0.6)) {
       const fee = r <= 10 ? 300 : r <= 30 ? 120 : 50;
       H.exhibitionYear = state.year;
@@ -1062,7 +1059,8 @@
     const list = [];
     for (const c of D.ATP_CALENDAR) {
       if (c.week !== week) continue;
-      list.push({ id: c.id + "-" + year, tid: c.id, name: c.name, cat: c.cat, def: D.CATS[c.cat], surface: c.surface, country: c.country, region: D.COUNTRIES[c.country].region, isAtp: true });
+      const country = c.cat === "DAVIS" ? D.DAVIS_HOSTS[(year - 1) % D.DAVIS_HOSTS.length] : c.country;
+      list.push({ id: c.id + "-" + year, tid: c.id, name: c.name, cat: c.cat, def: D.CATS[c.cat], surface: c.surface, country, region: D.COUNTRIES[country].region, isAtp: c.cat !== "DAVIS" });
     }
     const oly = week === D.OLYMPICS.week ? D.olympicsFor(START_YEAR + year - 1) : null;
     if (oly) list.push({ id: "oly-" + year, tid: "oly", name: `${oly.city}オリンピック`, cat: "OLY", def: D.CATS.OLY, surface: oly.surface, country: oly.country, region: D.COUNTRIES[oly.country].region, isAtp: false, oly: true });
@@ -1115,6 +1113,7 @@
     const home = T.country === h.country;
     const D0 = directCut(T);
     if (T.cat === "FINALS") return { code: r <= 8 ? "direct" : "none", label: r <= 8 ? "出場権あり" : "上位8名のみ" };
+    if (T.cat === "DAVIS") { const f = davisField(state); const mine = f.find((n) => n.country === h.country); if (!mine) return { code: "none", label: `${D.COUNTRIES[h.country].name}は上位8か国に入っていない（国内2人の実力で決まる${h.rank && h.rank <= 30 ? "" : "。自分が30位以内なら出場枠を引き寄せられる"}）` }; return mine.players.includes(h) ? { code: "direct", label: `${D.COUNTRIES[h.country].name}代表（第${mine.players.indexOf(h) === 0 ? 2 : 1}シングルス）` } : { code: "none", label: `代表外（国内上位2名: ${mine.players.map((p) => p.name).join("・")}）` }; }
     if (T.cat === "OLY") { const q = olympicQuota(state, T, h); return q.ok ? { code: "direct", label: `代表に選出（${D.COUNTRIES[h.country].name} ${q.pos}番手、枠${q.cap}）` } : { code: "none", label: q.pos ? `代表枠外（国内${q.pos}番手、枠${q.cap}。${q.need}位以内が目安）` : "代表枠外（上位の選手のみ）" }; }
     if (state.human.money < 0 && distKm(state.human.loc || h.country, T.country) > 2500) return { code: "money", label: "資金不足（長距離の移動ができない）" };
     if (T.def.tier <= 5) {
@@ -1147,7 +1146,8 @@
     const D0 = directCut(T);
     const home = T.country === p.country;
     if (T.cat === "FINALS") return false;
-    if (T.cat === "OLY") return r <= 100 && rng.chance(0.92); // national duty: nearly everyone selected goes
+    if (T.cat === "OLY") return r <= 100 && rng.chance(0.92);
+    if (T.cat === "DAVIS") return false; // handled as a team event // national duty: nearly everyone selected goes
     if (tier <= 2) return r > CUT.CH50 || r === 9999 ? true : r > 200 && rng.chance(0.3);
     if (tier <= 5) {
       const c = lowerCut(T);
@@ -1367,11 +1367,7 @@
       p.surf[T.surface] = clamp(p.surf[T.surface] + 0.18, 20, 85); // same rate for the human and the AI
       rollInjury(state, p, T);
     }
-    if (w.isHuman || l.isHuman) {
-      const h = w.isHuman ? w : l, o = w.isHuman ? l : w;
-      state.history.matches.push({ t: state.t, year: state.year, week: state.week, tour: T.name, cat: T.def.short, surface: T.surface, round: label, opp: o.name, oppRank: o.rank, oppId: o.id, won: w.isHuman, score: res.score, log: res.log, stats: res.stats, humanIdx: res.names[0] === h.name ? 0 : 1, minutes: res.minutes, deciding: !!res.deciding, comeback: !!res.comeback });
-      if (state.history.matches.length > 400) state.history.matches.splice(0, state.history.matches.length - 400);
-    }
+    logHumanMatch(state, T, label, w, l, res);
     if (T.def.tier >= 8 && (w.rank || 9999) > (l.rank || 9999) + 40 && (l.rank || 9999) <= 20) {
       news(state, `${T.name} ${label}: ${w.name}(${w.rank || "-"}位) が ${l.name}(${l.rank}位) を ${res.score} で破る金星`);
     }
@@ -1450,7 +1446,7 @@
     row[i] = BIG_ENC[code]; p.big[y] = row.join("");
   }
   function recordBig(state, p, T, code, onlyIfEmpty) {
-    if (!T || !T.def || T.def.tier < 8 || T.cat === "OLY") return;
+    if (!T || !T.def || T.def.tier < 8 || T.cat === "OLY" || T.cat === "DAVIS") return;
     if (!p.isHuman && code === "Q") return; // qualifying losses only for the human (save size)
     const y = state.year;
     if (onlyIfEmpty && bigGet(p, y, T.tid)) return;
@@ -1576,6 +1572,7 @@
         const bres = yield* playOne(state, T, sfL[0], sfL[1], "3位決定戦");
         const bw = bres.winnerIdx === 0 ? sfL[0] : sfL[1], bl = bres.winnerIdx === 0 ? sfL[1] : sfL[0];
         afterMatch(state, bw, bl, bres, T, "3位決定戦");
+        logHumanMatch(state, T, "3位決定戦", bw, bl, bres);
         const bm = { round: "3位決定戦", roundIdx: res.rounds, a: sfL[0], b: sfL[1], w: bw, res: bres };
         res.matches.push(bm);
         if (bw.isHuman || bl.isHuman) report.humanMatches.push(describeMatch(bm));
@@ -1611,6 +1608,83 @@
       report.items.push({ type: "milestone", text: `オリンピック${label}！ スポンサーから $${bonus}k` });
       if (kind === "g") { state.human.olyGold = (state.human.olyGold || 0) + 1; state.human.sponsor2 = { weekly: (state.human.sponsor2.weekly || 0) + 1, until: state.t + 52 }; }
     }
+  }
+  function logHumanMatch(state, T, label, w, l, res) {
+    if (!(w.isHuman || l.isHuman)) return;
+    const h = w.isHuman ? w : l, o = w.isHuman ? l : w;
+    state.history.matches.push({ t: state.t, year: state.year, week: state.week, tour: T.name, cat: T.def.short, surface: T.surface, round: label, opp: o.name, oppRank: o.rank, oppId: o.id, won: w.isHuman, score: res.score, log: res.log, stats: res.stats, humanIdx: res.names[0] === h.name ? 0 : 1, minutes: res.minutes, deciding: !!res.deciding, comeback: !!res.comeback });
+    if (state.history.matches.length > 400) state.history.matches.splice(0, state.history.matches.length - 400);
+  }
+  // ---------- Davis Cup (v2.18) ----------
+  // Eight nations, each with its two best available players. A tie is two singles (No.2 vs No.2,
+  // then No.1 vs No.1) and, at 1-1, a doubles decided from the pairs' net/serve/return.
+  function davisField(state, withoutHuman) {
+    const h = human(state), byC = {};
+    for (const p of state.players) { if (p.retired || p.injury || !p.rank || (withoutHuman && p.isHuman)) continue; (byC[p.country] = byC[p.country] || []).push(p); }
+    const nations = Object.entries(byC).filter(([, ps]) => ps.length >= 2).map(([country, ps]) => { ps.sort((a, b) => a.rank - b.rank); const players = ps.slice(0, 2); return { country, players, str: (TL.overall(players[0]) + TL.overall(players[1])) / 2 }; });
+    nations.sort((a, b) => b.str - a.str);
+    const field = nations.slice(0, 8);
+    const mine = nations.find((n) => n.country === h.country);
+    if (mine && !field.includes(mine) && h.rank && h.rank <= 30 && mine.players.includes(h)) field[7] = mine; // the captain gets the nation in on the strength of its star
+    return field;
+  }
+  function* runDavis(state, T, field) {
+    const rng = state.rng, h = human(state);
+    const report = { T, humanPlayed: false, humanMatches: [], winner: null, davis: { ties: [] }, items: [] };
+    const cname = (c) => D.COUNTRIES[c].name;
+    const dbl = (n) => n.players.reduce((s, p) => s + 0.4 * p.attrs.net + 0.3 * p.attrs.serve + 0.3 * p.attrs.return + ((p.surf[T.surface] || 50) - 50) / 10, 0) / n.players.length;
+    const seeds = field.slice().sort((a, b) => b.str - a.str);
+    let round = [[seeds[0], seeds[7]], [seeds[3], seeds[4]], [seeds[1], seeds[6]], [seeds[2], seeds[5]]];
+    const labels = ["準々決勝", "準決勝", "決勝"], placed = new Map(), ties = new Map();
+    for (const n of field) ties.set(n.country, 0);
+    function* tie(A, B, label) {
+      const sc = [0, 0], rub = [];
+      const single = function* (a, b, k) {
+        const res = yield* playOne(state, T, a, b, label);
+        const w = res.winnerIdx === 0 ? a : b, l = w === a ? b : a;
+        afterMatch(state, w, l, res, T, label);
+        logHumanMatch(state, T, `${label}（${cname(A.country)} vs ${cname(B.country)}）`, w, l, res);
+        if (a.isHuman || b.isHuman) { report.humanPlayed = true; report.humanMatches.push(describeMatch({ round: `${label} ${k} vs ${cname(a.isHuman ? B.country : A.country)}`, a, b, w, res })); }
+        sc[w === a ? 0 : 1]++;
+        rub.push(`${k}: ${w.name} d. ${l.name} ${res.score}`);
+      };
+      yield* single(A.players[1], B.players[1], "第1S");
+      yield* single(A.players[0], B.players[0], "第2S");
+      if (sc[0] === 1 && sc[1] === 1) {
+        const pA = 1 / (1 + Math.exp(-(dbl(A) - dbl(B)) / 6));
+        const aw = rng.chance(pA);
+        sc[aw ? 0 : 1]++;
+        rub.push(`ダブルス: ${cname(aw ? A.country : B.country)}`);
+        for (const p of A.players.concat(B.players)) if (p.isHuman) { h.fatigue = clamp(h.fatigue + 4 * (1.3 - h.attrs.stamina / 100), 0, 100); report.humanPlayed = true; }
+      }
+      const w = sc[0] > sc[1] ? A : B;
+      report.davis.ties.push({ label, a: cname(A.country), b: cname(B.country), score: `${sc[0]}-${sc[1]}`, winner: cname(w.country), rubbers: rub, mine: A.country === h.country || B.country === h.country });
+      ties.set(A.country, ties.get(A.country) + 1); ties.set(B.country, ties.get(B.country) + 1);
+      return w;
+    }
+    let alive = seeds.slice();
+    for (let ri = 0; ri < 3; ri++) {
+      const next = [];
+      for (const [A, B] of round) { const w = yield* tie(A, B, labels[ri]); placed.set((w === A ? B : A).country, labels[ri] + "敗退"); next.push(w); }
+      round = []; for (let i = 0; i < next.length; i += 2) round.push([next[i], next[i + 1]]);
+      alive = next;
+    }
+    const champ = alive[0], runner = report.davis.ties[report.davis.ties.length - 1], runnerC = field.find((n) => cname(n.country) === (runner.winner === runner.a ? runner.b : runner.a));
+    placed.set(champ.country, "優勝"); placed.set(runnerC.country, "準優勝");
+    for (const n of field) {
+      const r = placed.get(n.country), won = r === "優勝", fin = r === "準優勝";
+      for (const p of n.players) {
+        addResult(state, p, T, 0, ties.get(n.country) * 25 + (won ? 100 : fin ? 40 : 0), `${r}（団体）`);
+        p.stats.davis = p.stats.davis || { w: 0, f: 0 }; if (won) p.stats.davis.w++; if (fin) p.stats.davis.f++;
+        if (p.isHuman) { report.humanRound = `${r}（団体）`; report.humanPts = 0; report.humanPrize = ties.get(n.country) * 25 + (won ? 100 : fin ? 40 : 0); if (won) { awardGP(state, 4, "デビスカップ優勝", report); state.human.sponsor2 = { weekly: (state.human.sponsor2.weekly || 0) + 0.5, until: state.t + 52 }; } else if (fin) awardGP(state, 2, "デビスカップ準優勝", report); }
+        p.consec++;
+      }
+    }
+    report.winner = { id: champ.players[0].id, name: `${cname(champ.country)}（${champ.players[0].name}・${champ.players[1].name}）` };
+    news(state, `デビスカップ: ${cname(champ.country)} が優勝（決勝 ${cname(runnerC.country)} に ${runner.score}）`);
+    if (field.some((n) => n.country === h.country)) report.items.push({ type: placed.get(h.country) === "優勝" ? "milestone" : "info", text: `デビスカップ ${cname(h.country)} 代表: ${placed.get(h.country)}` });
+    state.history.tournaments.push({ year: state.year, week: state.week, name: T.name, cat: T.cat, short: T.def.short, surface: T.surface, winner: cname(champ.country), winnerId: null, finalist: cname(runnerC.country) });
+    return report;
   }
   function describeMatch(m) {
     const h = m.a.isHuman ? m.a : m.b, o = m.a.isHuman ? m.b : m.a;
@@ -2064,6 +2138,17 @@
         }
         continue;
       }
+      if (T.cat === "DAVIS") {
+        const playing = act.type === "auto" || (act.type === "enter" && act.tid === T.id);
+        const field = davisField(state, !playing);
+        if (field.length === 8) {
+          for (const n of field) for (const p of n.players) assigned.add(p.id);
+          const mine = field.find((n) => n.players.includes(h));
+          if (mine) { humanAccepted = T; act = { type: "enter", tid: T.id, davis: true }; report.humanAction = act; }
+          runs.push({ T, davis: true, field });
+        }
+        continue;
+      }
       const cands = avail.filter((p) => !assigned.has(p.id) && !resting.has(p.id) && pref.get(p.id)[T.def.tier] === T.id && aiWants(state, p, T, rankNow.get(p.id)));
       cands.sort((a, b) => rankNow.get(a.id) - rankNow.get(b.id) || rng.next() - 0.5);
       const humanIn = act.type === "enter" && act.tid === T.id && !humanAccepted;
@@ -2121,9 +2206,10 @@
     for (const run of runs) {
       let rep;
       if (run.finals) rep = yield* runFinals(state, run.T, run.field);
+      else if (run.davis) rep = yield* runDavis(state, run.T, run.field);
       else if (run.main.length + run.qual.length >= 4) rep = yield* runTournament(state, run.T, run.main, run.qual, null);
       else continue;
-      rep.entrants = run.finals ? 8 : run.main.length;
+      rep.entrants = run.finals || run.davis ? 8 : run.main.length;
       report.tournaments.push(rep);
       if (rep.humanPlayed) {
         report.human = rep;
@@ -2593,13 +2679,13 @@
     // Priority events: Grand Slams, Masters 1000 and home-country ATP events come first. They
     // override the pacing rules below (only exhaustion keeps the player out), and the week
     // before a Slam or Masters is kept free so the player arrives fresh.
-    const prio = (T) => (T.def.tier === 9 || T.cat === "OLY" ? 3 : T.def.tier === 8 ? 2 : T.def.tier >= 6 && T.country === h.country ? 2 : 0);
+    const prio = (T) => (T.def.tier === 9 || T.cat === "OLY" || T.cat === "DAVIS" ? 3 : T.def.tier === 8 ? 2 : T.def.tier >= 6 && T.country === h.country ? 2 : 0);
     // qualifying is worth it for a Slam (points and prize money even when losing), for a Masters
     // only near the cut, for a home ATP event only inside the top 150
     const qualOk = (T) => (T.def.tier === 9 ? r <= 250 : T.def.tier === 8 ? r <= 90 : r <= 150);
     const enterable = (x) => x.st.code === "direct" || x.st.code === "bubble" || (x.st.code === "qual" && qualOk(x.T)) || (x.st.code === "wc" && x.st.fw) || (x.st.code === "wc" && x.T.country === h.country && (r <= 250 || state.human.wcBoostUntil > state.t));
     const big = ranked.filter((x) => prio(x.T) > 0 && enterable(x)).sort((a, b) => prio(b.T) - prio(a.T) || b.T.def.tier - a.T.def.tier)[0];
-    const prioName = (T) => (T.cat === "OLY" ? "オリンピック" : T.def.tier === 9 ? "グランドスラム" : T.def.tier === 8 ? "マスターズ1000" : "自国のATP大会");
+    const prioName = (T) => (T.cat === "DAVIS" ? "デビスカップ" : T.cat === "OLY" ? "オリンピック" : T.def.tier === 9 ? "グランドスラム" : T.def.tier === 8 ? "マスターズ1000" : "自国のATP大会");
     if (big) {
       if (h.fatigue > 65) return { type: "rest", reason: `${prioName(big.T)}の週だが疲労が${Math.round(h.fatigue)}。無理をせず休養` };
       return { type: "enter", tid: big.T.id, auto: true, reason: `${prioName(big.T)}を最優先（${big.st.label}）` };
@@ -2789,7 +2875,7 @@
       timeline: state.history.seasons.map((z) => ({ y: z.calendarYear, age: z.age, rank: z.rank, titles: z.titles.length, w: z.w, l: z.l })), byCat, injuries: (state.human.injuryLog || []).length,
       tag: late + tag, hof, legacy: L.total, name: h.name, country: h.country, origin: state.config.origin, seasons: state.history.seasons.length, titles: total, gs: s.gs, m1000: s.m1000, bestRank: s.bestRank, weeksNo1: s.weeksNo1, prize: Math.round(s.prize), w: s.w, l: s.l,
       lines: [
-        `通算 ${s.w}勝${s.l}敗、タイトル${total}（GS ${s.gs}、1000 ${s.m1000}）${s.oly && (s.oly.g || s.oly.s || s.oly.b) ? `、五輪 金${s.oly.g} 銀${s.oly.s} 銅${s.oly.b}` : ""}`,
+        `通算 ${s.w}勝${s.l}敗、タイトル${total}（GS ${s.gs}、1000 ${s.m1000}）${s.oly && (s.oly.g || s.oly.s || s.oly.b) ? `、五輪 金${s.oly.g} 銀${s.oly.s} 銅${s.oly.b}` : ""}${s.davis && s.davis.w ? `、デビスカップ優勝${s.davis.w}回` : ""}`,
         `最高ランキング ${s.bestRank || "-"}位、No.1在位 ${s.weeksNo1}週、トップ10在位 ${s.weeksTop10}週`,
         `生涯賞金 $${(s.prize / 1000).toFixed(2)}M`,
         `レガシー ${L.total}pt（殿堂ライン ${HOF_LINE}）・ この世界の歴代 ${lpos >= 0 ? lpos + 1 : "-"}位`,
@@ -2961,5 +3047,5 @@
     return s;
   }
 
-  TL.World = { rivalScores, RIVAL_MIN, GP_SINK, DRILL_COOLDOWN, gpDrill, gpPrep, gpSlot, olympicQuota, HEIGHT_BASE, HEIGHT_FX, heightOf, heightEffects, attrCeil, announceRetirement, isFarewell, farewellOf, coachTalk, LEGACY, LEGACY_LABEL, HOF_LINE, legacyOf, legacyView, goalsView, strategyOk, devStyleOk, declineMods, declineEstimate, RIVALS, rehabWeekly, aiTraitList, TRAIT_LV, TRAIT_COST, traitLevels, traitLevel, traitList, traitSlots, traitEffectText, traitReq, dropTrait, bigTimeline, strengthOf, cashOf, fundingOptions, useFunding, setBudget, JOBS, forcedRetire, TRAIN_SLOTS, TRAIN_CATS, allocOf, allocShare, autoAlloc, allocSummary, TRAITS, hasTrait, traitReqOk, learnTrait, DEV_STYLES, INTENSITY, devOf, styleGap, autoFocus, trainRate, STRATEGIES, sharpBonus, sharpLabel, confLabel, sponsorsOf, brandOf, sponsorOffer, sponsorUnlocked, activeContracts, signSponsor, releaseSponsor, sponsorTerminationFee, sponsorPerks, sponsorWeekly, ASSETS, TAX, AGENT_CUT, assetsOf, assetUnlocked, buyAsset, assetsWeekly, DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
+  TL.World = { davisField, rivalScores, RIVAL_MIN, GP_SINK, DRILL_COOLDOWN, gpDrill, gpPrep, gpSlot, olympicQuota, HEIGHT_BASE, HEIGHT_FX, heightOf, heightEffects, attrCeil, announceRetirement, isFarewell, farewellOf, coachTalk, LEGACY, LEGACY_LABEL, HOF_LINE, legacyOf, legacyView, goalsView, strategyOk, devStyleOk, declineMods, declineEstimate, RIVALS, rehabWeekly, aiTraitList, TRAIT_LV, TRAIT_COST, traitLevels, traitLevel, traitList, traitSlots, traitEffectText, traitReq, dropTrait, bigTimeline, strengthOf, cashOf, fundingOptions, useFunding, setBudget, JOBS, forcedRetire, TRAIN_SLOTS, TRAIN_CATS, allocOf, allocShare, autoAlloc, allocSummary, TRAITS, hasTrait, traitReqOk, learnTrait, DEV_STYLES, INTENSITY, devOf, styleGap, autoFocus, trainRate, STRATEGIES, sharpBonus, sharpLabel, confLabel, sponsorsOf, brandOf, sponsorOffer, sponsorUnlocked, activeContracts, signSponsor, releaseSponsor, sponsorTerminationFee, sponsorPerks, sponsorWeekly, ASSETS, TAX, AGENT_CUT, assetsOf, assetUnlocked, buyAsset, assetsWeekly, DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
 })(typeof globalThis !== "undefined" ? globalThis : window);

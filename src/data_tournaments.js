@@ -47,6 +47,9 @@
     // v2.15: the Olympics (every four years, week 30). No ranking points; medals count towards legacy.
     OLY: { label: "オリンピック", short: "五輪", tier: 8, draw: 64, q: 0, qRounds: 0, wc: 0, bo5: false, weeks: 1, oly: true,
       points: [0, 0, 0, 0, 0, 0, 0], qPts: 0, prize: [0, 0, 0, 0, 0, 0, 0], qPrize: 0 },
+    // v2.18: Davis Cup Finals (week 47): eight nations, ties of two singles and a doubles
+    DAVIS: { label: "デビスカップ", short: "DC", tier: 8, draw: 8, q: 0, qRounds: 0, wc: 0, bo5: false, weeks: 1, team: true,
+      points: [0, 0, 0, 0], qPts: 0, prize: [0, 0, 0, 0], qPrize: 0 },
     FINALS: { label: "ATP Finals", short: "Finals", tier: 10, draw: 8, q: 0, qRounds: 0, wc: 0, bo5: false, weeks: 1,
       points: [1500], qPts: 0, prize: [4800] },
   };
@@ -57,6 +60,7 @@
   // Olympic hosts by calendar year (rotates); [country, surface, city]
   D.OLYMPICS = { week: 30, hosts: [["USA", "hard", "ロサンゼルス"], ["AUS", "hard", "ブリスベン"], ["ESP", "clay", "マドリード"], ["JPN", "hard", "東京"], ["FRA", "clay", "パリ"], ["GER", "hard", "ベルリン"]] };
   D.olympicsFor = (calYear) => { if (calYear % 4 !== 0 || calYear < 2028) return null; const i = ((calYear - 2028) / 4) % D.OLYMPICS.hosts.length; const [country, surface, city] = D.OLYMPICS.hosts[i]; return { country, surface, city, calYear }; };
+  D.DAVIS_HOSTS = ["ESP", "ITA", "USA", "GER", "AUS", "JPN"];
   D.COUNTRIES = {
     JPN: { name: "日本", region: "ASIA", ll: [35.7, 139.7] }, USA: { name: "アメリカ", region: "NA", ll: [40.7, -74.0] }, ESP: { name: "スペイン", region: "EU", ll: [40.4, -3.7] },
     FRA: { name: "フランス", region: "EU", ll: [48.9, 2.3] }, ITA: { name: "イタリア", region: "EU", ll: [41.9, 12.5] }, GBR: { name: "イギリス", region: "EU", ll: [51.5, -0.1] },
@@ -142,6 +146,7 @@
     [44, "metz", "メス", "A250", "indoor", "FRA"],
     [44, "athens", "アテネ", "A250", "indoor", "GRE"],
     [45, "finals", "ATPファイナルズ", "FINALS", "indoor", "ITA"],
+    [47, "davis", "デビスカップ ファイナルズ", "DAVIS", "indoor", "ESP"],
   ];
   D.ATP_CALENDAR = C.map((r) => ({ week: r[0], id: r[1], name: r[2], cat: r[3], surface: r[4], country: r[5] }));
 
