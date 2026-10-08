@@ -57,6 +57,12 @@
     return `<table class="small" style="margin-top:6px"><tr><th></th><th class="num">プレースタイル</th><th class="num">適性値</th><th class="num">合計（目安）</th></tr>${Object.keys(D.SURFACES).map((s) => { const e = surfEdge(p, s); return `<tr><td>${D.SURFACES[s]}</td><td class="num">${sg(e.style)}</td><td class="num">${sg(e.aff)}</td><td class="num ${e.total >= 2 ? "green" : e.total <= -2 ? "red" : ""}"><b>${sg(e.total)}</b></td></tr>`; }).join("")}</table>
       <p class="tiny muted">同じ総合力のオールラウンダーと戦ったときの勝率の差（目安）。芝・室内はサーブとリターン、クレーはラリーが効く。適性値は試合に出るたびに上がる。</p>`;
   }
+  // v2.17: who is becoming a rival, and why
+  function rivalCandsHtml() {
+    const S = U.S, cands = (S.human.rivalCands || []).map((c) => Object.assign({ p: S.players.find((p) => p.id === c.id) }, c)).filter((c) => c.p && !c.p.retired);
+    if (!cands.length) return `<div class="panel"><h2>ライバル関係</h2><p class="small muted">まだ因縁はない。同じ相手と何度も当たる、決勝で負ける、同世代と順位を競る——そこから宿敵が生まれる（スコア ${W.RIVAL_MIN} 以上で宿敵に）。</p></div>`;
+    return `<div class="panel"><h2>ライバル関係 <span class="muted small">結果から自動で決まる</span></h2><table class="small">${cands.map((c) => { const h2h = S.history.matches.filter((m) => m.oppId === c.id); return `<tr class="${c.p.isRival ? "rival" : ""}"><td><span data-player="${c.id}" class="accent">${esc(c.p.name)}</span>${c.p.isRival ? ' <span class="pill rival">宿敵</span>' : ""}</td><td class="num">${c.p.rank || "-"}位</td><td class="num">${h2h.filter((m) => m.won).length}-${h2h.filter((m) => !m.won).length}</td><td class="muted">${esc([...new Set(c.why)].slice(0, 3).join("・"))}</td><td class="num">${c.v}</td></tr>`; }).join("")}</table><p class="tiny muted">スコア: 直近3季の対戦1回 +3、3戦以上で拮抗 +4、大舞台・決勝での対戦 +2、決勝で敗れた +3、同世代で順位が近い +3。${W.RIVAL_MIN} 以上で宿敵、入れ替わりには +8 の差と40週以上の間隔が必要（対戦が途絶えて薄れた因縁は除く）。</p></div>`;
+  }
   function goalsCard() {
     const G = W.goalsView(U.S);
     return `<div class="panel"><h2>今季の目標 <span class="muted small">${cal(G.year)}年</span></h2><div class="goals">${G.list.map((g) => `<div class="goal ${g.done ? "done" : ""}"><span class="gk">${g.done ? "✓" : "○"}</span><div><b>${esc(g.label)}</b><div class="tiny muted">${g.done ? "達成" : esc(g.cur)}${g.type === "rank" && !g.done ? " ・ 年末に判定" : ""} ・ 成長pt +${g.gp}</div></div></div>`).join("")}</div><div class="tiny muted" style="margin-top:6px">3つとも達成でスポンサーから ${money(G.bonus)}</div></div>`;
@@ -216,9 +222,9 @@
       <div class="row between actions" style="margin-top:12px"><div class="row actions" style="flex:1"><button class="primary bigbtn" data-run="4">この4週を進める</button><button data-run="1">1週だけ進める</button><button data-auto="60">自動進行（停止条件まで）</button></div>${hidden || showAll ? `<button data-showall class="small">${showAll ? "出られない大会を隠す" : `出られない大会を表示（${hidden}）`}</button>` : ""}</div>
       <p class="small muted" style="margin:8px 0 0">大会カードをクリックで選択。「おまかせ」は出られる最上位の大会に出るが、疲労45超・負荷上限・GS翌週は休む。先の週の当落は現在のランキングで推定。</p></div>`;
     html += `<div class="grid2"><div class="panel"><h2>自動進行の停止条件</h2>
-      ${[["stopTournament", "自分の大会が終わるごと"], ["stopMilestone", "ランキングの節目"], ["stopEvent", "イベント（選択肢）"], ["stopSeason", "シーズン終了"]].map(([k, l]) => `<label class="small" style="display:inline-block;margin-right:14px"><input type="checkbox" data-set="${k}" ${settings[k] ? "checked" : ""}> ${l}</label>`).join("")}</div>
+      ${[["stopTournament", "自分の大会が終わるごと"], ["stopMilestone", "ランキングの節目"], ["stopEvent", "イベント（選択肢）"], ["stopRival", "宿敵との対戦"], ["stopSeason", "シーズン終了"]].map(([k, l]) => `<label class="small" style="display:inline-block;margin-right:14px"><input type="checkbox" data-set="${k}" ${settings[k] ? "checked" : ""}> ${l}</label>`).join("")}</div>
     <div class="panel"><h2>観戦モード</h2><p class="small muted">重要試合はポイント単位で観戦し、セット間にプランを変えられる。</p>
-      ${[["watchEnabled", "観戦モードを使う"], ["watchFinals", "ATPファイナルズ（全試合）"], ["watchTop10", "トップ10戦"]].map(([k, l]) => `<label class="small" style="display:inline-block;margin-right:14px"><input type="checkbox" data-set="${k}" ${settings[k] ? "checked" : ""}> ${l}</label>`).join("")}
+      ${[["watchEnabled", "観戦モードを使う"], ["watchFinals", "ATPファイナルズ（全試合）"], ["watchTop10", "トップ10戦"], ["watchRival", "宿敵戦"]].map(([k, l]) => `<label class="small" style="display:inline-block;margin-right:14px"><input type="checkbox" data-set="${k}" ${settings[k] ? "checked" : ""}> ${l}</label>`).join("")}
       <div class="row" style="gap:14px;flex-wrap:wrap;margin-top:8px">${(() => { const d = U.watchDepth(); const opt = (k, list) => list.map(([v, l]) => `<option value="${v}" ${d[k] === v ? "selected" : ""}>${l}</option>`).join("");
         const F = [["off", "観戦しない"], ["final", "決勝のみ"], ["sf", "準決勝から"], ["qf", "準々決勝から"], ["all", "全試合"]];
         return [["gs", "グランドスラム", F], ["m1000", "マスターズ1000・五輪", F.slice(0, 4)], ["tour", "ATP 500・250", F.slice(0, 3)], ["lower", "チャレンジャー・ITF", F.slice(0, 2)]].map(([k, l, list]) => `<label class="small">${l} <select data-wdepth="${k}">${opt(k, list)}</select></label>`).join(""); })()}</div></div></div>`;
@@ -499,6 +505,7 @@
         <h3 style="margin-top:10px">年表</h3>${U.timelineHtml(S.history.seasons, curSeason)}
         <h3 style="margin-top:10px">トロフィーケース</h3>${U.trophyCase(titles)}</div>
         <div class="panel"><h2>グランドスラム・マスターズ成績 <span class="muted small">年ごと</span></h2>${U.bigTimelineHtml(me)}</div>
+      ${rivalCandsHtml()}
       ${rv ? `<div class="panel"><h2>宿敵</h2><div class="identity" data-player="${rv.id}">${U.avatar(rv)}<div><div class="name">${esc(rv.name)}</div><div class="sub">${W.age(S, rv)}歳 ・ ${rv.retired ? "引退" : rv.rank ? rv.rank + "位" : "ランク外"} ・ 最高${rv.stats.bestRank || "-"}位 ・ タイトル${rv.stats.titles}</div></div></div><p style="margin-top:8px">対戦成績 <b>${h2h.filter((m) => m.won).length}勝${h2h.filter((m) => !m.won).length}敗</b></p>${h2h.slice(-5).reverse().map((m) => `<div class="small ${m.won ? "green" : "red"}">${cal(m.year)} ${esc(m.tour)} ${esc(m.round)} ${m.won ? "WIN" : "LOSS"} ${esc(m.score)}</div>`).join("")}</div>` : ""}</div></div>`;
     U.bindPlayerLinks(c);
     U.bindDevPanel(c);

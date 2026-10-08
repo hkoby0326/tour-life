@@ -251,7 +251,7 @@
       config: { name: cfg.name || "選手", country: cfg.country || "JPN", origin: cfg.origin || "grinder", injuryRealism: cfg.injuryRealism || "standard", difficulty: DIFFICULTY[cfg.difficulty] ? cfg.difficulty : "normal" },
       rankSnaps: [], history: { tournaments: [], seasons: [], matches: [], news: [] }, lastReport: null,
       human: { money: 0, sponsorWeekly: 0, sponsorUntil: 0, wcBoostUntil: 0, lastRegion: null, focus: ["serve", "fh"], careerOver: false, epilogue: null, milestones: {},
-        coach: null, physio: false, coachOffers: [], plan: "balanced", switchRule: "none", event: null, lastEventT: -99, forceRest: false, riskWeek: -1, sponsor2: { weekly: 0, until: 0 }, pressureUntil: -1, attrHist: [], seasonStartAttrs: null, exhibitionYear: 0, rivalry: { heat: 25, log: [], flags: {}, lastCross: -99 }, rivalAhead: null, focusBoostUntil: -1, assets: { jet: false, medical: false, base: false, academy: false }, investment: null, pendingPurchase: 0, sponsors: { racket: null, apparel: null, shoes: null, other: [] }, sponsorsInit: true, pendingSigning: 0, pendingBonus: 0, strategy: "big", dev: { style: null, intensity: "normal", auto: false, established: false }, actLog: [], alloc: { serve: 3, stroke: 3, ret: 2, physical: 2, mental: 0, match: 0 }, allocV2: true, gp: 0, gpLog: [], traits: [], traitLv: {}, aiTraitsInit: true, legacyInit: true, cash: { budget: false, loan: 0, loanRate: 0, unpaid: 0, family: false, crowd: false, fedYear: 0, job: null, jobUntil: 0, jobCooldown: {}, crisisYear: 0, lowYear: 0 } },
+        coach: null, physio: false, coachOffers: [], plan: "balanced", switchRule: "none", event: null, lastEventT: -99, forceRest: false, riskWeek: -1, sponsor2: { weekly: 0, until: 0 }, pressureUntil: -1, attrHist: [], seasonStartAttrs: null, exhibitionYear: 0, rivalry: { heat: 25, log: [], flags: {}, lastCross: -99 }, rivalAhead: null, focusBoostUntil: -1, assets: { jet: false, medical: false, base: false, academy: false }, investment: null, pendingPurchase: 0, sponsors: { racket: null, apparel: null, shoes: null, other: [] }, sponsorsInit: true, pendingSigning: 0, pendingBonus: 0, strategy: "big", dev: { style: null, intensity: "normal", auto: false, established: false }, actLog: [], alloc: { serve: 3, stroke: 3, ret: 2, physical: 2, mental: 0, match: 0 }, allocV2: true, gp: 0, gpLog: [], traits: [], traitLv: {}, aiTraitsInit: true, legacyInit: true, rivalV2: true, rivalCands: [], cash: { budget: false, loan: 0, loanRate: 0, unpaid: 0, family: false, crowd: false, fedYear: 0, job: null, jobUntil: 0, jobCooldown: {}, crisisYear: 0, lowYear: 0 } },
       cutoffs: {},
     };
     state.rng = new TL.RNG(seed);
@@ -304,9 +304,8 @@
     // rival: same age, similar ceiling
     const rc = rng.pick(["ESP", "FRA", "ITA", "USA", "ARG", "GER", "AUS", "CZE", "BRA", "GBR"]);
     const rv = newPlayer(state, { name: randomName(rng, rc), country: rc, birthYear: spec.birthYear, overall: spec.overall + rng.gauss(1, 2), potential: clamp(spec.potential + rng.gauss(0, 4), 60, 97) });
-    if (RIVALS) rv.isRival = true;
     state.players.push(rv);
-    state.rivalId = RIVALS ? rv.id : null;
+    state.rivalId = null; // v2.17: the rival emerges from results (updateRival)
     seedResults(state, rv, Math.max(0, spec.pts + rng.int(-10, 30)));
 
     recomputeRanking(state);
@@ -709,7 +708,65 @@
   // ---------- rivalry story ----------
   // v2.10: the rival feature is switched off (it did not add much). The same-age player is still
   // created (keeps the RNG stream) but is an ordinary AI player; flip this to bring it back.
-  const RIVALS = false;
+  const RIVALS = true; // v2.17: back on, but the rival now emerges from results (see updateRival)
+  // Who counts as a rival: head-to-heads in the last three seasons (closer and bigger = more),
+  // beating the human in a final or at a big event, and a same-age player sitting next to the
+  // human in the ranking. The top candidate becomes the 宿敵 once it clears a threshold, and a
+  // new one needs a clear margin to take over (so the story does not flip every month).
+  const RIVAL_MIN = 12, RIVAL_SWAP = 8, RIVAL_TENURE = 40;
+  function rivalScores(state) {
+    const h = human(state), hr = h.rank || 9999, ha = age(state, h);
+    const since = state.t - 52 * 3;
+    const sc = new Map();
+    const add = (id, v, why) => { const e = sc.get(id) || { v: 0, why: [] }; e.v += v; if (why) e.why.push(why); sc.set(id, e); };
+    const h2h = {};
+    for (const m of state.history.matches) {
+      if (m.t < since || m.wo || !m.oppId) continue;
+      const e = (h2h[m.oppId] = h2h[m.oppId] || { w: 0, l: 0, big: 0, finals: 0, lostFinal: 0, lostBig: 0 });
+      if (m.won) e.w++; else e.l++;
+      const big = /^(GS|1000|Finals)/.test(m.cat);
+      if (big) e.big++;
+      if (m.round === "決勝") e.finals++;
+      if (!m.won && m.round === "決勝") e.lostFinal++;
+      if (!m.won && big) e.lostBig++;
+    }
+    for (const [id, e] of Object.entries(h2h)) {
+      const n = e.w + e.l;
+      add(+id, n * 3, `対戦${n}回`);
+      if (n >= 3 && Math.abs(e.w - e.l) <= 1) add(+id, 4, "拮抗");
+      if (e.big) add(+id, e.big * 2, "大舞台で対戦");
+      if (e.finals) add(+id, e.finals * 2, "決勝で対戦");
+      if (e.lostFinal) add(+id, e.lostFinal * 3, "決勝で敗れた");
+      if (e.lostBig) add(+id, e.lostBig * 2);
+    }
+    for (const p of state.players) {
+      if (p.isHuman || p.retired || !p.rank) continue;
+      const near = Math.abs(p.rank - hr);
+      if (Math.abs(age(state, p) - ha) <= 1 && near <= 20) add(p.id, 3, "同世代");
+      if (near <= 10 && hr <= 150) add(p.id, 2, "順位が近い");
+    }
+    return sc;
+  }
+  function updateRival(state, report) {
+    const H = state.human, h = human(state);
+    const sc = rivalScores(state);
+    let best = null, bv = 0;
+    for (const [id, e] of sc) { const p = state.players.find((x) => x.id === id); if (!p || p.retired) continue; if (e.v > bv) { bv = e.v; best = p; } }
+    const cur = rival(state);
+    const curV = cur && sc.get(cur.id) ? sc.get(cur.id).v : 0;
+    H.rivalCands = [...sc.entries()].map(([id, e]) => ({ id, v: e.v, why: e.why })).filter((x) => x.v >= 5).sort((a, b) => b.v - a.v).slice(0, 4);
+    if (cur && cur.retired) { cur.isRival = false; state.rivalId = null; news(state, `宿敵 ${cur.name} が引退。物語はいったん幕を閉じた`); }
+    if (!best || bv < RIVAL_MIN) return;
+    const stale = cur && curV < 4; // no matches for a long time: the story has faded
+    if (cur && !cur.retired && (best === cur || (!stale && (bv < curV + RIVAL_SWAP || state.t - (H.rivalSince || -99) < RIVAL_TENURE)))) return;
+    if (cur) { cur.isRival = false; rivalLog(state, `${cur.name} との因縁は過去のものになった`, true); }
+    best.isRival = true; state.rivalId = best.id; H.rivalSince = state.t;
+    H.rivalAhead = null;
+    H.rivalry = { heat: 35, log: (H.rivalry && H.rivalry.log) || [], flags: {}, lastCross: -99 };
+    const why = (sc.get(best.id).why || []).filter((x, i, a) => a.indexOf(x) === i).slice(0, 3).join("・");
+    rivalLog(state, `${best.name} が宿敵に（${why}）`);
+    if (report) { report.items.push({ type: "milestone", text: `新たな宿敵: ${best.name}（${why}）` }); report.stops.push("rival"); }
+  }
   // heat 0-100: how charged the rivalry is. Rises with head-to-heads, rank crossings and media;
   // cools with friendly choices and time. High heat makes rival matches swing more on big points.
   function rivalryLabel(heat) { return heat >= 70 ? "因縁" : heat >= 45 ? "ライバル" : heat >= 25 ? "意識" : "友好"; }
@@ -1938,7 +1995,7 @@
     return state.players.find((p) => p.id === state.humanId);
   }
   function rival(state) {
-    if (!RIVALS || state.rivalId === null || state.rivalId === undefined) return null;
+    if (state.rivalId === null || state.rivalId === undefined) return null;
     return state.players.find((p) => p.id === state.rivalId);
   }
 
@@ -2237,7 +2294,8 @@
     if (h.rank && h.rank <= 10) h.stats.weeksTop10++;
     if (h.rank && (!h.stats.bestRank || h.rank < h.stats.bestRank)) h.stats.bestRank = h.rank;
     if (rv && rv.rank && (!rv.stats.bestRank || rv.rank < rv.stats.bestRank)) rv.stats.bestRank = rv.rank;
-    rivalWeekly(state, h, rv);
+    if (report.human || state.t % 4 === 0) updateRival(state, report);
+    rivalWeekly(state, h, rival(state));
     for (const m of [300, 200, 100, 50, 20, 10, 5, 1]) {
       if (h.rank && h.rank <= m && !state.human.milestones[m]) {
         state.human.milestones[m] = { year: state.year, week: state.week };
@@ -2877,7 +2935,7 @@
       const h = s.players.find((p) => p.isHuman);
       if (h) { h.stats.ye10 = s.history.seasons.filter((z) => z.rank && z.rank <= 10).length; h.stats.ye1 = s.history.seasons.filter((z) => z.rank === 1).length; }
     }
-    if (!RIVALS && s.rivalId !== null) { s.rivalId = null; for (const p of s.players) if (p.isRival) delete p.isRival; }
+    if (!H.rivalV2) { H.rivalV2 = true; s.rivalId = null; for (const p of s.players) if (p.isRival) delete p.isRival; H.rivalCands = []; }
     if (!H.aiTraitsInit) { H.aiTraitsInit = true; for (const p of s.players) if (!p.isHuman && !p.retired) assignAiTraits(s, p); }
     allocOf(s);
     // v2.4: the old default (serve 5 / strokes 5) built lopsided players; move untouched defaults to the balanced one
@@ -2903,5 +2961,5 @@
     return s;
   }
 
-  TL.World = { GP_SINK, DRILL_COOLDOWN, gpDrill, gpPrep, gpSlot, olympicQuota, HEIGHT_BASE, HEIGHT_FX, heightOf, heightEffects, attrCeil, announceRetirement, isFarewell, farewellOf, coachTalk, LEGACY, LEGACY_LABEL, HOF_LINE, legacyOf, legacyView, goalsView, strategyOk, devStyleOk, declineMods, declineEstimate, RIVALS, rehabWeekly, aiTraitList, TRAIT_LV, TRAIT_COST, traitLevels, traitLevel, traitList, traitSlots, traitEffectText, traitReq, dropTrait, bigTimeline, strengthOf, cashOf, fundingOptions, useFunding, setBudget, JOBS, forcedRetire, TRAIN_SLOTS, TRAIN_CATS, allocOf, allocShare, autoAlloc, allocSummary, TRAITS, hasTrait, traitReqOk, learnTrait, DEV_STYLES, INTENSITY, devOf, styleGap, autoFocus, trainRate, STRATEGIES, sharpBonus, sharpLabel, confLabel, sponsorsOf, brandOf, sponsorOffer, sponsorUnlocked, activeContracts, signSponsor, releaseSponsor, sponsorTerminationFee, sponsorPerks, sponsorWeekly, ASSETS, TAX, AGENT_CUT, assetsOf, assetUnlocked, buyAsset, assetsWeekly, DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
+  TL.World = { rivalScores, RIVAL_MIN, GP_SINK, DRILL_COOLDOWN, gpDrill, gpPrep, gpSlot, olympicQuota, HEIGHT_BASE, HEIGHT_FX, heightOf, heightEffects, attrCeil, announceRetirement, isFarewell, farewellOf, coachTalk, LEGACY, LEGACY_LABEL, HOF_LINE, legacyOf, legacyView, goalsView, strategyOk, devStyleOk, declineMods, declineEstimate, RIVALS, rehabWeekly, aiTraitList, TRAIT_LV, TRAIT_COST, traitLevels, traitLevel, traitList, traitSlots, traitEffectText, traitReq, dropTrait, bigTimeline, strengthOf, cashOf, fundingOptions, useFunding, setBudget, JOBS, forcedRetire, TRAIN_SLOTS, TRAIN_CATS, allocOf, allocShare, autoAlloc, allocSummary, TRAITS, hasTrait, traitReqOk, learnTrait, DEV_STYLES, INTENSITY, devOf, styleGap, autoFocus, trainRate, STRATEGIES, sharpBonus, sharpLabel, confLabel, sponsorsOf, brandOf, sponsorOffer, sponsorUnlocked, activeContracts, signSponsor, releaseSponsor, sponsorTerminationFee, sponsorPerks, sponsorWeekly, ASSETS, TAX, AGENT_CUT, assetsOf, assetUnlocked, buyAsset, assetsWeekly, DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
 })(typeof globalThis !== "undefined" ? globalThis : window);
