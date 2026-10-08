@@ -29,6 +29,18 @@
     return { serve, ret, rally, clutch: a.clutch, stamina: a.stamina };
   }
   TL.components = components;
+  // v2.16: serve speed (km/h) from the serve and power ratings and the player's height.
+  // Tour reference: first-serve average ~175-195 for most pros, 200+ for the big servers; peaks
+  // 20-25 km/h above the average; second serves ~30 km/h slower.
+  function serveSpeed(p) {
+    const a = p.attrs, h = p.height || 186;
+    const avg1 = 172 + (a.serve - 60) * 0.45 + (a.power - 60) * 0.28 + (h - 186) * 0.45;
+    const avg2 = avg1 - 28 + (a.serve - 60) * 0.05;
+    const max = avg1 + 22 + (a.power - 60) * 0.2;
+    const r = (x) => Math.round(Math.max(120, Math.min(250, x)));
+    return { avg1: r(avg1), avg2: r(avg2), max: r(max) };
+  }
+  TL.serveSpeed = serveSpeed;
   // v2.12: style-vs-surface fit in match-win % against an equal-overall all-rounder (approximation of
   // the point model; calibrated on big server vs baseliner). Surface affinity is not included.
   function surfaceFit(p) {
@@ -82,12 +94,12 @@
     const setsToWin = bo5 ? 3 : 2;
     const doLog = !!opts.log;
     const M = {
-      names: [pa.name, pb.name], players: [pa, pb], surface, bo5, setsToWin, done: false, winnerIdx: null, result: null,
+      names: [pa.name, pb.name], players: [pa, pb], surface, bo5, setsToWin, done: false, winnerIdx: null, result: null, svSpeed: [serveSpeed(pa), serveSpeed(pb)],
       sets: [], setsWon: [0, 0], games: [0, 0], pts: [0, 0], tb: false, tbPts: null, tbCount: 0, server: 0, setNo: 0,
       plans: [(opts.plans && opts.plans[0]) || "balanced", (opts.plans && opts.plans[1]) || "balanced"],
       rules: [(opts.rules && opts.rules[0]) || "none", (opts.rules && opts.rules[1]) || "none"],
       stats: { points: [0, 0], breaks: [0, 0], bpSaved: [0, 0], bpFaced: [0, 0], aces: [0, 0], dfs: [0, 0], winners: [0, 0], ues: [0, 0], mpSaved: [0, 0], longest: 0,
-        svPts: [0, 0], svWon: [0, 0], firstIn: [0, 0], firstWon: [0, 0], secondWon: [0, 0], netPts: [0, 0], netWon: [0, 0], svGames: [0, 0], holds: [0, 0], tbW: [0, 0], tbL: [0, 0] },
+        svPts: [0, 0], svWon: [0, 0], firstIn: [0, 0], firstWon: [0, 0], secondWon: [0, 0], svMax: [0, 0], svSum1: [0, 0], svN1: [0, 0], netPts: [0, 0], netWon: [0, 0], svGames: [0, 0], holds: [0, 0], tbW: [0, 0], tbL: [0, 0] },
       log: [], events: [], betweenSets: false, last: null,
     };
     const base = [components(pa, surface), components(pb, surface)];
@@ -180,13 +192,23 @@
       if (w === sv) M.stats.svWon[sv]++;
       if (first) { M.stats.firstIn[sv]++; if (w === sv) M.stats.firstWon[sv]++; } else if (w === sv) M.stats.secondWon[sv]++;
       if (shot === "net") { const atNet = kind === "winner" ? w : 1 - w; M.stats.netPts[atNet]++; if (atNet === w) M.stats.netWon[atNet]++; }
-      return { kind, rally, shot, first };
+      // serve speed for the feed and the stats (cosmetic; a hash of the point index, no RNG)
+      let kmh = null;
+      if (kind !== "double_fault") {
+        const sp = M.svSpeed[sv];
+        const u = ((TL.RNG.hash(`sv:${M.names[sv]}:${M.stats.points[0] + M.stats.points[1]}:${M.stats.svPts[sv]}`) % 1000) / 1000) * 2 - 1;
+        kmh = Math.round((first ? sp.avg1 : sp.avg2) + u * (first ? 11 : 8) + (kind === "ace" ? 7 : 0));
+        kmh = Math.min(kmh, sp.max + 4);
+        if (kmh > M.stats.svMax[sv]) M.stats.svMax[sv] = kmh;
+        if (first) { M.stats.svSum1[sv] += kmh; M.stats.svN1[sv]++; }
+      }
+      return { kind, rally, shot, first, kmh };
     }
     const SHOT_LABEL = { fh: "フォア", bh: "バック", net: "ボレー" };
     function kindText(ev, who) {
       const n = M.names[who];
       switch (ev.kind) {
-        case "ace": return `${n} エース！`;
+        case "ace": return `${n} エース！${ev.kmh ? ` ${ev.kmh}km/h` : ""}`;
         case "double_fault": return `${M.names[1 - who]} ダブルフォルト`;
         case "serve_winner": return `${n} サービスウィナー`;
         case "return_winner": return `${n} リターンウィナー`;

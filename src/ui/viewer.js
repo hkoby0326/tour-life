@@ -99,7 +99,7 @@
     function animate(ev) {
       if (raf) { cancelAnimationFrame(raf); raf = null; }
       const kb = KIND_BADGE[ev.kind];
-      $("v-kind").innerHTML = kb ? `<span class="${kb[1]}">${kb[0]}</span>${ev.rally >= 3 ? ` <span class="muted">${ev.rally}打</span>` : ""}` : "";
+      $("v-kind").innerHTML = (kb ? `<span class="${kb[1]}">${kb[0]}</span>${ev.rally >= 3 ? ` <span class="muted">${ev.rally}打</span>` : ""}` : "") + (ev.kmh ? ` <span class="kmh">${ev.first ? "1st" : "2nd"} ${ev.kmh} km/h</span>` : "");
       $("v-kind").className = "kind " + (ev.winner === hi ? "me" : "op");
       const F = buildFlights(ev);
       ball.classList.remove("dead");

@@ -106,7 +106,7 @@
   }
 
   // ---------- career statistics (broadcast-style) ----------
-  const CS_KEYS = ["m", "w", "aces", "dfs", "svPts", "svWon", "firstIn", "firstWon", "secondWon", "retPts", "retWon", "bpFaced", "bpSaved", "bpChances", "bpConv", "svGames", "holds", "retGames", "breaks", "tbW", "tbL", "decW", "decL", "cbW", "cbL", "top10W", "top10L", "finalW", "finalL", "netPts", "netWon", "winners", "ues", "mpSaved", "minutes", "streak", "bestStreak", "longest", "longestMin"];
+  const CS_KEYS = ["m", "w", "aces", "dfs", "svPts", "svWon", "firstIn", "firstWon", "secondWon", "retPts", "retWon", "bpFaced", "bpSaved", "bpChances", "bpConv", "svGames", "holds", "retGames", "breaks", "tbW", "tbL", "decW", "decL", "cbW", "cbL", "top10W", "top10L", "finalW", "finalL", "netPts", "netWon", "winners", "ues", "mpSaved", "minutes", "streak", "bestStreak", "longest", "longestMin", "svMax", "svSum1", "svN1"];
   function initCs() { const o = {}; for (const k of CS_KEYS) o[k] = 0; o.longestVs = null; return o; }
   // add one finished match to a player's running totals
   function addCs(cs, st, i, won, opp, oppRank, label, res) {
@@ -123,6 +123,7 @@
     if (oppRank && oppRank <= 10) { if (won) cs.top10W++; else cs.top10L++; }
     if (label === "決勝" || label === "優勝") { if (won) cs.finalW++; else cs.finalL++; }
     cs.netPts += g("netPts"); cs.netWon += g("netWon"); cs.winners += g("winners"); cs.ues += g("ues"); cs.mpSaved += g("mpSaved");
+    if (g("svMax") > (cs.svMax || 0)) cs.svMax = g("svMax"); cs.svSum1 = (cs.svSum1 || 0) + g("svSum1"); cs.svN1 = (cs.svN1 || 0) + g("svN1");
     const min = res && res.minutes ? res.minutes : 0;
     cs.minutes += min;
     if (min > cs.longestMin) { cs.longestMin = min; cs.longestVs = opp ? `${opp.name} ${res.score}` : null; }
@@ -139,6 +140,7 @@
       hold: pct(cs.holds, cs.svGames), bpSaved: pct(cs.bpSaved, cs.bpFaced), bpFaced: cs.bpFaced, bpSavedN: cs.bpSaved,
       retWon: pct(cs.retWon, cs.retPts), bpConv: pct(cs.bpConv, cs.bpChances), bpChances: cs.bpChances, bpConvN: cs.bpConv, retGamesWon: pct(cs.breaks, cs.retGames),
       totalPts: pct(cs.svWon + cs.retWon, cs.svPts + cs.retPts), tb: [cs.tbW, cs.tbL], dec: [cs.decW, cs.decL], cb: [cs.cbW, cs.cbL], top10: [cs.top10W, cs.top10L], finals: [cs.finalW, cs.finalL],
+      svMax: cs.svMax || null, svAvg1: cs.svN1 ? Math.round(cs.svSum1 / cs.svN1) : null,
       net: pct(cs.netWon, cs.netPts), netPts: cs.netPts, winners: cs.winners, ues: cs.ues, mpSaved: cs.mpSaved, avgMin: cs.m ? Math.round(cs.minutes / cs.m) : null, longestMin: cs.longestMin, longestVs: cs.longestVs, longest: cs.longest, bestStreak: cs.bestStreak, streak: cs.streak,
     };
   }
@@ -1154,6 +1156,7 @@
   // Plays one match; yields an interactive match object when the human should watch it.
   function* playOne(state, T, a, b, label, qualifying) {
     const rng = state.rng;
+    heightOf(state, a); heightOf(state, b); // serve speed uses the height
     const hum = a.isHuman || b.isHuman;
     // Grand Slam qualifying is best-of-three; only the main draw is best-of-five.
     const mo = Object.assign({ rng, surface: T.surface, bo5: T.def.bo5 && !qualifying, finalTb10: T.def.tier === 9, log: hum }, hum ? matchOpts(state, a, b, T) : {});

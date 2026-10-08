@@ -439,3 +439,6 @@ tr.flash-me td{animation:flashMe .45s} tr.flash-op td{animation:flashOp .45s}
 .gpsinks{display:flex;flex-direction:column;gap:8px}
 .gpsinks>.row{gap:10px;align-items:center}
 .gpsinks select{max-width:170px}
+
+/* v2.16 serve speed */
+.kind .kmh{display:inline-block;margin-left:8px;padding:1px 7px;border-radius:9px;background:var(--panel3);color:var(--text);font-size:11px;font-weight:600;letter-spacing:.02em}
