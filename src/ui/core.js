@@ -5,7 +5,7 @@
     W, D, S: null, tab: "home", modal: null, planSel: null, planWeekT: -1, runLog: null, running: false, screens: {},
     SAVE_KEY: "tourlife_v1", SETTINGS_KEY: "tourlife_settings_v1", HOF_KEY: "tourlife_hof_v1",
     DEFAULT_SETTINGS: { stopTournament: true, stopMilestone: true, stopInjury: true, stopSeason: true, stopEvent: true, stopRival: true, watchEnabled: true, watchDepth: { gs: "all", m1000: "sf", tour: "final", lower: "final" }, watchLowerFinal: true, watchGs: true, watchFinals: true, watchRival: true, watchTop10: true, watchTitle: true, watchSpeed: 300, sound: false, volume: 0.5, reduceMotion: false, slot: 1, introSeen: false, hints: {}, hintsAlways: false },
-    VERSION: "v2.23",
+    VERSION: "v2.24",
   });
   U.ATTRL = W.ATTR_LABEL;
   U.ORIGINS = {
@@ -108,6 +108,8 @@
     let wrap = document.querySelector(".toast-wrap");
     if (!wrap) { wrap = document.createElement("div"); wrap.className = "toast-wrap"; document.body.appendChild(wrap); }
     const t = document.createElement("div"); t.className = "toast " + (cls || ""); t.innerHTML = html; wrap.appendChild(t);
+    while (wrap.children.length > 3) wrap.firstChild.remove(); // v2.24: never pile up; tap to dismiss
+    t.onclick = () => t.remove();
     setTimeout(() => { t.style.opacity = "0"; t.style.transition = "opacity .4s"; setTimeout(() => t.remove(), 400); }, 3800);
   };
 
@@ -126,11 +128,12 @@
     const scrollY = window.scrollY;
     app.innerHTML = `<div class="app">
       <nav class="rail"><div class="brand"><span class="logo">TL</span><span>Tour Life</span></div>
-        ${U.TABS.map(([k, l]) => `<button class="nav ${U.tab === k ? "active" : ""} ${U.PRIMARY.includes(k) ? "" : "more-hidden"}" data-tab="${k}" title="${l}">${U.icon(k)}<span>${l}</span>${k === "report" && S.human.event ? '<span class="badge">!</span>' : ""}</button>`).join("")}
+        ${U.TABS.map(([k, l]) => `<button class="nav ${U.tab === k ? "active" : ""} ${U.PRIMARY.includes(k) ? "" : "more-hidden"}" data-tab="${k}" title="${l}">${U.icon(k)}<span>${l}</span>${k === "report" && S.human.event ? '<span class="badge">!</span>' : k === "sponsor" && U.emptySponsorSlots(S).length ? `<span class="badge">${U.emptySponsorSlots(S).length}</span>` : ""}</button>`).join("")}
         <button class="nav more-only ${U.PRIMARY.includes(U.tab) ? "" : "active"}" data-more title="その他">${U.icon("more")}<span>${U.PRIMARY.includes(U.tab) ? "その他" : U.TAB_LABEL[U.tab]}</span></button>
         <div class="spacer"></div><div class="version">${U.VERSION}</div></nav>
       <div class="main"><header class="topbar">
-        <div class="identity">${U.avatar(me)}<div><div class="name">${esc(me.name)}</div><div class="sub">${U.cal()}年 第${S.week}週 ・ ${W.age(S, me)}歳 ・ ${U.ORIGINS[S.config.origin].name}${S.human.retireYear && S.year === S.human.retireYear ? ' ・ <span class="gold">ラストシーズン</span>' : ""}</div></div></div>
+        <div class="identity">${U.avatar(me)}<div><div class="name">${esc(me.name)}</div><div class="sub">${U.cal()}年 第${S.week}週 ・ ${W.age(S, me)}歳 ・ ${U.ORIGINS[S.config.origin].name}${S.human.retireYear && S.year === S.human.retireYear ? ' ・ <span class="gold">ラストシーズン</span>' : ""}</div></div>
+          ${S.human.careerOver ? "" : `<button class="primary gobtn" data-go-top title="${U.tab === "plan" ? "プランの4週を進める" : "自動方針で4週進める（イベント・怪我・停止条件で止まる）"}">${U.tab === "plan" ? "この4週を進める" : "4週進める"} <span class="arrow">▶</span></button>`}</div>
         <div class="statrow">
         <div class="stat"><span class="l">Ranking</span><span class="v">${me.rank ? me.rank + "位" : "ランク外"}</span><span class="d">${me.points}pt ${delta > 0 ? `<span class="green">▲${delta}</span>` : delta < 0 ? `<span class="red">▼${-delta}</span>` : ""}</span></div>
         ${(() => { const L = W.legacyView(S); return `<div class="stat" data-goto-legacy style="cursor:pointer" title="レガシー（キャリア評価）"><span class="l">Legacy</span><span class="v ${L.hof ? "gold" : ""}">${L.total}<span class="small muted">pt</span></span><span class="d"><span class="lgbar"><i style="width:${Math.min(100, (L.total / L.line) * 100)}%"></i></span>${L.hof ? '<span class="gold">殿堂ライン到達</span>' : `殿堂まで ${L.gap}`}</span></div>`; })()}
@@ -142,6 +145,7 @@
         ${inj}
         </div></header><div class="content" id="content"></div></div></div>`;
     app.querySelectorAll(".rail .nav[data-tab]").forEach((b) => b.onclick = () => { U.tab = b.dataset.tab; U.render(); });
+    const gt = app.querySelector("[data-go-top]"); if (gt) gt.onclick = () => U.goDefault(4);
     app.querySelectorAll("[data-goto-legacy]").forEach((b) => b.onclick = () => U.openModal(U.legacyHtml(), true));
     const more = app.querySelector("[data-more]");
     if (more) more.onclick = () => U.openModal(`<h2>メニュー</h2><div class="grid2" style="grid-template-columns:repeat(2,1fr)">${U.TABS.filter(([k]) => !U.PRIMARY.includes(k)).map(([k, l]) => `<button class="${U.tab === k ? "primary" : ""}" data-goto="${k}" style="display:flex;gap:8px;align-items:center;justify-content:flex-start">${U.icon(k)} ${l}</button>`).join("")}</div><div style="margin-top:10px"><button data-close>閉じる</button></div>`);
@@ -183,7 +187,7 @@
       layer.querySelectorAll("[data-asset-confirm]").forEach((b) => b.onclick = () => { W.buyAsset(S, b.dataset.assetConfirm); U.save(); U.modal = null; U.render(); });
       layer.querySelectorAll("[data-confirm-fire]").forEach((b) => b.onclick = () => { W.fireCoach(S); U.save(); U.modal = null; U.render(); });
       layer.querySelectorAll("[data-confirm-retire]").forEach((b) => b.onclick = () => { W.retireNow(S); U.save(); U.pushHof(S.human.epilogue); U.modal = `<h2>引退</h2>${U.epilogueHtml()}<button data-close>閉じる</button>`; U.tab = "plan"; U.render(); });
-      layer.querySelectorAll("[data-choice]").forEach((b) => b.onclick = () => { const txt = W.resolveEvent(S, b.dataset.choice); U.save(); U.modalDirty = true; const r = U.resume && !S.human.careerOver && !S.human.event ? U.resume : (U.resume = null); U.openModal(`<h2>結果</h2><p>${esc(txt)}</p>${r ? `<div class="row" style="gap:8px"><button class="primary" data-resume>閉じて続ける <span class="small">（${r.kind === "auto" ? "自動進行" : "プラン"} 残り${r.left}週）</span></button><button data-close data-stop-resume>ここで止める</button></div>` : '<button class="primary" data-close>閉じる</button>'}`, false, true); });
+      layer.querySelectorAll("[data-choice]").forEach((b) => b.onclick = () => { const txt = W.resolveEvent(S, b.dataset.choice); U.save(); U.modalDirty = true; if (b.dataset.choice === "gotosponsor") { U.tab = "sponsor"; U.resume = null; } const r = U.resume && !S.human.careerOver && !S.human.event ? U.resume : (U.resume = null); U.openModal(`<h2>結果</h2><p>${esc(txt)}</p>${r ? `<div class="row" style="gap:8px"><button class="primary" data-resume>閉じて続ける <span class="small">（${r.kind === "auto" ? "自動進行" : "プラン"} 残り${r.left}週）</span></button><button data-close data-stop-resume>ここで止める</button></div>` : '<button class="primary" data-close>閉じる</button>'}`, false, true); });
       layer.querySelectorAll("[data-resume]").forEach((b) => b.onclick = () => U.doResume());
     }
     U.bindPlayerLinks(layer); U.bindHelp(layer);
@@ -258,8 +262,8 @@
   // v2.21: long explanations live behind a "?" instead of on the screen
   // v2.21: the guide — every rule in one place; screens link to a section with a "?"
   U.GUIDE = [
-    ["home", "ホーム", "「今週の決断」は自動方針の提案。そのまま1週進めるか、「4週プラン」で自分で組む。<br>受信箱: 選択肢つきのイベント、ニュース、コーチの一言。<br>今季の目標: 毎年3つ（年末ランキング／タイトル／GS）。達成で成長ポイント、3つ全部でスポンサーボーナス。<br>レガシー: キャリアの評価点。殿堂ライン 400 が最終目標。"],
-    ["plan", "プラン・大会", "各週は おまかせ／大会／練習／休養／合宿。大会カードの色は エントリー状況（本戦ダイレクトイン／当落線上／予選／ワイルドカード）。<br>自動の方針: ビッグイベント優先（GS・マスターズ・自国大会を最優先、前週は休む）／ポイント重視（ほぼ毎週出る）／育成重視（大会を絞って練習、練習効果 ×1.2）／移動最小／厳選（30歳〜）。<br>負荷の目安: トップ20 年15〜20大会、トップ100 22〜26、それ以下 26〜30。疲労45超・GS翌週は休む。<br>停止条件: 自動進行を止めるタイミング。怪我は常に止まる。"],
+    ["home", "ホーム", "画面上部の「4週進める」はどの画面からでも使える（プランタブではプランを、それ以外は自動方針で進める）。「今週の決断」は自動方針の提案。そのまま1週進めるか、「4週プラン」で自分で組む。<br>受信箱: 選択肢つきのイベント、ニュース、コーチの一言。<br>今季の目標: 毎年3つ（年末ランキング／タイトル／GS）。達成で成長ポイント、3つ全部でスポンサーボーナス。<br>レガシー: キャリアの評価点。殿堂ライン 400 が最終目標。"],
+    ["plan", "プラン・大会", "各週は おまかせ／大会／練習／休養／合宿。大会カードの色は エントリー状況（本戦ダイレクトイン／当落線上／予選／ワイルドカード）。カードの「優勝○%・期待○pt」は、いまの実力と想定される出場者で大会を160回試算した目安（疲労とサーフェス適性込み）。<br>自動の方針: ビッグイベント優先（GS・マスターズ・自国大会を最優先、前週は休む）／ポイント重視（ほぼ毎週出る）／育成重視（大会を絞って練習、練習効果 ×1.2）／移動最小／厳選（30歳〜）。<br>負荷の目安: トップ20 年15〜20大会、トップ100 22〜26、それ以下 26〜30。疲労45超・GS翌週は休む。<br>停止条件: 自動進行を止めるタイミング。スポンサー契約の満了は設定に関係なく止まる。怪我は常に止まる。"],
     ["watch", "観戦モード", "重要試合はポイント単位で観戦し、セット間にプランを変えられる。大会の種類ごとに「決勝のみ／準決勝から／準々決勝から／全試合」を選べる。<br>大一番（GS・マスターズ・ファイナルズ・五輪・デビス・各大会の決勝）は試合前にタイトルカードが出る。<br>「スキップ」で結果だけ見る。ポイントごとにサーブ速度（km/h）を表示。"],
     ["match", "試合プラン", "相手に合わせる（推奨）: 試合ごとに相手のタイプを読み、コーチが対策を選ぶ。サーブ型→守備的、ラリー型・カウンター型→攻撃的、オールラウンド型→バランス。噛み合うと全局面 +0.8（勝率 約+1.7%）。手動でも噛み合えば同じ。<br>バランス: 標準。攻撃的: サーブ +2.5・ラリー +1・リターン −2、ポイントが短くなる。守備的: リターン +2.5・ラリー +0.5・サーブ −2、試合が長くなり疲労 ×1.1。体力温存: 全体 −1.5、疲労 ×0.7。<br>セット間の切替: 「セットを落としたら攻撃的に」で試合中に変わる。"],
     ["player", "能力・育成", "能力は11項目。総合は試合エンジンと同じ重み。実力は総合にサーフェス適性・試合勘・スタイル・特性などを足した試合上の強さ。<br>目標スタイル: 決めるとキー能力の練習効果 ×1.15。キー能力の平均が他より5以上高くなると「確立」し、試合で効果（例: ビッグサーバー サーブ +5.5）。3を割ると解除。<br>練習配分: 週10コマを サーブ／ストローク／リターン／フィジカル／メンタル／試合勘 に割り振る。フィジカル4コマ以上は疲労が溜まる。コーチに任せることもできる。<br>練習強度: 軽め ×0.75（疲労 −6、怪我 ×0.7）、標準、ハード ×1.3（疲労 +8、怪我 ×2.5）。<br>天井（ポテンシャル）は見えない。天井より6以上高い能力は伸びが鈍る。身長で得意な能力と天井がずれる。"],
@@ -296,7 +300,7 @@
 
   // ---------- onboarding (UI-9): first-season hints per screen, replayable from settings ----------
   U.HINTS = {
-    home: ["ホームの読み方", "右の「今季の目標」は毎シーズン3つ。達成すると成長ポイント、全達成でボーナス。「レガシー」はキャリアの評価点で、殿堂ラインを越えるのが最終目標。「今週の決断」は自動方針の提案。そのまま4週進める（1週だけも可）か、「4週プラン」で大会・練習・休養を自分で組む。怪我・イベント・設定で選んだ停止条件に当たると途中で止まる。イベントで止まった場合は、選択後に「閉じて続ける」で残りを再開できる。優勝と怪我は全画面で知らせる。受信箱には選択肢つきのイベントとニュースが届く。"],
+    home: ["ホームの読み方", "右の「今季の目標」は毎シーズン3つ。達成すると成長ポイント、全達成でボーナス。「レガシー」はキャリアの評価点で、殿堂ラインを越えるのが最終目標。画面上部の「4週進める」はどの画面からでも使える（プランタブではプランを、それ以外は自動方針で進める）。「今週の決断」は自動方針の提案。そのまま4週進める（1週だけも可）か、「4週プラン」で大会・練習・休養を自分で組む。怪我・イベント・設定で選んだ停止条件に当たると途中で止まる。イベントで止まった場合は、選択後に「閉じて続ける」で残りを再開できる。優勝と怪我は全画面で知らせる。受信箱には選択肢つきのイベントとニュースが届く。"],
     plan: ["4週プランの組み方", "「自動の方針」で大会選びの考え方（ビッグイベント優先／ポイント重視／育成重視／移動最小）を決められる。各週は 自動／大会／練習／休養／合宿 から選ぶ。大会カードの点はエントリー見込み（緑=本戦、黄=予選、赤=カットオフ外）。負荷メーターが赤なら休養を。重要試合は観戦モードになる。"],
     report: ["結果の見方", "試合ごとのスコアと、練習で伸びた能力が週単位で出る。「ドロー表」で本戦の全試合を確認できる。"],
     sponsor: ["スポンサー契約", "ラケット・ウエア・シューズは各1社、その他は2社まで。ブランドはランキングで解放され、週給は契約時のランキングで決まって期間中固定。用具には試合やコンディションへの効果、優勝ボーナス条項もある。"],
@@ -386,8 +390,22 @@
   };
   U.epilogueHtml = () => { const e = U.S.human.epilogue; if (!e) return ""; return `${U.S.human.retireReason ? `<p class="small muted">${U.esc(U.S.human.retireReason)}</p>` : ""}<h1 class="gold">「${U.esc(e.tag)}」</h1><p>${e.lines.map(U.esc).join("<br>")}</p><p class="small muted">殿堂ギャラリー（スタート画面）に記録されました。</p>`; };
 
+  // v2.24: the same "advance" from any screen. On the plan tab it runs the plan; elsewhere the auto policy.
+  U.goDefault = function (n) {
+    const S = U.S; if (!S || U.running || S.human.careerOver) return;
+    if (U.tab === "plan") { const b = document.querySelector('[data-run="4"]'); if (b) { b.click(); return; } }
+    const me = U.human();
+    const first = me.blockedUntil >= S.t ? { type: "blocked" } : { type: "auto" };
+    U.runWeeks([first].concat(Array.from({ length: n - 1 }, () => ({ type: "auto" }))));
+  };
+  // main sponsor categories with no contract while at least one brand would sign now
+  U.emptySponsorSlots = (S) => {
+    const sp = W.sponsorsOf(S), out = [];
+    for (const cat of ["racket", "apparel", "shoes"]) if (!sp[cat] && (D.SPONSORS[cat] || []).some((b) => W.sponsorUnlocked(S, b))) out.push(cat);
+    return out;
+  };
   // ---------- run loop ----------
-  U.shouldStop = (rep) => { const st = rep.stops, s = U.settings; return st.includes("injury") || (st.includes("season") && s.stopSeason) || (st.includes("event") && s.stopEvent) || (st.includes("rival") && s.stopRival); };
+  U.shouldStop = (rep) => { const st = rep.stops, s = U.settings; return st.includes("injury") || st.includes("sponsor") || (st.includes("season") && s.stopSeason) || (st.includes("event") && s.stopEvent) || (st.includes("rival") && s.stopRival); }; // v2.24: a lapsed sponsor contract always stops
   U.advanceInteractive = (action) => new Promise((resolve) => {
     const gen = W.advanceWeekGen(U.S, Object.assign({}, action, { watch: U.watchOpts() }));
     const pump = () => { let r = gen.next(); while (!r.done && r.value.type !== "match") r = gen.next(); if (r.done) { resolve(r.value); return; } U.showMatchViewer(r.value, pump); };

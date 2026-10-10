@@ -1066,6 +1066,8 @@
       case "rivalinjury:visit": h.attrs.focus = clamp(h.attrs.focus + 0.5, 25, 99); rivalHeat(state, -20); text = "短い返事が来た。「戻ったら、また」。"; break;
       case "rivalinjury:focus": H.focusBoostUntil = state.t + 4; rivalHeat(state, 10); text = "練習量を上げた。相手が戻る前に差をつける。"; break;
       case "spexpire:renew": signSponsor(state, ev.cat, ev.brand, 1); text = "契約を更新した。"; break;
+      case "spend:gotosponsor": text = "スポンサータブで契約できるブランドを確認する。"; break;
+      case "spend:ok": text = "空き枠はそのまま。収入が減っている間はホームに表示される。"; break;
       case "spexpire:release": text = "更新しなかった。"; break;
       case "invest:yes": H.money -= ev.amount; H.investment = { amount: ev.amount, label: ev.label, until: state.t + 52 }; text = `${ev.label} に $${ev.amount}k を出資した。結果は1年後。`; break;
       case "invest:no": text = "見送った。"; break;
@@ -2595,14 +2597,23 @@
       if (!c) return c;
       const b = brandOf(c.cat, c.id);
       if (state.t >= c.until) {
+        // v2.24: another event already waiting this week → the contract runs one more week and the
+        // renewal is asked next week instead of silently lapsing
+        if (state.human.event) return c;
         news(state, `${c.name} との契約が満了`);
-        if (!state.human.event && b && sponsorUnlocked(state, b)) {
+        if (b && sponsorUnlocked(state, b)) {
           const pay = sponsorOffer(state, c.cat, b);
           state.human.event = { id: "spexpire", title: `${c.name} との契約満了`, text: `${D.SPONSOR_CATS[c.cat]}契約が満了。${c.name} は ${money(pay)}/週 で1年の更新を提示している${pay > c.pay ? "（ランキング上昇で増額）" : ""}。`, cat: c.cat, brand: b.id, pay, choices: [
             { key: "renew", label: "更新する", desc: `${money(pay)}/週 × 1年、契約金 ${money(pay * 10)}` },
             { key: "release", label: "更新しない", desc: "スポンサータブで別のブランドを探す" }] };
-          state.human.lastEventT = state.t; report.event = state.human.event; report.stops.push("event");
-        } else report.items.push({ type: "sponsor", text: `${c.name} との契約が満了。スポンサータブで再契約できる` });
+        } else {
+          // the brand no longer wants a player at this ranking: still a decision, not a footnote
+          state.human.event = { id: "spend", title: `${c.name} との契約終了`, text: `${D.SPONSOR_CATS[c.cat]}契約が満了し、${c.name} は更新を見送った（契約条件は${b ? `${b.unlock}位以内` : "満たしていない"}）。週 ${money(c.pay)} の収入が消える。`, cat: c.cat, choices: [
+            { key: "gotosponsor", label: "スポンサータブで別のブランドを探す", desc: "いま契約できるブランドを確認する" },
+            { key: "ok", label: "あとで考える", desc: "空き枠はホームと結果に表示され続ける" }] };
+        }
+        state.human.lastEventT = state.t; report.event = state.human.event; report.stops.push("event"); report.stops.push("sponsor");
+        report.items.push({ type: "sponsor", text: `${c.name} との契約が満了（週 ${money(c.pay)} の収入が止まる）` });
         return null;
       }
       if (b && b.risky && rng.chance(0.2 / 52)) { const h = human(state); h.attrs.focus = clamp(h.attrs.focus - 1, 25, 99); news(state, `${c.name} が経営破綻。契約は消滅し、イメージが傷ついた`); report.items.push({ type: "sponsor", text: `${c.name} が破綻した` }); return null; }
@@ -3082,6 +3093,58 @@
     return state.players.filter((p) => !p.retired && !p.isHuman && !p.injury && p.rank && p.rank <= cut && p.rank > floor && !(T.def.tier === 6 && p.rank <= 10 && p.country !== T.country)).sort((a, b) => a.rank - b.rank).slice(0, n || 4);
   }
 
+  // v2.24: what a tournament is worth before entering — title odds, expected points and prize.
+  // Monte Carlo over a seeded bracket of the likely field; a local RNG so the game's own stream is untouched.
+  const OUTLOOK_K = 0.085; // logistic slope per point of strength (~2% match win per point, from the engine)
+  const outlookCache = new Map();
+  function tourOutlook(state, T) {
+    const h = human(state);
+    const key = `${T.id}:${state.t}:${Math.round(TL.overall(h) * 10)}:${Math.round(h.fatigue)}`;
+    if (outlookCache.has(key)) return outlookCache.get(key);
+    if (outlookCache.size > 200) outlookCache.clear();
+    const def = T.def, rounds = Math.ceil(Math.log2(def.draw)), size = Math.pow(2, rounds);
+    const surfOf = (p) => (((p.surf && p.surf[T.surface] !== undefined ? p.surf[T.surface] : 50) - 50) / 50) * 6;
+    const globalSurf = (p) => Object.entries(SURF_SHARE).reduce((c, [k, w]) => c + w * (((p.surf && p.surf[k] !== undefined ? p.surf[k] : 50) - 50) / 50) * 6, 0);
+    const eff = (p) => strengthOf(state, p) - globalSurf(p) + surfOf(p) + (p.isHuman ? -Math.max(0, p.fatigue - 40) * 0.05 : 0);
+    const cut = expectedCut(state, T);
+    const floor = def.tier <= 2 ? 200 : def.tier <= 3 ? 100 : def.tier <= 5 ? 50 : 0;
+    const field = state.players.filter((p) => !p.retired && !p.isHuman && !p.injury && p.rank && p.rank <= Math.max(cut, 8) && p.rank > floor && !(def.tier === 6 && p.rank <= 10 && p.country !== T.country))
+      .sort((a, b) => a.rank - b.rank).slice(0, size - 1).map((p) => ({ s: eff(p) }));
+    const me = { s: eff(h), me: true };
+    const rng = new TL.RNG(TL.RNG.hash(key));
+    const k = OUTLOOK_K * (def.bo5 ? 1.3 : 1);
+    const beat = (a, b) => rng.next() < 1 / (1 + Math.exp(-k * (a.s - b.s)));
+    const N = 160; const reach = new Array(rounds + 1).fill(0);
+    for (let it = 0; it < N; it++) {
+      // seeded draw: the field in rank order, byes (null) at the bottom, the human in a random unseeded slot
+      const slots = new Array(size).fill(null);
+      const top = field.slice(0, Math.min(field.length, size)); for (let i = 0; i < top.length; i++) slots[i] = top[i];
+      const pos = Math.min(size - 1, Math.max(0, Math.floor(rng.next() * size)));
+      slots.splice(pos, 0, me); slots.length = size;
+      // shuffle within halves so seeds spread, then play the bracket
+      let cur = slots.slice(); for (let i = cur.length - 1; i > 0; i--) { const j = Math.floor(rng.next() * (i + 1)); if (!(cur[i] && cur[i].me && i < size / 2) ) { const t = cur[i]; cur[i] = cur[j]; cur[j] = t; } }
+      let r = 0, alive = true;
+      while (cur.length > 1) {
+        const next = [];
+        for (let i = 0; i < cur.length; i += 2) {
+          const a = cur[i], b = cur[i + 1];
+          if (!a && !b) { next.push(null); continue; }
+          if (!a || !b) { next.push(a || b); continue; }
+          const w = beat(a, b) ? a : b; next.push(w);
+          if ((a.me || b.me) && !w.me) alive = false;
+        }
+        if (!alive) break;
+        r++; cur = next;
+      }
+      reach[r]++;
+    }
+    const pts = (ri) => def.points[Math.max(0, rounds - ri)] || 0, prize = (ri) => def.prize[Math.max(0, rounds - ri)] || 0;
+    let expPts = 0, expPrize = 0;
+    for (let ri = 0; ri <= rounds; ri++) { const f = reach[ri] / N; expPts += f * pts(ri); expPrize += f * prize(ri); }
+    const out = { win: reach[rounds] / N, final: (reach[rounds] + reach[rounds - 1]) / N, expPts: Math.round(expPts), expPrize: Math.round(expPrize), rounds, n: field.length + 1 };
+    outlookCache.set(key, out);
+    return out;
+  }
   // ---------- public view of any player (no hidden potential) ----------
   function playerInfo(state, id) {
     const p = state.players.find((x) => x.id === id);
@@ -3190,5 +3253,5 @@
     return s;
   }
 
-  TL.World = { ECON_TIERS, econOf, potNow, DEV_PROFILES, profileOf, MENTOR_COST, MENTOR_MULT, MENTOR_UNLOCK, mentorOf, mentorUnlocked, mentorCandidates, setProtege, mentorLegacy, davisField, rivalScores, RIVAL_MIN, GP_SINK, DRILL_COOLDOWN, gpDrill, gpPrep, gpSlot, olympicQuota, HEIGHT_BASE, HEIGHT_FX, heightOf, heightEffects, attrCeil, announceRetirement, isFarewell, farewellOf, coachTalk, LEGACY, LEGACY_LABEL, HOF_LINE, legacyOf, legacyView, goalsView, strategyOk, devStyleOk, declineMods, declineEstimate, RIVALS, rehabWeekly, aiTraitList, TRAIT_LV, TRAIT_COST, traitLevels, traitLevel, traitList, traitSlots, traitEffectText, traitReq, dropTrait, bigTimeline, strengthOf, cashOf, fundingOptions, useFunding, setBudget, JOBS, forcedRetire, TRAIN_SLOTS, TRAIN_CATS, allocOf, allocShare, autoAlloc, allocSummary, TRAITS, hasTrait, traitReqOk, learnTrait, DEV_STYLES, INTENSITY, devOf, styleGap, autoFocus, trainRate, STRATEGIES, sharpBonus, sharpLabel, confLabel, sponsorsOf, brandOf, sponsorOffer, sponsorUnlocked, activeContracts, signSponsor, releaseSponsor, sponsorTerminationFee, sponsorPerks, sponsorWeekly, ASSETS, TAX, AGENT_CUT, assetsOf, assetUnlocked, buyAsset, assetsWeekly, DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
+  TL.World = { tourOutlook, ECON_TIERS, econOf, potNow, DEV_PROFILES, profileOf, MENTOR_COST, MENTOR_MULT, MENTOR_UNLOCK, mentorOf, mentorUnlocked, mentorCandidates, setProtege, mentorLegacy, davisField, rivalScores, RIVAL_MIN, GP_SINK, DRILL_COOLDOWN, gpDrill, gpPrep, gpSlot, olympicQuota, HEIGHT_BASE, HEIGHT_FX, heightOf, heightEffects, attrCeil, announceRetirement, isFarewell, farewellOf, coachTalk, LEGACY, LEGACY_LABEL, HOF_LINE, legacyOf, legacyView, goalsView, strategyOk, devStyleOk, declineMods, declineEstimate, RIVALS, rehabWeekly, aiTraitList, TRAIT_LV, TRAIT_COST, traitLevels, traitLevel, traitList, traitSlots, traitEffectText, traitReq, dropTrait, bigTimeline, strengthOf, cashOf, fundingOptions, useFunding, setBudget, JOBS, forcedRetire, TRAIN_SLOTS, TRAIN_CATS, allocOf, allocShare, autoAlloc, allocSummary, TRAITS, hasTrait, traitReqOk, learnTrait, DEV_STYLES, INTENSITY, devOf, styleGap, autoFocus, trainRate, STRATEGIES, sharpBonus, sharpLabel, confLabel, sponsorsOf, brandOf, sponsorOffer, sponsorUnlocked, activeContracts, signSponsor, releaseSponsor, sponsorTerminationFee, sponsorPerks, sponsorWeekly, ASSETS, TAX, AGENT_CUT, assetsOf, assetUnlocked, buyAsset, assetsWeekly, DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
 })(typeof globalThis !== "undefined" ? globalThis : window);
