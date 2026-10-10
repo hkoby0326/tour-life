@@ -5,7 +5,7 @@
     W, D, S: null, tab: "home", modal: null, planSel: null, planWeekT: -1, runLog: null, running: false, screens: {},
     SAVE_KEY: "tourlife_v1", SETTINGS_KEY: "tourlife_settings_v1", HOF_KEY: "tourlife_hof_v1",
     DEFAULT_SETTINGS: { stopTournament: true, stopMilestone: true, stopInjury: true, stopSeason: true, stopEvent: true, stopRival: true, watchEnabled: true, watchDepth: { gs: "all", m1000: "sf", tour: "final", lower: "final" }, watchLowerFinal: true, watchGs: true, watchFinals: true, watchRival: true, watchTop10: true, watchTitle: true, watchSpeed: 300, sound: false, volume: 0.5, reduceMotion: false, slot: 1, introSeen: false, hints: {}, hintsAlways: false },
-    VERSION: "v2.21",
+    VERSION: "v2.22",
   });
   U.ATTRL = W.ATTR_LABEL;
   U.ORIGINS = {
@@ -167,7 +167,7 @@
     layer.innerHTML = `<div class="modal-bg ${U.modalClass || ""}" id="modalbg"><div class="modal ${U.modalWide ? "wide" : ""} ${U.modalClass || ""}">${U.modal}</div></div>`;
     const bg = document.getElementById("modalbg");
     bg.onclick = (e) => { if (e.target === bg && !(S && S.human.event) && U.modalClass !== "injury") U.closeModal(); };
-    layer.querySelectorAll("[data-close]").forEach((b) => b.onclick = () => U.closeModal());
+    layer.querySelectorAll("[data-close]").forEach((b) => b.onclick = () => { if (b.hasAttribute("data-stop-resume")) U.resume = null; U.closeModal(); });
     layer.querySelectorAll("[data-announce]").forEach((b) => b.onclick = () => { W.announceRetirement(S, b.dataset.announce); U.save(); U.modal = null; U.render(); });
     layer.querySelectorAll("[data-heal]").forEach((b) => b.onclick = () => { U.modal = null; U.modalClass = null; U.renderModal(); const me = U.human(); if (me.injury) U.runWeeks(Array.from({ length: me.injury.weeks + 1 }, () => ({ type: "rest" })), { untilHealed: true }); });
     layer.querySelectorAll("[data-goto]").forEach((g) => g.onclick = () => { U.tab = g.dataset.goto; U.modal = null; U.render(); });
@@ -183,7 +183,8 @@
       layer.querySelectorAll("[data-asset-confirm]").forEach((b) => b.onclick = () => { W.buyAsset(S, b.dataset.assetConfirm); U.save(); U.modal = null; U.render(); });
       layer.querySelectorAll("[data-confirm-fire]").forEach((b) => b.onclick = () => { W.fireCoach(S); U.save(); U.modal = null; U.render(); });
       layer.querySelectorAll("[data-confirm-retire]").forEach((b) => b.onclick = () => { W.retireNow(S); U.save(); U.pushHof(S.human.epilogue); U.modal = `<h2>引退</h2>${U.epilogueHtml()}<button data-close>閉じる</button>`; U.tab = "plan"; U.render(); });
-      layer.querySelectorAll("[data-choice]").forEach((b) => b.onclick = () => { const txt = W.resolveEvent(S, b.dataset.choice); U.save(); U.modalDirty = true; U.openModal(`<h2>結果</h2><p>${esc(txt)}</p><button class="primary" data-close>閉じる</button>`, false, true); });
+      layer.querySelectorAll("[data-choice]").forEach((b) => b.onclick = () => { const txt = W.resolveEvent(S, b.dataset.choice); U.save(); U.modalDirty = true; const r = U.resume && !S.human.careerOver && !S.human.event ? U.resume : (U.resume = null); U.openModal(`<h2>結果</h2><p>${esc(txt)}</p>${r ? `<div class="row" style="gap:8px"><button class="primary" data-resume>閉じて続ける <span class="small">（${r.kind === "auto" ? "自動進行" : "プラン"} 残り${r.left}週）</span></button><button data-close data-stop-resume>ここで止める</button></div>` : '<button class="primary" data-close>閉じる</button>'}`, false, true); });
+      layer.querySelectorAll("[data-resume]").forEach((b) => b.onclick = () => U.doResume());
     }
     U.bindPlayerLinks(layer); U.bindHelp(layer);
     if (U.bindWrapped) U.bindWrapped(layer);
@@ -212,6 +213,28 @@
     U.openModal(`<h2>引退を表明する</h2><p>${esc(me.name)}（${W.age(S, me)}歳、${me.rank ? me.rank + "位" : "ランク外"}、レガシー ${L.total}）。いつを最後のシーズンにする？</p>
       <ul class="small" style="margin:6px 0 12px 18px;line-height:1.8"><li>ラストシーズンは全試合で勝負所 +2</li><li>GS・ホーム・優勝した大会がセレモニーを企画（受けると勝負所 +3、出場ボーナス）</li><li>元トップ50ならATP大会の本戦ワイルドカードが出やすい</li><li>最後のGSの前に決意を選ぶ。好成績なら一度だけ撤回できる</li></ul>
       <div class="row" style="gap:8px;flex-wrap:wrap"><button class="primary" data-announce="this">今季限りで引退</button><button data-announce="next">来季限りで引退</button><button data-close>やめておく</button></div>`);
+  };
+  // v2.22: a title is announced full screen, like an injury
+  U.isTitleRound = (round) => round === "優勝" || round === "金メダル" || round === "優勝（団体）";
+  U.titleHtml = function (rep) {
+    const S = U.S, me = U.human(), T = rep.T, { esc, money } = U;
+    const tier = T.def ? T.def.tier : 0, cat = D.CATS[T.cat] || {};
+    const oly = T.cat === "OLY", davis = T.cat === "DAVIS", finals = T.cat === "FINALS";
+    const k = finals ? "FINALS" : tier === 9 ? "GS" : tier === 8 ? "M1000" : tier === 7 ? "A500" : tier === 6 ? "A250" : tier >= 3 ? "CH" : null;
+    const tw = me.stats.tw || {}, nk = k ? tw[k] || 0 : 0, titles = me.stats.titles || 0;
+    const legacy = oly ? W.LEGACY.olyG : davis ? W.LEGACY.davisW : k ? W.LEGACY[k] : 0;
+    const fin = (rep.humanMatches || []).filter((m) => m.won).slice(-1)[0];
+    const kicker = oly ? "オリンピック 金メダル" : davis ? "デビスカップ 優勝" : `${esc(cat.label || "")} 優勝`;
+    const count = oly ? "祖国に金メダル" : davis ? `${esc(D.COUNTRIES[me.country].name)}が世界一` : titles === 1 ? "キャリア初タイトル" : k && nk === 1 && tier >= 6 ? `初の${esc(W.LEGACY_LABEL[k])}タイトル（通算${titles}勝目）` : `通算${titles}勝目${k && tier >= 6 ? `・${esc(W.LEGACY_LABEL[k])} ${nk}勝目` : ""}`;
+    const home = !oly && !davis && T.country === me.country ? "ホームでの優勝" : "";
+    const farewell = S.human.retireYear === S.year ? "ラストシーズンの優勝" : "";
+    return `<div class="titlepop ${tier >= 8 || oly || davis || finals ? "big" : ""}"><div class="tic">${oly ? "🥇" : "🏆"}</div>
+      <div class="tk">${kicker}</div><h2>${esc(T.name)}</h2>
+      <p class="gold" style="font-size:16px;font-weight:700;margin:2px 0 0">${count}</p>
+      <p class="muted small" style="margin:2px 0 0">${U.cal()}年 第${S.week}週 ・ ${esc(D.SURFACES[T.surface] || "")}${home ? " ・ " + home : ""}${farewell ? " ・ " + farewell : ""}</p>
+      ${fin ? `<p class="small" style="margin:8px 0 0">決勝 ${esc(fin.opp)}${fin.oppRank ? `（${fin.oppRank}位）` : ""} に ${esc(fin.score || "")}</p>` : ""}
+      <div class="kpi"><div class="card"><div class="v gold">+${rep.humanPts || 0}</div><div class="l">ポイント</div></div><div class="card"><div class="v">${money(rep.humanPrize || 0)}</div><div class="l">賞金</div></div><div class="card"><div class="v">+${legacy}</div><div class="l">レガシー</div></div><div class="card"><div class="v">${me.rank ? me.rank + "位" : "-"}</div><div class="l">現在のランク</div></div></div>
+      <button class="primary bigbtn" data-close>閉じる</button></div>`;
   };
   U.injuryHtml = function () {
     const S = U.S, me = U.human(), inj = me.injury, { esc, money } = U;
@@ -266,13 +289,13 @@
   U.closeModal = () => {
     U.modalClass = null;
     // something was waiting behind the injury screen (season report etc.)
-    if (U.modalQueue && U.modalQueue.length) { const q = U.modalQueue.shift(); U.modal = q.html; U.modalWide = q.wide; U.renderModal(); return; }
+    if (U.modalQueue && U.modalQueue.length) { const q = U.modalQueue.shift(); U.modal = q.html; U.modalWide = q.wide; U.modalClass = q.cls || null; U.renderModal(); return; }
     if (U.S && U.S.human.event) U.modalDirty = true;
     U.modal = null; U.modalWide = false; if (U.modalDirty) { U.modalDirty = false; U.render(); } else U.renderModal(); };
 
   // ---------- onboarding (UI-9): first-season hints per screen, replayable from settings ----------
   U.HINTS = {
-    home: ["ホームの読み方", "右の「今季の目標」は毎シーズン3つ。達成すると成長ポイント、全達成でボーナス。「レガシー」はキャリアの評価点で、殿堂ラインを越えるのが最終目標。「今週の決断」は自動方針の提案。そのまま4週進める（1週だけも可）か、「4週プラン」で大会・練習・休養を自分で組む。怪我・イベント・設定で選んだ停止条件に当たると途中で止まる。受信箱には選択肢つきのイベントとニュースが届く。"],
+    home: ["ホームの読み方", "右の「今季の目標」は毎シーズン3つ。達成すると成長ポイント、全達成でボーナス。「レガシー」はキャリアの評価点で、殿堂ラインを越えるのが最終目標。「今週の決断」は自動方針の提案。そのまま4週進める（1週だけも可）か、「4週プラン」で大会・練習・休養を自分で組む。怪我・イベント・設定で選んだ停止条件に当たると途中で止まる。イベントで止まった場合は、選択後に「閉じて続ける」で残りを再開できる。優勝と怪我は全画面で知らせる。受信箱には選択肢つきのイベントとニュースが届く。"],
     plan: ["4週プランの組み方", "「自動の方針」で大会選びの考え方（ビッグイベント優先／ポイント重視／育成重視／移動最小）を決められる。各週は 自動／大会／練習／休養／合宿 から選ぶ。大会カードの点はエントリー見込み（緑=本戦、黄=予選、赤=カットオフ外）。負荷メーターが赤なら休養を。重要試合は観戦モードになる。"],
     report: ["結果の見方", "試合ごとのスコアと、練習で伸びた能力が週単位で出る。「ドロー表」で本戦の全試合を確認できる。"],
     sponsor: ["スポンサー契約", "ラケット・ウエア・シューズは各1社、その他は2社まで。ブランドはランキングで解放され、週給は契約時のランキングで決まって期間中固定。用具には試合やコンディションへの効果、優勝ボーナス条項もある。"],
@@ -369,35 +392,47 @@
     const pump = () => { let r = gen.next(); while (!r.done && r.value.type !== "match") r = gen.next(); if (r.done) { resolve(r.value); return; } U.showMatchViewer(r.value, pump); };
     pump();
   });
-  U.runWeeks = async function (actions, opts) {
-    if (U.running) return; U.running = true;
-    const log = [];
+  // v2.22: a run that stops only because an event wants an answer can pick up where it left off
+  // once the player has chosen (U.resume is consumed by the event's result dialog)
+  const noEvent = (rep) => Object.assign({}, rep, { stops: rep.stops.filter((x) => x !== "event") });
+  U.runWeeks = async function (actions, opts, prevLog) {
+    if (U.running) return; U.running = true; U.resume = null;
+    const log = prevLog ? prevLog.slice() : [];
     try {
       for (let i = 0; i < actions.length; i++) {
         const rep = await U.advanceInteractive(actions[i]);
         log.push(rep); U.save();
         if (U.S.human.careerOver) break;
         if (opts && opts.untilHealed && !U.human().injury) break;
-        if (U.shouldStop(rep)) break;
+        if (U.shouldStop(rep)) {
+          if (!U.shouldStop(noEvent(rep)) && U.S.human.event && i + 1 < actions.length) U.resume = { kind: "weeks", actions: actions.slice(i + 1), opts, log, left: actions.length - i - 1 };
+          break;
+        }
       }
     } finally { U.running = false; }
     U.finishRun(log);
   };
-  U.autoRun = async function (maxWeeks) {
-    if (U.running) return; U.running = true;
-    const log = [];
+  U.autoRun = async function (maxWeeks, prevLog) {
+    if (U.running) return; U.running = true; U.resume = null;
+    const log = prevLog ? prevLog.slice() : [];
+    const other = (rep) => U.shouldStop(noEvent(rep)) || (rep.stops.includes("tournament") && U.settings.stopTournament) || (rep.stops.includes("milestone") && U.settings.stopMilestone) || rep.items.some((it) => it.type === "healed");
     try {
       for (let i = 0; i < maxWeeks; i++) {
         const rep = await U.advanceInteractive({ type: "auto" });
         log.push(rep); U.save();
         if (U.S.human.careerOver) break;
-        if (U.shouldStop(rep)) break;
-        if (rep.stops.includes("tournament") && U.settings.stopTournament) break;
-        if (rep.stops.includes("milestone") && U.settings.stopMilestone) break;
-        if (rep.items.some((it) => it.type === "healed")) break;
+        if (U.shouldStop(rep) || other(rep)) {
+          if (!other(rep) && U.S.human.event && i + 1 < maxWeeks) U.resume = { kind: "auto", left: maxWeeks - i - 1, log };
+          break;
+        }
       }
     } finally { U.running = false; }
     U.finishRun(log);
+  };
+  U.doResume = function () {
+    const r = U.resume; U.resume = null; if (!r) return;
+    U.modal = null; U.modalClass = null; U.modalWide = false; U.renderModal();
+    if (r.kind === "auto") U.autoRun(r.left, r.log); else U.runWeeks(r.actions, r.opts, r.log);
   };
   U.finishRun = function (log) {
     const S = U.S;
@@ -408,16 +443,14 @@
     let fanfare = false;
     for (const r of log) {
       for (const it of r.items) if (it.type === "milestone") { U.toast(`🏅 ${U.esc(it.text)}`, "gold"); fanfare = true; } else if (it.type === "goal") { U.toast(`🎯 ${U.esc(it.text)}`, "gold"); fanfare = true; }
-      if (r.human && r.human.humanRound === "優勝") { U.toast(`🏆 ${U.esc(r.human.T.name)} 優勝！ +${r.human.humanPts}pt`, "gold"); fanfare = true; }
     }
-    if (fanfare && U.sfx) U.sfx("milestone");
-    // injury this run and nothing more important on screen → popup
-    // the injury comes first, full screen; anything else (season report) waits behind it, events after
-    if (!S.human.careerOver && U.human().injury && log.some((r) => r.stops.includes("injury"))) {
-      if (U.modal) U.modalQueue.push({ html: U.modal, wide: U.modalWide });
-      U.modal = U.injuryHtml(); U.modalWide = false; U.modalClass = "injury";
-      if (U.sfx) U.sfx("injury");
-    }
+    // v2.22: the order on screen is title(s) → injury → season report / epilogue; events after all of them
+    const shows = [];
+    for (const r of log) if (r.human && U.isTitleRound(r.human.humanRound)) shows.push({ html: U.titleHtml(r.human), wide: false, cls: "title" });
+    if (!S.human.careerOver && U.human().injury && log.some((r) => r.stops.includes("injury"))) shows.push({ html: U.injuryHtml(), wide: false, cls: "injury" });
+    if (U.modal) shows.push({ html: U.modal, wide: U.modalWide, cls: null });
+    if (shows.length) { const first = shows.shift(); U.modal = first.html; U.modalWide = first.wide; U.modalClass = first.cls; U.modalQueue = shows; }
+    if (U.sfx) { if (U.modalClass === "title") U.sfx("title"); else if (U.modalClass === "injury") U.sfx("injury"); else if (fanfare) U.sfx("milestone"); }
     U.tab = "report"; U.render();
   };
 

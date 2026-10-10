@@ -31,6 +31,7 @@
     lose: () => [392, 330, 262].forEach((f, i) => tone(f, 0.25, "sine", 0.3, i * 0.18)),
     milestone: () => [784, 988, 1175, 1568].forEach((f, i) => tone(f, 0.2, "sine", 0.3, i * 0.1)),
     click: () => tone(1200, 0.03, "square", 0.08),
+    title: () => { [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.18, "triangle", 0.3, i * 0.11)); [784, 1047, 1319].forEach((f, i) => tone(f, 0.7, "sine", 0.22, 0.5 + i * 0.02)); },
     hype: () => [392, 523, 659, 784, 1047].forEach((f, i) => tone(f, 0.5, "triangle", 0.28, i * 0.09)),
     injury: () => { tone(330, 0.18, "sawtooth", 0.12, 0, 200); tone(196, 0.35, "sine", 0.25, 0.16); },
   };

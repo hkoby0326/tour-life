@@ -470,3 +470,17 @@ tr.flash-me td{animation:flashMe .45s} tr.flash-op td{animation:flashOp .45s}
 .hype .hl{font-size:15px;line-height:1.8;margin-bottom:16px}
 .hype .hl div:first-child{font-weight:700;font-size:17px}
 @media (max-width:720px){.hype .ht{font-size:26px}.hype .hvs{gap:12px}.hype .hp{min-width:90px}}
+
+/* v2.22 title popup: full screen, gold */
+.titlepop{text-align:center}
+.titlepop .tic{font-size:76px;line-height:1;margin:0 0 8px;animation:titlepop .6s cubic-bezier(.2,1.4,.4,1) 1}
+.titlepop .tk{font-size:14px;font-weight:700;letter-spacing:.08em;color:var(--gold)}
+.titlepop h2{margin:4px 0 2px;font-size:24px;justify-content:center;border-bottom:0;padding-bottom:0}
+.titlepop h2::before{display:none}
+.titlepop .kpi{margin:12px 0}
+.titlepop .bigbtn{margin-top:6px}
+.titlepop.big .tic{font-size:96px}
+@keyframes titlepop{0%{transform:scale(.3);opacity:0}100%{transform:none;opacity:1}}
+@media (prefers-reduced-motion: reduce){.titlepop .tic{animation:none}}
+.modal-bg.title{background:radial-gradient(circle at 50% 35%,rgba(202,138,4,.45),rgba(3,6,10,.92) 70%);animation:injbg .5s ease}
+.modal.title{max-width:640px;border:2px solid var(--gold);box-shadow:0 0 0 1px rgba(250,204,21,.25),0 0 90px rgba(250,204,21,.35);padding:30px 26px}
