@@ -25,14 +25,19 @@ const { chromium } = require("playwright");
   await page.screenshot({ path: shots + "/01_plan.png", fullPage: true });
   let viewers = 0;
   // wait for a run to finish, driving the live match viewer when it appears
+  let titles = 0, hypes = 0;
   async function settle() {
     for (let i = 0; i < 400; i++) {
       const v = await page.$(".viewer");
       if (v) {
         viewers++;
         if (viewers === 1) { await page.waitForTimeout(1200); await page.screenshot({ path: shots + "/09_viewer.png", fullPage: false }); await page.selectOption("#v-planSel", "aggressive"); }
+        const go = await page.$("#v-hype-go"); if (go) { hypes++; await go.click(); await page.waitForTimeout(400); } // v2.21 title card before a big final
         await page.click("#v-skip"); await page.click("#v-done"); continue;
       }
+      // v2.23: a title popup mid-run pauses the loop until it is closed
+      const tp = await page.$(".modal.title [data-close]");
+      if (tp) { titles++; if (titles === 1) await page.screenshot({ path: shots + "/14_title.png", fullPage: false }); await tp.click(); continue; }
       if (await page.$('.rail .nav.active[data-tab="report"]')) return;
       await page.waitForTimeout(50);
     }
@@ -92,7 +97,7 @@ const { chromium } = require("playwright");
   }
   const header = (await page.textContent(".topbar")).replace(/\s+/g, " ");
   console.log("header:", header.slice(0, 200));
-  console.log("season modal:", seasonSeen, "| event seen:", eventSeen, "| live viewers:", viewers);
+  console.log("season modal:", seasonSeen, "| event seen:", eventSeen, "| live viewers:", viewers, "| title popups:", titles, "| hype cards:", hypes);
   await page.reload(); await page.waitForSelector(".topbar");
   console.log("reload ok");
   await browser.close();

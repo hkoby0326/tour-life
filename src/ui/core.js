@@ -5,7 +5,7 @@
     W, D, S: null, tab: "home", modal: null, planSel: null, planWeekT: -1, runLog: null, running: false, screens: {},
     SAVE_KEY: "tourlife_v1", SETTINGS_KEY: "tourlife_settings_v1", HOF_KEY: "tourlife_hof_v1",
     DEFAULT_SETTINGS: { stopTournament: true, stopMilestone: true, stopInjury: true, stopSeason: true, stopEvent: true, stopRival: true, watchEnabled: true, watchDepth: { gs: "all", m1000: "sf", tour: "final", lower: "final" }, watchLowerFinal: true, watchGs: true, watchFinals: true, watchRival: true, watchTop10: true, watchTitle: true, watchSpeed: 300, sound: false, volume: 0.5, reduceMotion: false, slot: 1, introSeen: false, hints: {}, hintsAlways: false },
-    VERSION: "v2.22",
+    VERSION: "v2.23",
   });
   U.ATTRL = W.ATTR_LABEL;
   U.ORIGINS = {
@@ -288,6 +288,7 @@
   };
   U.closeModal = () => {
     U.modalClass = null;
+    if (U._popupResolve) { const r = U._popupResolve; U._popupResolve = null; U.modal = null; U.modalWide = false; U.renderModal(); r(); return; }
     // something was waiting behind the injury screen (season report etc.)
     if (U.modalQueue && U.modalQueue.length) { const q = U.modalQueue.shift(); U.modal = q.html; U.modalWide = q.wide; U.modalClass = q.cls || null; U.renderModal(); return; }
     if (U.S && U.S.human.event) U.modalDirty = true;
@@ -392,6 +393,13 @@
     const pump = () => { let r = gen.next(); while (!r.done && r.value.type !== "match") r = gen.next(); if (r.done) { resolve(r.value); return; } U.showMatchViewer(r.value, pump); };
     pump();
   });
+  // v2.22.1: a popup shown in the middle of a run (the loop waits until it is closed), so a title
+  // appears right after the final instead of when the run ends
+  U.popup = (html, cls, sfx) => new Promise((resolve) => {
+    U.modal = html; U.modalWide = false; U.modalClass = cls || null; U._popupResolve = resolve; U.renderModal();
+    if (sfx && U.sfx) U.sfx(sfx);
+  });
+  U.titlePopup = async (rep) => { if (rep.human && U.isTitleRound(rep.human.humanRound) && !rep._titleShown) { rep._titleShown = true; await U.popup(U.titleHtml(rep.human), "title", "title"); } };
   // v2.22: a run that stops only because an event wants an answer can pick up where it left off
   // once the player has chosen (U.resume is consumed by the event's result dialog)
   const noEvent = (rep) => Object.assign({}, rep, { stops: rep.stops.filter((x) => x !== "event") });
@@ -401,7 +409,7 @@
     try {
       for (let i = 0; i < actions.length; i++) {
         const rep = await U.advanceInteractive(actions[i]);
-        log.push(rep); U.save();
+        log.push(rep); U.save(); await U.titlePopup(rep);
         if (U.S.human.careerOver) break;
         if (opts && opts.untilHealed && !U.human().injury) break;
         if (U.shouldStop(rep)) {
@@ -419,7 +427,7 @@
     try {
       for (let i = 0; i < maxWeeks; i++) {
         const rep = await U.advanceInteractive({ type: "auto" });
-        log.push(rep); U.save();
+        log.push(rep); U.save(); await U.titlePopup(rep);
         if (U.S.human.careerOver) break;
         if (U.shouldStop(rep) || other(rep)) {
           if (!other(rep) && U.S.human.event && i + 1 < maxWeeks) U.resume = { kind: "auto", left: maxWeeks - i - 1, log };
@@ -446,7 +454,7 @@
     }
     // v2.22: the order on screen is title(s) → injury → season report / epilogue; events after all of them
     const shows = [];
-    for (const r of log) if (r.human && U.isTitleRound(r.human.humanRound)) shows.push({ html: U.titleHtml(r.human), wide: false, cls: "title" });
+    for (const r of log) if (r.human && U.isTitleRound(r.human.humanRound) && !r._titleShown) shows.push({ html: U.titleHtml(r.human), wide: false, cls: "title" });
     if (!S.human.careerOver && U.human().injury && log.some((r) => r.stops.includes("injury"))) shows.push({ html: U.injuryHtml(), wide: false, cls: "injury" });
     if (U.modal) shows.push({ html: U.modal, wide: U.modalWide, cls: null });
     if (shows.length) { const first = shows.shift(); U.modal = first.html; U.modalWide = first.wide; U.modalClass = first.cls; U.modalQueue = shows; }

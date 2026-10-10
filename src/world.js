@@ -286,6 +286,7 @@
   };
   const ECON_DEBT_RATE = 0.001; // per week (~5%/yr): a family loan, cheaper than the bank
   function econOf(state) { return (state.human.econ && ECON_TIERS[state.human.econ.tier]) ? state.human.econ : { tier: "normal", debt: 0 }; }
+  const JOURNEYMAN_P = 0.2, JOURNEYMAN_BAND = [58, 66];
   function create(cfg) {
     const seed = cfg.seed || Math.floor(Math.random() * 4294967295);
     const state = {
@@ -318,12 +319,16 @@
 
     // human
     const o = state.config.origin;
+    // v2.23: two-peaked ceiling. One career in five is a journeyman (58-66: with the human's +6 ceiling
+    // margin and traits that peaks around 60th-150th and stays there); the rest draw 77-91 as before.
+    // The difficulty setting still shifts the result. cfg.potRoll is a test hook, not exposed in the UI.
+    const potRoll = cfg.potRoll ? cfg.potRoll : rng.chance(JOURNEYMAN_P) ? JOURNEYMAN_BAND[0] + rng.int(0, JOURNEYMAN_BAND[1] - JOURNEYMAN_BAND[0]) : 77 + rng.int(0, 14);
     let spec;
-    if (o === "junior") spec = { overall: 56, birthYear: START_YEAR - 16, potential: 77 + rng.int(0, 14), money: 60, sponsor: 1.5, sponsorWeeks: 156, pts: 30, wcBoost: 104, style: "all" };
+    if (o === "junior") spec = { overall: 56, birthYear: START_YEAR - 16, potential: potRoll, money: 60, sponsor: 1.5, sponsorWeeks: 156, pts: 30, wcBoost: 104, style: "all" };
     // sponsor = 週あたりの支援（k$）。叩き上げは地元の後援会、大学経由は協会支援という設定
     // v2.8: どの出自も同じポテンシャル帯。開始能力・ポイントは「ジュニア王者がその年齢で届いている水準」に揃え、出自で天井や確率が変わらないようにする
-    else if (o === "college") spec = { overall: 73, birthYear: START_YEAR - 21, potential: 77 + rng.int(0, 14), money: 25, sponsor: 0.6, sponsorWeeks: 104, pts: 300, wcBoost: 0, growthRoll: rng.chance(0.5), style: "baseline" };
-    else spec = { overall: 62, birthYear: START_YEAR - 18, potential: 77 + rng.int(0, 14), money: 12, sponsor: 0.5, sponsorWeeks: 156, pts: 120, wcBoost: 0, style: "grinder" };
+    else if (o === "college") spec = { overall: 73, birthYear: START_YEAR - 21, potential: potRoll, money: 25, sponsor: 0.6, sponsorWeeks: 104, pts: 300, wcBoost: 0, growthRoll: rng.chance(0.5), style: "baseline" };
+    else spec = { overall: 62, birthYear: START_YEAR - 18, potential: potRoll, money: 12, sponsor: 0.5, sponsorWeeks: 156, pts: 120, wcBoost: 0, style: "grinder" };
     // v2.21: the money behind a career varies — a quarter start in debt from the junior years and stay tight until they break through
     const er = rng.next(), econTier = ECON_TIERS[cfg.econTier] ? cfg.econTier : er < ECON_TIERS.hard.w ? "hard" : er < ECON_TIERS.hard.w + ECON_TIERS.normal.w ? "normal" : "rich"; // cfg.econTier: test hook, not exposed in the UI
     const ET = ECON_TIERS[econTier];
