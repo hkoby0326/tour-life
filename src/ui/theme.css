@@ -449,3 +449,24 @@ tr.flash-me td{animation:flashMe .45s} tr.flash-op td{animation:flashOp .45s}
 /* v2.20.1 on-screen error */
 #fatal{position:fixed;left:12px;right:12px;bottom:12px;z-index:200;max-width:720px;margin:0 auto}
 .panel.fatal{border-color:var(--red);box-shadow:0 0 0 1px rgba(248,113,113,.25),0 10px 40px rgba(0,0,0,.5)}
+
+/* v2.21 help buttons + big-match title card */
+.helpbtn{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;padding:0;border-radius:50%;font-size:11px;font-weight:700;color:var(--muted);border:1px solid var(--line2);background:transparent;vertical-align:middle;margin-left:4px}
+.helpbtn:hover{color:var(--text);border-color:var(--accent)}
+.modal.viewer{position:relative}
+.hype{position:absolute;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(6px);background:radial-gradient(circle at 50% 30%,rgba(34,211,238,.2),rgba(3,6,10,.985) 60%);border-radius:inherit;animation:fade .3s;text-align:center}
+.hype.big{background:radial-gradient(circle at 50% 30%,rgba(251,191,36,.24),rgba(3,6,10,.985) 60%)}
+.hype.out{opacity:0;transition:opacity .35s}
+.hype-in{max-width:520px;padding:20px}
+.hype .hk{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.hype .ht{font-size:34px;font-weight:900;margin:6px 0 18px;letter-spacing:.02em}
+.hype.big .ht{color:var(--gold);text-shadow:0 0 30px rgba(251,191,36,.35)}
+.hype .hvs{display:flex;align-items:center;justify-content:center;gap:22px;margin:10px 0 16px}
+.hype .hp{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:120px}
+.hype .hp .avatar{width:56px;height:56px;font-size:22px}
+.hype .hn{font-weight:800;font-size:16px}
+.hype .hr{font-size:12px;color:var(--muted)}
+.hype .hv{font-size:22px;font-weight:900;color:var(--accent)}
+.hype .hl{font-size:15px;line-height:1.8;margin-bottom:16px}
+.hype .hl div:first-child{font-weight:700;font-size:17px}
+@media (max-width:720px){.hype .ht{font-size:26px}.hype .hvs{gap:12px}.hype .hp{min-width:90px}}

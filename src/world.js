@@ -31,8 +31,30 @@
   function age(state, p) {
     return START_YEAR + state.year - 1 - p.birthYear;
   }
+  // ---------- development profiles (v2.21) ----------
+  // How a career is shaped: when the peak comes, how long it lasts, how fast the decline is.
+  // shift moves the age curve (positive = everything happens earlier), young scales growth up to
+  // 22, surge keeps a late bloomer improving at 27-31, decline scales the yearly loss from 30,
+  // stall takes a chunk off the ceiling at 24 (the early star who never kicks on).
+  const DEV_PROFILES = {
+    normal: { label: "標準型", shift: 0, young: 1, surge: 1, decline: 1, stall: 0, w: 45, hint: "伸び方は標準的だ。25〜28歳がピークになる", desc: "25〜28歳がピーク。30歳から衰える" },
+    early: { label: "早熟型", shift: 3, young: 1.3, surge: 1, decline: 1.25, stall: 0, w: 15, hint: "早熟型だ。若いうちに完成するぶん、27歳を過ぎると衰えが早い", desc: "若いうちに完成し、22〜25歳がピーク。27歳から衰え、落ち方も速い" },
+    late: { label: "大器晩成型", shift: -2, young: 0.85, surge: 1, decline: 0.9, stall: 0, w: 15, hint: "大器晩成型だ。若いうちは伸びが鈍いが、28歳を過ぎても伸びる", desc: "若いうちは伸びが鈍く、27〜30歳がピーク。32歳から衰える" },
+    verylate: { label: "晩年開花型", shift: -4, young: 0.7, surge: 1.5, decline: 0.85, stall: 0, w: 7, hint: "変わった選手だ。20代前半は苦しむが、27歳からもう一段伸びる", desc: "20代前半は伸びず、27〜31歳に大きく伸びる。30〜33歳がピーク、34歳から衰える" },
+    durable: { label: "息の長い型", shift: 0, young: 1, surge: 1, decline: 0.55, stall: 0, w: 10, hint: "身体の持ちがいい。衰えが人より遅く、長くトップで戦える", desc: "ピークは標準的だが衰えが遅く、30代半ばまで水準を保つ" },
+    flash: { label: "早咲き失速型", shift: 3, young: 1.4, surge: 1, decline: 1.4, stall: 7, w: 8, hint: "伸びが速い。ただ、こういう選手は24歳ごろに壁に当たることが多い", desc: "10代で急成長するが24歳で頭打ちになり（天井 −7）、27歳から急な衰え" },
+  };
+  function profileOf(p) { return DEV_PROFILES[p.profile] || DEV_PROFILES[p.growth === "late" ? "late" : p.growth === "early" ? "early" : "normal"]; }
+  function drawProfile(rng, isHuman) {
+    const keys = Object.keys(DEV_PROFILES), ws = keys.map((k) => DEV_PROFILES[k].w); // v2.21: the human draws from the same table
+    let r = rng.next() * ws.reduce((a, b) => a + b, 0);
+    for (let i = 0; i < keys.length; i++) { r -= ws[i]; if (r < 0) return keys[i]; }
+    return "normal";
+  }
+  // training multiplier from the profile: youth factor until 22, the late surge at 27-31
+  function profileMult(state, p) { const pr = profileOf(p), a = age(state, p); if (a <= 22) return pr.young; if (a >= 27 && a <= 31) return pr.surge; return 1; }
   function growthAge(state, p) {
-    return age(state, p) + (p.growth === "late" ? -2 : p.growth === "early" ? 2 : 0);
+    return age(state, p) + profileOf(p).shift;
   }
   // Difficulty: scales growth, the AI pool's youth development, off-court income and injury risk.
   const DIFFICULTY = {
@@ -57,8 +79,17 @@
     if (a <= 32) return 0.12;
     return 0.05; // mid-thirties: training mostly slows the decline instead of adding
   }
+  // v2.21: a late bloomer's ceiling is locked while young and opens with age (so the curve
+  // really is late, instead of everyone reaching the same ceiling at 24). The lock is stored on
+  // the player and refreshed every season.
+  function potLockFor(p, a) {
+    const k = p.profile || "normal";
+    const base = k === "late" ? Math.max(0, 26 - a) * 1.5 : k === "verylate" ? Math.max(0, 29 - a) * 1.8 : 0;
+    return Math.round(base * 10) / 10;
+  }
+  function potNow(p) { return p.potential - (p.potLock || 0); }
   function headroomMult(p) {
-    const hr = p.potential - TL.overall(p);
+    const hr = potNow(p) - TL.overall(p);
     if (hr >= 10) return 1;
     if (hr <= 0) return 0.05;
     return Math.max(0.15, hr / 10);
@@ -211,7 +242,7 @@
   }
   function heightShift(p, k) { return p.isHuman && p.height ? ((HEIGHT_FX[k] || 0) * (p.height - HEIGHT_BASE)) / 10 : 0; }
   // the point above which an attribute grows slowly; height moves it per attribute so the build lasts
-  function attrCeil(p, k) { return p.potential + 6 + heightShift(p, k); }
+  function attrCeil(p, k) { return potNow(p) + 6 + heightShift(p, k); }
   function heightEffects(cm) { const h = (cm - HEIGHT_BASE) / 10; return Object.fromEntries(Object.entries(HEIGHT_FX).map(([k, v]) => [k, Math.round(v * h * 10) / 10])); }
   function newPlayer(state, spec) {
     const rng = state.rng;
@@ -219,13 +250,15 @@
     const built = buildAttrs(rng, spec.overall, style);
     const p = {
       id: state.nextId++, name: spec.name, country: spec.country, birthYear: spec.birthYear, hand: rng.chance(0.14) ? "L" : "R",
-      style, attrs: built.attrs, surf: built.surf, potential: 0, growth: spec.growth || (rng.chance(0.2) ? "late" : rng.chance(0.25) ? "early" : "normal"),
+      style, attrs: built.attrs, surf: built.surf, potential: 0, profile: spec.profile || drawProfile(rng, !!spec.isHuman),
       fatigue: rng.int(0, 20), injury: null, blockedUntil: -1, results: [], points: 0, rank: null, prevRank: null,
       isHuman: !!spec.isHuman, real: !!spec.real, retired: false, consec: 0, cs: initCs(), sharp: 65, conf: 0, mw: 0,
       stats: { w: 0, l: 0, titles: 0, prize: 0, gs: 0, m1000: 0, weeksNo1: 0, weeksTop10: 0, bestRank: null, seasons: [] },
     };
+    p.growth = p.profile === "late" || p.profile === "verylate" ? "late" : p.profile === "early" || p.profile === "flash" ? "early" : "normal";
     const a = age(state, p);
     p.potential = spec.potential !== undefined ? spec.potential : potentialFor(rng, TL.overall(p), a, spec.eliteP);
+    p.potLock = potLockFor(p, a);
     return p;
   }
 
@@ -244,6 +277,15 @@
   }
 
   // ---------- creation ----------
+  // v2.21: economic background. "hard" careers start with a debt from the junior years (repaid like a loan,
+  // 25% of earnings) and little backing, so the first seasons run on budget mode, grants and side jobs.
+  const ECON_TIERS = {
+    hard: { w: 0.25, label: "苦しい", money: [0.25, 0.5], weeks: [0.25, 0.5], support: 0.7, debt: [120, 250], desc: "育成期の借金を返しながら戦う。後援も薄く、最初の数年は資金繰りが仕事の一部" },
+    normal: { w: 0.5, label: "普通", money: [0.7, 1.2], weeks: [0.6, 1.2], support: 1, debt: null, desc: "最初の支援で1〜2年は回る。結果が出なければ資金難になる" },
+    rich: { w: 0.25, label: "恵まれた", money: [1.2, 1.6], weeks: [1.0, 1.4], support: 1.3, debt: null, desc: "後援が厚く、序盤から腰を据えて育成できる" },
+  };
+  const ECON_DEBT_RATE = 0.001; // per week (~5%/yr): a family loan, cheaper than the bank
+  function econOf(state) { return (state.human.econ && ECON_TIERS[state.human.econ.tier]) ? state.human.econ : { tier: "normal", debt: 0 }; }
   function create(cfg) {
     const seed = cfg.seed || Math.floor(Math.random() * 4294967295);
     const state = {
@@ -277,11 +319,17 @@
     // human
     const o = state.config.origin;
     let spec;
-    if (o === "junior") spec = { overall: 56, birthYear: START_YEAR - 16, potential: 78 + rng.int(0, 14), money: 60, sponsor: 1.5, sponsorWeeks: 156, pts: 30, wcBoost: 104, style: "all" };
+    if (o === "junior") spec = { overall: 56, birthYear: START_YEAR - 16, potential: 77 + rng.int(0, 14), money: 60, sponsor: 1.5, sponsorWeeks: 156, pts: 30, wcBoost: 104, style: "all" };
     // sponsor = 週あたりの支援（k$）。叩き上げは地元の後援会、大学経由は協会支援という設定
     // v2.8: どの出自も同じポテンシャル帯。開始能力・ポイントは「ジュニア王者がその年齢で届いている水準」に揃え、出自で天井や確率が変わらないようにする
-    else if (o === "college") spec = { overall: 73, birthYear: START_YEAR - 21, potential: 78 + rng.int(0, 14), money: 25, sponsor: 0.6, sponsorWeeks: 104, pts: 300, wcBoost: 0, growthRoll: rng.chance(0.5), style: "baseline" };
-    else spec = { overall: 62, birthYear: START_YEAR - 18, potential: 78 + rng.int(0, 14), money: 12, sponsor: 0.5, sponsorWeeks: 156, pts: 120, wcBoost: 0, style: "grinder" };
+    else if (o === "college") spec = { overall: 73, birthYear: START_YEAR - 21, potential: 77 + rng.int(0, 14), money: 25, sponsor: 0.6, sponsorWeeks: 104, pts: 300, wcBoost: 0, growthRoll: rng.chance(0.5), style: "baseline" };
+    else spec = { overall: 62, birthYear: START_YEAR - 18, potential: 77 + rng.int(0, 14), money: 12, sponsor: 0.5, sponsorWeeks: 156, pts: 120, wcBoost: 0, style: "grinder" };
+    // v2.21: the money behind a career varies — a quarter start in debt from the junior years and stay tight until they break through
+    const er = rng.next(), econTier = ECON_TIERS[cfg.econTier] ? cfg.econTier : er < ECON_TIERS.hard.w ? "hard" : er < ECON_TIERS.hard.w + ECON_TIERS.normal.w ? "normal" : "rich"; // cfg.econTier: test hook, not exposed in the UI
+    const ET = ECON_TIERS[econTier];
+    const econ = ET.money[0] + (ET.money[1] - ET.money[0]) * rng.next(), econW = ET.weeks[0] + (ET.weeks[1] - ET.weeks[0]) * rng.next();
+    spec.money = Math.round(spec.money * econ); spec.sponsorWeeks = Math.round(spec.sponsorWeeks * econW); spec.sponsor = Math.round(spec.sponsor * ET.support * 10) / 10;
+    const debt = ET.debt ? ET.debt[0] + rng.int(0, Math.round((ET.debt[1] - ET.debt[0]) / 10)) * 10 : 0;
     const generational = rng.chance(0.10);
     if (generational) spec.potential = Math.max(spec.potential, 90 + rng.int(0, 6));
     spec.potential = clamp(spec.potential + diff(state).pot, 60, 97);
@@ -299,6 +347,8 @@
     state.human.sponsorUntil = spec.sponsorWeeks;
     state.human.wcBoostUntil = spec.wcBoost;
     state.human.generational = generational;
+    state.human.econ = { tier: econTier, debt };
+    if (debt) { const C = cashOf(state); C.loan = debt; C.loanRate = ECON_DEBT_RATE; news(state, `育成期に家族が借りた $${debt}k の返済を抱えてプロ入り。賞金とスポンサー収入の25%が返済に回る`); }
     if (spec.pts) seedResults(state, h, spec.pts);
 
     // rival: same age, similar ceiling
@@ -338,7 +388,7 @@
   function staffOf(state) {
     const H = state.human;
     if (!H.staff) H.staff = { physio: !!H.physio, fitness: false, hitting: false, agent: false, analyst: false };
-    if (H.coach && H.coach.until === undefined) { H.coach.since = s.t; H.coach.until = s.t + 52; H.coach.years = 1; H.coach.compat = H.coach.compat || 0; H.coach.rankAtHire = 9999; }
+    if (H.coach && H.coach.until === undefined) { H.coach.since = state.t; H.coach.until = state.t + 52; H.coach.years = 1; H.coach.compat = H.coach.compat || 0; H.coach.rankAtHire = 9999; }
     for (const o of H.coachOffers) if (o.years === undefined) { o.years = 2; o.compat = 0; }
     return H.staff;
   }
@@ -532,17 +582,18 @@
       none: [`${ATTR_LABEL[weak]}が弱い。誰か見てくれるコーチがほしい`, `コーチがいれば${ATTR_LABEL[weak]}の直し方を教われるのに`, `${ATTR_LABEL[weak]}を鍛えないと、上では通用しない`],
     };
     // the weak spot is a standing remark — mention it some weeks, not every week
-    if (hv("weakday") % 3 === 0) add(20, weakLines[type || "none"], "wk");
+    if (hv("weakday") % 3 === 0) add(20, weakLines[type || "none"] || weakLines.tech, "wk"); // surface coaches (clay/grass) use the tech lines
     // age
     if (a >= 30) {
       const m = declineMods(state);
       if (m.body > 0.85 && m.tech > 0.9 && H.strategy !== "veteran") add(48, ["身体能力は落ちていく年齢だ。何か手を打とう（選手タブの「衰えとの向き合い方」）", "昔と同じやり方では続かない。身体を守るか、スタイルを変えるか考えよう"]);
       else add(22, ["経験は武器だ。若い選手が慌てる場面で落ち着いていよう", "今の準備の仕方で正しい。積み重ねよう"]);
     } else if (a <= 19) add(15, ["若いうちは負けて覚えればいい。ただ、同じ負け方はするな", "今は土台作りの時期だ。焦らなくていい"]);
+    if (a >= 21 && a <= 29 && hv("profile") % 4 === 0) add(24, [profileOf(h).hint], "pf");
     // money
     if (H.money < 10) add(58, ["遠征費が苦しい。近場の大会を選ぶのも立派な作戦だ", "資金が尽きかけている。財務タブで手を打とう"]);
     // headroom (fallback)
-    const hr = h.potential - TL.overall(h);
+    const hr = potNow(h) - TL.overall(h);
     add(10, hr > 20 ? ["伸びしろはまだ大きい。土台を作る時期だ", "まだまだ伸びる。基本を繰り返そう"] : hr > 10 ? ["まだ伸びる。弱点を一つずつ潰そう", "成長の途中だ。焦らず積み上げよう"] : hr > 4 ? ["完成が近い。勝ち方を覚える段階だ", "能力はもう十分ある。あとは試合での使い方だ"] : ["技術はほぼ完成形。維持とスケジュール管理が課題だ", "これ以上大きくは伸びない。今ある武器をどう使うかだ"], "hr");
     c.sort((x, y) => y.p - x.p || hv(x.t) % 7 - hv(y.t) % 7);
     // the most pressing line, plus one more from the rest (rotates week to week)
@@ -562,7 +613,7 @@
     else if (summary.titles.length === 1) parts.push(`${summary.titles[0]}の優勝は今季の収穫だ`);
     if (summary.goals) parts.push(summary.goals.all ? "目標は全部達成した。来季は一段上を狙おう" : summary.goals.list.filter((g) => g.ok).length === 0 ? "目標には一つも届かなかった。計画から見直そう" : `目標は${summary.goals.list.filter((g) => g.ok).length}つ達成。残りは来季に持ち越しだ`);
     if (summary.injuries && summary.injuries.length >= 2) parts.push("怪我が多かった。スケジュールと身体のケアを見直そう");
-    const hr = h.potential - TL.overall(h);
+    const hr = potNow(h) - TL.overall(h);
     if (a >= 30) parts.push(pick(["身体のケアを優先する時期に入っている", "経験で勝つ年齢だ。準備の質を上げよう"], 3));
     else if (hr > 10) parts.push(pick(["まだ伸びる。来季も土台を積み上げよう", "伸びしろは残っている。弱点を一つずつ潰そう"], 4));
     else if (hr <= 4) parts.push("能力はほぼ完成した。あとは戦い方とスケジュールだ");
@@ -1230,7 +1281,7 @@
     mo.clutch = [0, 1].map((i) => ((mo.clutch && mo.clutch[i]) || 0) + ([a, b][i].conf || 0) * 0.2);
     if (hum && isImportant(state, T, label, a, b, qualifying)) {
       const m = TL.Match.create(a, b, mo);
-      yield { type: "match", match: m, T, round: label, a, b, tactic: mo.tactic || null };
+      yield { type: "match", match: m, T, round: label, a, b, tactic: mo.tactic || null, stakes: matchStakes(state, T, label, a, b) };
       return m.result || m.finish();
     }
     return TL.Match.play(a, b, mo);
@@ -1694,6 +1745,30 @@
     state.history.tournaments.push({ year: state.year, week: state.week, name: T.name, cat: T.cat, short: T.def.short, surface: T.surface, winner: cname(champ.country), winnerId: null, finalist: cname(runnerC.country) });
     return report;
   }
+  // v2.21: what a big match means, shown before the first point (finals and medal matches only)
+  function matchStakes(state, T, label, a, b) {
+    const h = a.isHuman ? a : b, o = a.isHuman ? b : a;
+    const big = label === "決勝" || (T.cat === "OLY" && label === "3位決定戦");
+    if (!big || (T.def.tier < 6 && h.stats.titles > 0)) return null; // a Challenger/ITF final counts only while the first title is at stake
+    const s = h.stats, tw = s.tw || {}, tour = (tw.A250 || 0) + (tw.A500 || 0) + (tw.M1000 || 0) + (tw.GS || 0) + (tw.FINALS || 0);
+    const title = T.cat === "OLY" ? (label === "決勝" ? "金メダルマッチ" : "銅メダルマッチ") : T.cat === "FINALS" ? "ファイナルズ 決勝" : T.cat === "DAVIS" ? "デビスカップ 決勝" : T.def.tier === 9 ? "グランドスラム 決勝" : T.def.tier === 8 ? "マスターズ 決勝" : "決勝";
+    const lines = [];
+    if (T.cat === "OLY") lines.push(label === "決勝" ? "祖国に金メダルを" : "メダルを持ち帰るか、4位か");
+    else if (T.cat === "DAVIS") lines.push(`${D.COUNTRIES[h.country].name}の命運を背負う`);
+    else if (s.titles === 0) lines.push("キャリア初タイトルがかかる");
+    else if (T.def.tier === 9 && !tw.GS) lines.push("初のグランドスラムタイトルがかかる");
+    else if (T.cat === "FINALS" && !tw.FINALS) lines.push("初のファイナルズ制覇がかかる");
+    else if (T.def.tier === 8 && !tw.M1000) lines.push("初のマスターズタイトルがかかる");
+    else if (T.def.tier >= 6 && tour === 0) lines.push("初のツアータイトルがかかる");
+    else if (T.def.tier === 9) lines.push(`${(tw.GS || 0) + 1}つ目のグランドスラムへ`);
+    if (o.rank === 1) lines.push("相手は世界No.1");
+    if (o.isRival) lines.push("宿敵との決勝");
+    if (state.human.retireYear === state.year) lines.push("ラストシーズンの決勝");
+    if (T.country === h.country && T.cat !== "DAVIS") lines.push("ホームの大観衆の前で");
+    const h2h = state.history.matches.filter((m) => m.oppId === o.id);
+    const rec = h2h.length ? `対戦成績 ${h2h.filter((m) => m.won).length}勝${h2h.filter((m) => !m.won).length}敗` : "初対戦";
+    return { title, lines: lines.slice(0, 3), rec, big: T.def.tier >= 8 || T.cat === "FINALS" || T.cat === "OLY" || T.cat === "DAVIS" };
+  }
   function describeMatch(m) {
     const h = m.a.isHuman ? m.a : m.b, o = m.a.isHuman ? m.b : m.a;
     return { round: m.round, opp: o.name, oppRank: o.rank, oppId: o.id, won: m.w === h, score: m.res.score, log: m.res.log || [], stats: m.res.stats, humanIdx: m.a.isHuman ? 0 : 1, wo: !!m.wo };
@@ -1776,9 +1851,9 @@
     return { body, tech };
   }
   function declineEstimate(state, p) {
-    const a = age(state, p) + 1, ga = a + (p.growth === "late" ? -2 : p.growth === "early" ? 2 : 0);
+    const pr = profileOf(p), a = age(state, p) + 1, ga = a + pr.shift;
     if (ga < 30) return { body: 0, tech: 0, ga };
-    const dec = (ga - 29) * (ga >= 34 ? 0.95 : 0.8) * (p.fragile ? 1.5 : 1), vm = declineMods(state);
+    const dec = (ga - 29) * (ga >= 34 ? 0.95 : 0.8) * (p.fragile ? 1.5 : 1) * pr.decline, vm = declineMods(state);
     return { body: Math.round(dec * vm.body * 10) / 10, tech: Math.round(dec * vm.tech * (ga >= 34 ? 0.6 : 0.4) * 0.5 * 10) / 10, ga, raw: Math.round(dec * 10) / 10 };
   }
   const INTENSITY = {
@@ -1988,7 +2063,7 @@
   // Expected gain of one attribute for one week of training (no randomness). trainPlayer uses the
   // same numbers, so what the development panel promises is what the engine does.
   function trainRate(state, p, k, focus, intensity, opts) {
-    const mult = ageMult(growthAge(state, p)) * headroomMult(p);
+    const mult = ageMult(growthAge(state, p)) * headroomMult(p) * profileMult(state, p);
     const coach = p.isHuman ? state.human.coach : null;
     const useAlloc = p.isHuman && opts && opts.session;
     const share = useAlloc ? allocShare(opts.alloc || allocOf(state), k) : focus && focus.includes(k) ? 0.245 : 0;
@@ -2022,7 +2097,7 @@
   }
   function trainPlayer(state, p, focus, intensity, opts) {
     const rng = state.rng;
-    const mult = ageMult(growthAge(state, p)) * headroomMult(p);
+    const mult = ageMult(growthAge(state, p)) * headroomMult(p) * profileMult(state, p);
     const coach = p.isHuman ? state.human.coach : null;
     if (p.isHuman) {
       for (const k of ATTRS) p.attrs[k] = clamp(p.attrs[k] + trainRate(state, p, k, focus, intensity, opts) * (0.7 + 0.6 * rng.next()), 25, 99);
@@ -2058,7 +2133,7 @@
   }
   function aiOffWeek(state, p) {
     const rng = state.rng;
-    const mult = ageMult(growthAge(state, p)) * headroomMult(p) * (state.human.mentor && state.human.mentor.protege === p.id && !state.human.careerOver ? MENTOR_MULT : 1);
+    const mult = ageMult(growthAge(state, p)) * headroomMult(p) * profileMult(state, p) * (state.human.mentor && state.human.mentor.protege === p.id && !state.human.careerOver ? MENTOR_MULT : 1);
     // AI trains toward its weakest skills
     const weakest = ATTRS.slice().sort((a, b) => p.attrs[a] - p.attrs[b]).slice(0, 3);
     for (const k of ATTRS) {
@@ -2807,7 +2882,7 @@
     summary.defend = q;
     summary.overall = TL.overall(h);
     summary.age = age(state, h);
-    const hr = h.potential - TL.overall(h);
+    const hr = potNow(h) - TL.overall(h);
     summary.no1 = state.players.filter((p) => p.rank === 1).map((p) => p.name)[0] || "-";
     summary.gsWinners = state.history.tournaments.filter((t) => t.year === yr && t.cat === "GS").map((t) => `${t.name}: ${t.winner}`);
     summary.ovrDelta = (h.stats.seasons.length ? summary.overall - h.stats.seasons[h.stats.seasons.length - 1].overall : null);
@@ -2832,10 +2907,14 @@
     for (const p of state.players) {
       if (p.retired) continue;
       const a = age(state, p) + 1; // age next season
-      const ga = a + (p.growth === "late" ? -2 : p.growth === "early" ? 2 : 0);
+      const pr = profileOf(p);
+      const ga = a + pr.shift;
+      p.potLock = potLockFor(p, a);
+      // the early star who never kicks on: the ceiling drops once at 24
+      if (pr.stall && a === 24 && !p.stalled) { p.stalled = true; const drop = pr.stall; p.potential = Math.max(TL.overall(p), p.potential - drop); if (p.isHuman) news(state, `${p.name} は伸び悩みの時期に入った（天井 −${drop}）。コーチ「ここからは、今ある武器で勝ち方を覚える時期だ」`); }
       if (ga >= 30) {
         // physical decline from 30, steepening in the mid-thirties; technique erodes later and slower
-        const dec = (ga - 29) * (ga >= 34 ? 0.95 : 0.8) * (p.fragile ? 1.5 : 1);
+        const dec = (ga - 29) * (ga >= 34 ? 0.95 : 0.8) * (p.fragile ? 1.5 : 1) * pr.decline;
         // v2.11: the human can slow it — body care (physical training slots, the veteran schedule)
         // and the veteran style (technique holds up longer)
         const vm = p.isHuman ? declineMods(state) : { body: 1, tech: 1 };
@@ -3022,7 +3101,7 @@
       attrs, surf, w: p.stats.w, l: p.stats.l, titles: p.stats.titles, gs: p.stats.gs, m1000: p.stats.m1000, prize: p.stats.prize, injury: p.injury, fatigue: Math.round(p.fatigue), retired: p.retired,
       isHuman: p.isHuman, isRival: !!p.isRival, real: p.real, sharp: Math.round(p.sharp === undefined ? 65 : p.sharp), sharpLabel: sharpLabel(p.sharp === undefined ? 65 : p.sharp), conf: Math.round(p.conf || 0), confLabel: confLabel(p.conf || 0), h2hW: h2h.filter((m) => m.won).length, h2hL: h2h.filter((m) => !m.won).length, h2h: h2h.slice(-6).reverse(),
       titleList: titles.slice(-8).reverse(), tournaments52: new Set(seasonRes.map((r) => r.t)).size, peers: peers.length,
-      peerPos: p.rank ? peers.filter((x) => x.rank < p.rank).length + 1 : null, growth: p.growth, cs: csView(p.cs || initCs()) };
+      peerPos: p.rank ? peers.filter((x) => x.rank < p.rank).length + 1 : null, growth: p.growth, profile: p.isHuman ? (age(state, p) >= 21 ? profileOf(p) : null) : profileOf(p), cs: csView(p.cs || initCs()) };
   }
 
   // Keep in-memory numbers identical to what the save stores (2 decimals), so a reload is bit-for-bit the same.
@@ -3057,6 +3136,7 @@
     Object.assign(H, { coach: H.coach || null, physio: !!H.physio, coachOffers: H.coachOffers || [], plan: H.plan || "balanced", switchRule: H.switchRule || "none", event: H.event || null, lastEventT: H.lastEventT === undefined ? -99 : H.lastEventT, forceRest: !!H.forceRest, riskWeek: H.riskWeek === undefined ? -1 : H.riskWeek, sponsor2: H.sponsor2 || { weekly: 0, until: 0 }, pressureUntil: H.pressureUntil === undefined ? -1 : H.pressureUntil, attrHist: H.attrHist || [], seasonStartAttrs: H.seasonStartAttrs || null, exhibitionYear: H.exhibitionYear || 0 });
     s.cutoffs = s.cutoffs || {};
     if (!DIFFICULTY[s.config.difficulty]) s.config.difficulty = "normal";
+    if (!H.econ) H.econ = { tier: "normal", debt: 0 }; // v2.21: saves from before the economic roll
     for (const p of s.players) if (!p.cs) p.cs = p.isHuman ? statsFromHistory(s) : initCs();
     for (const p of s.players) { if (p.sharp === undefined) p.sharp = p.injury ? 30 : 65; if (p.conf === undefined) p.conf = 0; if (p.mw === undefined) p.mw = 0; }
     if (!H.strategy) H.strategy = "big";
@@ -3065,6 +3145,12 @@
     cashOf(s); H.cash.jobCooldown = H.cash.jobCooldown || {};
     backfillBig(s);
     { const hu = s.players.find((p) => p.isHuman); if (hu && !hu.height) hu.height = HEIGHT_BASE; }
+    // v2.21: development profiles for a world made before them (hash-based, no RNG)
+    for (const p of s.players) if (!p.profile) {
+      const u = (TL.RNG.hash(`${s.seed}:profile:${p.id}`) % 1000) / 1000;
+      p.profile = p.growth === "late" ? (u < 0.3 ? "verylate" : "late") : p.growth === "early" ? (u < 0.35 ? "flash" : "early") : u < 0.18 ? "durable" : "normal";
+    }
+    for (const p of s.players) if (p.potLock === undefined) p.potLock = potLockFor(p, age(s, p));
     if (!H.legacyInit) {
       H.legacyInit = true;
       const byId = new Map(s.players.map((p) => [p.id, p]));
@@ -3099,5 +3185,5 @@
     return s;
   }
 
-  TL.World = { MENTOR_COST, MENTOR_MULT, MENTOR_UNLOCK, mentorOf, mentorUnlocked, mentorCandidates, setProtege, mentorLegacy, davisField, rivalScores, RIVAL_MIN, GP_SINK, DRILL_COOLDOWN, gpDrill, gpPrep, gpSlot, olympicQuota, HEIGHT_BASE, HEIGHT_FX, heightOf, heightEffects, attrCeil, announceRetirement, isFarewell, farewellOf, coachTalk, LEGACY, LEGACY_LABEL, HOF_LINE, legacyOf, legacyView, goalsView, strategyOk, devStyleOk, declineMods, declineEstimate, RIVALS, rehabWeekly, aiTraitList, TRAIT_LV, TRAIT_COST, traitLevels, traitLevel, traitList, traitSlots, traitEffectText, traitReq, dropTrait, bigTimeline, strengthOf, cashOf, fundingOptions, useFunding, setBudget, JOBS, forcedRetire, TRAIN_SLOTS, TRAIN_CATS, allocOf, allocShare, autoAlloc, allocSummary, TRAITS, hasTrait, traitReqOk, learnTrait, DEV_STYLES, INTENSITY, devOf, styleGap, autoFocus, trainRate, STRATEGIES, sharpBonus, sharpLabel, confLabel, sponsorsOf, brandOf, sponsorOffer, sponsorUnlocked, activeContracts, signSponsor, releaseSponsor, sponsorTerminationFee, sponsorPerks, sponsorWeekly, ASSETS, TAX, AGENT_CUT, assetsOf, assetUnlocked, buyAsset, assetsWeekly, DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
+  TL.World = { ECON_TIERS, econOf, potNow, DEV_PROFILES, profileOf, MENTOR_COST, MENTOR_MULT, MENTOR_UNLOCK, mentorOf, mentorUnlocked, mentorCandidates, setProtege, mentorLegacy, davisField, rivalScores, RIVAL_MIN, GP_SINK, DRILL_COOLDOWN, gpDrill, gpPrep, gpSlot, olympicQuota, HEIGHT_BASE, HEIGHT_FX, heightOf, heightEffects, attrCeil, announceRetirement, isFarewell, farewellOf, coachTalk, LEGACY, LEGACY_LABEL, HOF_LINE, legacyOf, legacyView, goalsView, strategyOk, devStyleOk, declineMods, declineEstimate, RIVALS, rehabWeekly, aiTraitList, TRAIT_LV, TRAIT_COST, traitLevels, traitLevel, traitList, traitSlots, traitEffectText, traitReq, dropTrait, bigTimeline, strengthOf, cashOf, fundingOptions, useFunding, setBudget, JOBS, forcedRetire, TRAIN_SLOTS, TRAIN_CATS, allocOf, allocShare, autoAlloc, allocSummary, TRAITS, hasTrait, traitReqOk, learnTrait, DEV_STYLES, INTENSITY, devOf, styleGap, autoFocus, trainRate, STRATEGIES, sharpBonus, sharpLabel, confLabel, sponsorsOf, brandOf, sponsorOffer, sponsorUnlocked, activeContracts, signSponsor, releaseSponsor, sponsorTerminationFee, sponsorPerks, sponsorWeekly, ASSETS, TAX, AGENT_CUT, assetsOf, assetUnlocked, buyAsset, assetsWeekly, DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
 })(typeof globalThis !== "undefined" ? globalThis : window);

@@ -5,7 +5,7 @@
     W, D, S: null, tab: "home", modal: null, planSel: null, planWeekT: -1, runLog: null, running: false, screens: {},
     SAVE_KEY: "tourlife_v1", SETTINGS_KEY: "tourlife_settings_v1", HOF_KEY: "tourlife_hof_v1",
     DEFAULT_SETTINGS: { stopTournament: true, stopMilestone: true, stopInjury: true, stopSeason: true, stopEvent: true, stopRival: true, watchEnabled: true, watchDepth: { gs: "all", m1000: "sf", tour: "final", lower: "final" }, watchLowerFinal: true, watchGs: true, watchFinals: true, watchRival: true, watchTop10: true, watchTitle: true, watchSpeed: 300, sound: false, volume: 0.5, reduceMotion: false, slot: 1, introSeen: false, hints: {}, hintsAlways: false },
-    VERSION: "v2.20.2",
+    VERSION: "v2.21",
   });
   U.ATTRL = W.ATTR_LABEL;
   U.ORIGINS = {
@@ -45,7 +45,7 @@
     settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
   };
   U.icon = (n) => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n] || ""}</svg>`;
-  U.TABS = [["home", "ホーム"], ["plan", "プラン"], ["report", "結果"], ["ranking", "ランキング"], ["calendar", "カレンダー"], ["player", "選手"], ["team", "チーム"], ["sponsor", "スポンサー"], ["finance", "財務"], ["records", "記録"], ["settings", "設定"]];
+  U.TABS = [["home", "ホーム"], ["plan", "プラン"], ["report", "結果"], ["ranking", "ランキング"], ["calendar", "カレンダー"], ["player", "選手"], ["team", "チーム"], ["sponsor", "スポンサー"], ["finance", "財務"], ["records", "記録"], ["guide", "説明"], ["settings", "設定"]];
   U.PRIMARY = ["home", "plan", "report", "ranking"]; // bottom tab bar on phones; the rest live behind "その他"
   U.TAB_LABEL = Object.fromEntries(U.TABS);
 
@@ -145,9 +145,9 @@
     app.querySelectorAll("[data-goto-legacy]").forEach((b) => b.onclick = () => U.openModal(U.legacyHtml(), true));
     const more = app.querySelector("[data-more]");
     if (more) more.onclick = () => U.openModal(`<h2>メニュー</h2><div class="grid2" style="grid-template-columns:repeat(2,1fr)">${U.TABS.filter(([k]) => !U.PRIMARY.includes(k)).map(([k, l]) => `<button class="${U.tab === k ? "primary" : ""}" data-goto="${k}" style="display:flex;gap:8px;align-items:center;justify-content:flex-start">${U.icon(k)} ${l}</button>`).join("")}</div><div style="margin-top:10px"><button data-close>閉じる</button></div>`);
-    U.bindPlayerLinks(app);
+    U.bindPlayerLinks(app); U.bindHelp(app);
     const c = document.getElementById("content");
-    try { (U.screens[U.tab] || U.screens.home)(c); }
+    try { (U.screens[U.tab] || U.screens.home)(c); U.bindHelp(c); }
     catch (e) { console.error(e); c.innerHTML = U.fatalHtml(e, `画面「${U.TAB_LABEL[U.tab] || U.tab}」の描画でエラー`); U.bindFatal(c); }
     U.applyHints(c);
     U._renderedTab = U.tab;
@@ -185,7 +185,7 @@
       layer.querySelectorAll("[data-confirm-retire]").forEach((b) => b.onclick = () => { W.retireNow(S); U.save(); U.pushHof(S.human.epilogue); U.modal = `<h2>引退</h2>${U.epilogueHtml()}<button data-close>閉じる</button>`; U.tab = "plan"; U.render(); });
       layer.querySelectorAll("[data-choice]").forEach((b) => b.onclick = () => { const txt = W.resolveEvent(S, b.dataset.choice); U.save(); U.modalDirty = true; U.openModal(`<h2>結果</h2><p>${esc(txt)}</p><button class="primary" data-close>閉じる</button>`, false, true); });
     }
-    U.bindPlayerLinks(layer);
+    U.bindPlayerLinks(layer); U.bindHelp(layer);
     if (U.bindWrapped) U.bindWrapped(layer);
     if (U.scrollTimelines) U.scrollTimelines(layer);
   };
@@ -232,6 +232,37 @@
       <ul class="small injlist"><li>離脱中は休養に固定され、予定していた大会は欠場になる</li><li>復帰時の試合勘は約${sharpAfter}（${W.sharpLabel(sharpAfter)}）。試合をこなすと戻る</li>${loss ? `<li class="red">手術の影響で能力が低下: ${esc(loss)}</li>` : ""}${sev === 3 ? "<li>大怪我の後は再発しやすい。復帰直後の連戦は避けたい</li>" : ""}</ul>
       <div class="row" style="gap:8px;justify-content:center;margin-top:12px">${U.modalQueue && U.modalQueue.length ? "" : '<button class="primary" data-heal>治るまで進める</button>'}<button data-close>閉じる</button></div></div>`;
   };
+  // v2.21: long explanations live behind a "?" instead of on the screen
+  // v2.21: the guide — every rule in one place; screens link to a section with a "?"
+  U.GUIDE = [
+    ["home", "ホーム", "「今週の決断」は自動方針の提案。そのまま1週進めるか、「4週プラン」で自分で組む。<br>受信箱: 選択肢つきのイベント、ニュース、コーチの一言。<br>今季の目標: 毎年3つ（年末ランキング／タイトル／GS）。達成で成長ポイント、3つ全部でスポンサーボーナス。<br>レガシー: キャリアの評価点。殿堂ライン 400 が最終目標。"],
+    ["plan", "プラン・大会", "各週は おまかせ／大会／練習／休養／合宿。大会カードの色は エントリー状況（本戦ダイレクトイン／当落線上／予選／ワイルドカード）。<br>自動の方針: ビッグイベント優先（GS・マスターズ・自国大会を最優先、前週は休む）／ポイント重視（ほぼ毎週出る）／育成重視（大会を絞って練習、練習効果 ×1.2）／移動最小／厳選（30歳〜）。<br>負荷の目安: トップ20 年15〜20大会、トップ100 22〜26、それ以下 26〜30。疲労45超・GS翌週は休む。<br>停止条件: 自動進行を止めるタイミング。怪我は常に止まる。"],
+    ["watch", "観戦モード", "重要試合はポイント単位で観戦し、セット間にプランを変えられる。大会の種類ごとに「決勝のみ／準決勝から／準々決勝から／全試合」を選べる。<br>大一番（GS・マスターズ・ファイナルズ・五輪・デビス・各大会の決勝）は試合前にタイトルカードが出る。<br>「スキップ」で結果だけ見る。ポイントごとにサーブ速度（km/h）を表示。"],
+    ["match", "試合プラン", "相手に合わせる（推奨）: 試合ごとに相手のタイプを読み、コーチが対策を選ぶ。サーブ型→守備的、ラリー型・カウンター型→攻撃的、オールラウンド型→バランス。噛み合うと全局面 +0.8（勝率 約+1.7%）。手動でも噛み合えば同じ。<br>バランス: 標準。攻撃的: サーブ +2.5・ラリー +1・リターン −2、ポイントが短くなる。守備的: リターン +2.5・ラリー +0.5・サーブ −2、試合が長くなり疲労 ×1.1。体力温存: 全体 −1.5、疲労 ×0.7。<br>セット間の切替: 「セットを落としたら攻撃的に」で試合中に変わる。"],
+    ["player", "能力・育成", "能力は11項目。総合は試合エンジンと同じ重み。実力は総合にサーフェス適性・試合勘・スタイル・特性などを足した試合上の強さ。<br>目標スタイル: 決めるとキー能力の練習効果 ×1.15。キー能力の平均が他より5以上高くなると「確立」し、試合で効果（例: ビッグサーバー サーブ +5.5）。3を割ると解除。<br>練習配分: 週10コマを サーブ／ストローク／リターン／フィジカル／メンタル／試合勘 に割り振る。フィジカル4コマ以上は疲労が溜まる。コーチに任せることもできる。<br>練習強度: 軽め ×0.75（疲労 −6、怪我 ×0.7）、標準、ハード ×1.3（疲労 +8、怪我 ×2.5）。<br>天井（ポテンシャル）は見えない。天井より6以上高い能力は伸びが鈍る。身長で得意な能力と天井がずれる。"],
+    ["profile", "成長タイプ", "選手ごとに成長曲線が違う（自分も同じ表から引く。21歳からコーチが見立てる）。<br>標準型（45%）: 25〜28歳がピーク、30歳から衰える。<br>早熟型（15%）: 若いうちに完成、22〜25歳がピーク、27歳から速く衰える。<br>大器晩成型（15%）: 26歳まで天井が閉じていて伸びが鈍い。27〜30歳がピーク、32歳から衰える。<br>晩年開花型（7%）: 29歳まで天井が閉じ、27〜31歳に大きく伸びる。30〜33歳がピーク、34歳から衰える。<br>息の長い型（10%）: 衰えが半分の速さ。<br>早咲き失速型（8%）: 10代で急成長、24歳で天井 −7、27歳から急に衰える。"],
+    ["decline", "衰えとの向き合い方", "30歳（成長タイプで前後）から毎年、身体能力（スピード・スタミナ・パワー）が落ち、技術もゆっくり落ちる。30歳の開幕に選択イベントが出る。後からでも変えられる。<br>身体を守る: 練習配分のフィジカル1コマにつき身体の衰え −10%（最大 −50%）。<br>スタイルを変える（29歳〜）: 「ベテランの技巧」。確立でサーブ +2.5・勝負所 +8、技術の衰え −50%。<br>出場を絞る（30歳〜）: 方針「厳選」。GS・マスターズでサーブ・リターン +1.5、怪我 ×0.75、身体の衰え −15%。<br>引退: 34歳以上で250位の外、または38歳以上で100位の外ならシーズン末に引退。設定タブから「今季限りで引退を表明」もできる（ラストシーズンの演出とボーナス）。"],
+    ["traits", "特性と成長ポイント", "特性は Lv1〜5。強化コスト 2→4→6→9→12pt、効果は Lv1 の ×1.6・×2.1・×2.5・×2.8。持てるのは3つ（最高20位で+1、最高3位で+1、15ptで一度だけ+1）。外すと使ったポイントの半分が戻る。Lv4は最高50位、Lv5は最高10位が必要（能力条件のない特性）。<br>成長ポイントの獲得: タイトル（下部 1／250・500 2〜3／1000 4／GS・ファイナルズ 6）、トップ200以上の節目 2、シーズン終了 1、シーズン目標、五輪・デビスのメダル、教え子の節目。<br>ほかの使い道: 集中特訓 4pt（能力 +1.0、4週に1回）、調整合宿 3pt（次の大会で勝負所 +2・疲労 −8）、特性スロット +1 15pt。<br>AIのトップ選手も特性を持つ（最高10位以内3つ、30位以内2つ、100位以内1つ）。レベルは対戦するか観察で能力が確定した相手だけ見える。"],
+    ["surface", "サーフェス", "ハード・クレー・芝・室内で点の取りやすさが違う。芝・室内はサーブとリターン、クレーはラリーが効く。<br>選手ごとのサーフェス適性は試合に出るたびに少しずつ上がる。選手タブの「相性（目安）」は同じ総合力のオールラウンダーと戦ったときの勝率差。<br>特性「赤土の申し子」「高速コートの使い手」、育成スタイル「クレー巧者」でも上乗せ。"],
+    ["team", "チーム", "コーチ: 契約は1〜3年。途中解除は残り期間の半額が違約金。相性は雇って8週で分かり、練習効果に ±20% 前後効く。満了時に更新交渉。候補はシーズンごとに入れ替わる。<br>技術コーチ: 重点スキルの練習効果。フィジカルコーチ: 身体系 ×1.5、疲労回復 +6/週。メンタルコーチ: クラッチ・集中 ×1.6、全試合で勝負所 +2。クレー／芝の専門家: 適性と経験値。<br>スタッフ: フィジオ（怪我 ×0.7、回復 +5）、フィジカルトレーナー（身体系 ×1.3、回復 +4、怪我 ×0.85）、ヒッティングパートナー（練習 +15%、経験値 +10%）、エージェント（スポンサー ×1.3、アピアランスフィー、WC）、アナリスト（格上戦でサーブ・リターン +1、正確なスカウティング）。帯同する人数ぶん移動費がかかる。枠は最高ランキングで増える。<br>後進の育成（最高50位〜）: 同国の22歳以下かアカデミー卒を1人、週 $1.9k で重点指導。教え子の練習効果 ×1.3。教え子の実績は「指導者としてのレガシー」に加わる（上限150）。"],
+    ["rival", "宿敵", "宿敵は結果から生まれる。直近3シーズンの対戦1回 +3、3戦以上で拮抗 +4、大舞台・決勝での対戦 +2、決勝で敗れた +3、同世代で順位が近い +3、順位差10以内 +2。12以上で宿敵。入れ替わりには +8 の差と40週以上の間隔が必要。<br>因縁メーターが60を超えると、宿敵戦の勝負所でクラッチの差が大きく効く。宿敵がらみのイベント（メディア特集、合同練習、長期離脱）が届く。"],
+    ["money", "お金", "経済環境はキャリア開始時に決まる（恵まれた・普通・苦しい）。「苦しい」は育成期の借金を抱えてプロ入りし、賞金とスポンサー収入の25%が返済に回る。結果が出るまでは節約モード・協会の強化費・アルバイト・借入で回す。収入: 賞金、支援（出自・後援会は期限つき）、スポンサー契約（ランキングで解放）、小口スポンサー、アピアランスフィー（エージェント）。支出: チームの給与、移動費（帯同人数倍）、リハビリ費、税金（賞金・契約の一定割合）。<br>残高がマイナスになると2,500km超の遠征ができず、$50kの赤字で給与を2週払えないとチームが離れる。手段: 節約モード（単独遠征で移動費4割減）、欧州クラブリーグ、レッスンのアルバイト、借入。<br>資産: 専属メディカル（怪我 ×0.7、離脱 −20%）、トレーニング拠点（練習 +10%）、アカデミー（毎年卒業生）。投資話はエージェント経由で不定期（トップ100・残高 $800k 以上）。キャリアごとに開始資金と支援期間は変わる。"],
+    ["sponsor", "スポンサー", "ラケット・ウエア・シューズ・その他。ランキングが上がるほど上位ブランドが解放され、提示額も上がる。週給と契約金、優勝ボーナス（250以上／1000／GS）。契約中に下位ブランドへ乗り換えると違約金。用具には小さな性能効果（サーブ・リターン・怪我・回復など）。"],
+    ["legacy", "レガシー・殿堂", "配点: GS 100、ファイナルズ 50、マスターズ1000 30、500 15、250 8、チャレンジャー 1、No.1在位 3/週、年末トップ10 10、年末No.1 40、五輪 金60・銀25・銅12、デビス優勝40・準優勝15、有言実行 20、指導者（教え子の実績）。<br>殿堂ライン 400（キャリアの約6〜10%が到達）。ゲーム開始以降のこの世界の成績で数え、歴代ランキングはAI選手と共通。記録への挑戦: GS・マスターズ・ツアー優勝数、No.1在位、年末トップ10の最多記録。"],
+    ["events", "特別な大会", "オリンピック: 4年に1度（2028〜）第30週。各国トップ100以内の上位4人（開催国6人）。ポイント・賞金なし、3位決定戦あり。メダルはレガシーとボーナス、金なら1年間スポンサー収入 +$1k/週。<br>デビスカップ: 第47週、8か国。各国上位2人。自分が30位以内で国内上位2人なら自国を枠に引き寄せる。第1S→第2S→1-1ならダブルス。優勝でレガシー 40、スポンサー +$0.5k/週。<br>ATPファイナルズ: 年末上位8人。ラウンドロビン→準決勝→決勝。"],
+    ["settings", "セーブ・設定", "毎回自動保存（このブラウザの localStorage）。乱数はシード固定で、リロードしてやり直しても同じ結果。3つのセーブスロット、殿堂ギャラリーは共通。エクスポート／インポートでJSONとして保存できる。<br>観戦・停止条件・サウンド・アニメーション・ヒントは設定タブ。"],
+  ];
+  U.helpTo = (id) => `<button class="helpbtn" data-help-to="${id}" title="説明" aria-label="説明">?</button>`;
+  U.guideSection = (id) => { const g = U.GUIDE.find((x) => x[0] === id); return g ? `<h2>${g[1]}</h2><p class="small" style="line-height:1.8">${g[2]}</p>` : ""; };
+  U.screens.guide = function (c) {
+    c.innerHTML = `<div class="panel"><h2>説明 <span class="muted small">${U.VERSION}</span></h2><p class="small muted">各画面の「?」からも同じ内容が開く。</p><div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:10px">${U.GUIDE.map(([id, t]) => `<a href="#g-${id}" class="pill">${t}</a>`).join("")}</div>
+      ${U.GUIDE.map(([id, t, body]) => `<div class="card" id="g-${id}"><h3 style="margin-bottom:6px">${t}</h3><p class="small" style="line-height:1.8;margin:0">${body}</p></div>`).join("")}</div>`;
+  };
+  U.help = (text) => `<button class="helpbtn" data-help="${U.esc(text)}" title="説明" aria-label="説明">?</button>`;
+  U.bindHelp = (root) => {
+    root.querySelectorAll("[data-help]").forEach((b) => { if (b._bound) return; b._bound = true; b.onclick = (e) => { e.stopPropagation(); U.openModal(`<h2>説明</h2><p class="small" style="line-height:1.8">${U.esc(b.dataset.help)}</p><button data-close>閉じる</button>`, false, true); }; });
+    root.querySelectorAll("[data-help-to]").forEach((b) => { if (b._bound) return; b._bound = true; b.onclick = (e) => { e.stopPropagation(); U.openModal(`${U.guideSection(b.dataset.helpTo)}<div class="row" style="gap:8px"><button data-close>閉じる</button><button data-goto="guide">説明タブへ</button></div>`, false, true); }; });
+  };
   U.closeModal = () => {
     U.modalClass = null;
     // something was waiting behind the injury screen (season report etc.)
@@ -241,7 +272,7 @@
 
   // ---------- onboarding (UI-9): first-season hints per screen, replayable from settings ----------
   U.HINTS = {
-    home: ["ホームの読み方", "右の「今季の目標」は毎シーズン3つ。達成すると成長ポイント、全達成でボーナス。「レガシー」はキャリアの評価点で、殿堂ラインを越えるのが最終目標。「今週の決断」は自動方針の提案。そのまま1週進めるか、「4週プラン」で大会・練習・休養を自分で組む。受信箱には選択肢つきのイベントとニュースが届く。"],
+    home: ["ホームの読み方", "右の「今季の目標」は毎シーズン3つ。達成すると成長ポイント、全達成でボーナス。「レガシー」はキャリアの評価点で、殿堂ラインを越えるのが最終目標。「今週の決断」は自動方針の提案。そのまま4週進める（1週だけも可）か、「4週プラン」で大会・練習・休養を自分で組む。怪我・イベント・設定で選んだ停止条件に当たると途中で止まる。受信箱には選択肢つきのイベントとニュースが届く。"],
     plan: ["4週プランの組み方", "「自動の方針」で大会選びの考え方（ビッグイベント優先／ポイント重視／育成重視／移動最小）を決められる。各週は 自動／大会／練習／休養／合宿 から選ぶ。大会カードの点はエントリー見込み（緑=本戦、黄=予選、赤=カットオフ外）。負荷メーターが赤なら休養を。重要試合は観戦モードになる。"],
     report: ["結果の見方", "試合ごとのスコアと、練習で伸びた能力が週単位で出る。「ドロー表」で本戦の全試合を確認できる。"],
     sponsor: ["スポンサー契約", "ラケット・ウエア・シューズは各1社、その他は2社まで。ブランドはランキングで解放され、週給は契約時のランキングで決まって期間中固定。用具には試合やコンディションへの効果、優勝ボーナス条項もある。"],
@@ -263,7 +294,7 @@
       <div class="step"><div class="n">2</div><div><b>試合は観るもの</b><div class="small muted">グランドスラムやトップ10戦などの重要試合はポイント単位の観戦モードに。セット間に試合プランを変えられる。</div></div></div>
       <div class="step"><div class="n">3</div><div><b>伸びしろは見えない</b><div class="small muted">コーチのコメントと同年代比較から才能を推測する。</div></div></div>
       <div class="step"><div class="n">4</div><div><b>自動進行と停止条件</b><div class="small muted">自動進行は大会終了・怪我・ランキングの節目・イベントで止まる。条件はプラン画面の下で変えられる。</div></div></div>
-    </div><p class="small muted">最初のシーズンは各画面の上にヒントが出ます（設定からいつでも再表示できます）。</p>
+    </div><p class="small muted">最初のシーズンはヒントが出ます。</p>
     <button class="primary bigbtn" data-close>キャリアを始める</button></div>`;
 
   // ---------- shared html ----------
@@ -297,6 +328,7 @@
     const surf = Object.keys(D.SURFACES).map((k) => `<div class="attr" style="grid-template-columns:84px 1fr 36px"><span>${D.SURFACES[k]}</span>${bar(p.surf[k], `var(--${k})`)}<span class="num">${p.surf[k]}</span></div>`).join("");
     return `<div class="row between"><div class="identity">${U.avatar(p)}<div><div class="name">${esc(p.name)} ${p.isRival ? '<span class="pill rival">宿敵</span>' : ""}${p.isHuman ? '<span class="pill">自分</span>' : ""}</div><div class="sub">${p.age}歳 ・ ${D.COUNTRIES[p.country].name} ・ ${p.height}cm ・ ${p.hand === "L" ? "左利き" : "右利き"} ・ ${W.STYLE_LABEL[p.style] || p.style}</div></div></div><div style="text-align:right"><div class="kpi .v" style="font-size:22px;font-weight:800">${p.retired ? "引退" : p.rank ? p.rank + "位" : "ランク外"}</div><div class="small muted">${p.points}pt ・ 最高${p.bestRank || "-"}位 ・ 総合 ${p.overall} ・ 実力 ${p.strength}${p.scout && !p.scout.exact ? `<span class="pill" style="margin-left:4px">推定 ±${p.scout.amp}</span>` : ""}</div></div></div>
       ${p.injury ? `<p class="small red">${esc(p.injury.label)} 残り${p.injury.weeks}週</p>` : ""}
+      ${p.profile ? `<p class="small muted">成長タイプ: <b>${esc(p.profile.label)}</b>${p.isHuman ? "（コーチの見立て）" : ""} ・ ${esc(p.profile.desc)}</p>` : ""}
       <p class="small muted">サーブ速度の目安: 1st 平均 ${TL.serveSpeed({ attrs: p.attrs, height: p.height }).avg1} km/h ・ 最速 ${TL.serveSpeed({ attrs: p.attrs, height: p.height }).max} km/h ・ 2nd ${TL.serveSpeed({ attrs: p.attrs, height: p.height }).avg2} km/h${p.scout && !p.scout.exact ? "（推定）" : ""}</p>
       <p class="small muted">試合勘 ${p.sharp}（${p.sharpLabel}） ・ 自信: ${p.confLabel}${p.isHuman && W.traitList(U.S).length ? ` ・ 特性: ${W.traitList(U.S).map((t) => `${W.TRAITS[t].label} Lv${W.traitLevel(U.S, t)}`).join("・")}` : ""}${!p.isHuman && p.traits && p.traits.length ? ` ・ 特性: ${p.traits.map((t) => `<span title="${esc(t.l ? W.traitEffectText(t.id, t.l) : "対戦するか観察を重ねるとレベルが分かる")}">${esc(t.label)} Lv${t.l || "?"}</span>`).join("・")}` : ""}</p>
       <div class="grid2" style="margin-top:10px"><div>${U.radarSvg(p.attrs, p.isHuman ? null : U.human().attrs)}<div class="small muted" style="text-align:center;margin:-4px 0 8px"><span class="accent">■</span> ${esc(p.name)}${p.isHuman ? "" : ' <span class="red">■</span> 自分'}</div>${attrs}<h3 style="margin-top:8px">サーフェス</h3>${surf}</div>

@@ -191,6 +191,18 @@
     $("v-snd").onclick = () => { U.settings.sound = !U.settings.sound; U.saveSettings(); $("v-snd").textContent = U.settings.sound ? "🔊" : "🔇"; if (U.settings.sound && U.sfx) U.sfx("click"); };
     $("v-done").onclick = () => { stop(); if (raf) cancelAnimationFrame(raf); if (!m.done) m.finish(); bg.remove(); done(); };
     board();
-    start();
+    // v2.21: a big final opens on a title card instead of the first point
+    if (y.stakes) {
+      const st = y.stakes, opp = y.a.isHuman ? y.b : y.a;
+      const card = document.createElement("div");
+      card.className = "hype" + (st.big ? " big" : "");
+      card.innerHTML = `<div class="hype-in"><div class="hk">${esc(T.name)}</div><div class="ht">${esc(st.title)}</div>
+        <div class="hvs"><div class="hp me">${U.avatar(me)}<div class="hn">${esc(me.name)}</div><div class="hr">${me.rank ? me.rank + "位" : "ランク外"}</div></div><div class="hv">VS</div><div class="hp op">${U.avatar(opp)}<div class="hn">${esc(opp.name)}</div><div class="hr">${opp.rank ? opp.rank + "位" : "ランク外"}</div></div></div>
+        <div class="hl">${st.lines.map((l) => `<div>${esc(l)}</div>`).join("")}<div class="muted">${esc(st.rec)}</div></div>
+        <button class="primary bigbtn" id="v-hype-go">試合開始</button></div>`;
+      bg.querySelector(".modal.viewer").appendChild(card);
+      if (U.sfx) U.sfx("hype");
+      card.querySelector("#v-hype-go").onclick = () => { card.classList.add("out"); setTimeout(() => card.remove(), 350); start(); };
+    } else start();
   };
 })();
