@@ -502,3 +502,22 @@ tr.flash-me td{animation:flashMe .45s} tr.flash-op td{animation:flashOp .45s}
   .toast{max-width:none}
   .hilite{grid-template-columns:1fr}
 }
+
+/* v2.25 comparison rows, momentum line, record filters */
+.cmp{display:grid;grid-template-columns:1fr 1fr;gap:2px 16px}
+.cmprow{display:grid;grid-template-columns:30px 1fr 64px 30px;align-items:center;gap:6px;font-size:12px}
+.cmprow .l{color:var(--muted);text-align:right}
+.cmprow .bars{display:flex;flex-direction:column;gap:2px}
+.cmprow .bars i{display:block;height:4px;border-radius:2px;background:var(--accent)}
+.cmprow .bars i.op{background:var(--gold)}
+.momsvg{margin:4px 0 2px}
+.momsvg svg{display:block}
+.momsvg .mid{stroke:var(--line2);stroke-width:1}
+.momsvg .line{fill:none;stroke:var(--accent);stroke-width:1.5}
+.momsvg .area{fill:rgba(34,211,238,.12)}
+.momsvg .mk{stroke:var(--muted);stroke-width:1;opacity:.7}
+.momsvg .mk.set{stroke-width:2.5;stroke:var(--gold);opacity:.9}
+.momsvg .mk.break.me{stroke:var(--green)} .momsvg .mk.break.op{stroke:var(--red)}
+.recfilter{display:flex;gap:6px;flex-wrap:wrap}
+.recfilter select{padding:4px 8px;font-size:12px}
+@media(max-width:800px){.cmp{grid-template-columns:1fr}}

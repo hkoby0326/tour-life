@@ -17,7 +17,7 @@
       <div class="row between"><div><div class="small muted" style="text-transform:uppercase;letter-spacing:.08em">Live ・ ${esc(y.round)}</div><div style="font-size:18px;font-weight:800">${flag(T.country)} ${esc(T.name)} ${catPill(T)}${T.def.bo5 ? ' <span class="pill">5セット</span>' : ""}</div></div><div class="small muted" id="v-plan-label"></div></div>
       <div class="vgrid">
         <div><table class="scoreboard"><tbody id="v-board"></tbody></table>
-          <div class="momentum" id="v-mom" title="直近10ポイント"></div>
+          <div class="momentum" id="v-mom" title="直近10ポイント"></div><div id="v-momsvg" class="momsvg" title="直近12ポイントの差（上=自分）。縦線はブレーク、太線はセット終了"></div>
           <div id="v-banner" class="banner"></div></div>
         <div class="court-wrap"><svg viewBox="0 0 200 110" class="court ${T.surface}" id="v-court">
           <rect x="10" y="10" width="180" height="90" rx="2" class="cline" fill="none"/>
@@ -171,8 +171,9 @@
       const row = (l, a, b) => `<tr><td class="muted">${l}</td><td class="num"><b>${a}</b></td><td class="num">${b}</td></tr>`;
       $("v-stats").innerHTML = `<tr><th></th><th class="num">自分</th><th class="num">相手</th></tr>${U.matchStatsRows(st, hi, TL.PLANS[m.plans[hi]].label, TL.PLANS[m.plans[1 - hi]].label)}`;
       $("v-plan-label").textContent = `セット ${m.setsWon[hi]}-${m.setsWon[1 - hi]}`;
-      while (feedSeen < m.events.length) { const e = m.events[feedSeen++]; if (U.sfx && timer) { if (e.kind === "set") U.sfx("set"); else if (e.kind === "break" && e.who === hi) U.sfx("brk"); } feed.unshift(`<div class="${e.kind === "set" || e.kind === "end" ? "gold" : e.kind === "break" ? (e.who === hi ? "green" : "red") : e.kind === "pt" ? (e.who === hi ? "" : "muted") : "muted"}">${esc(e.text)}</div>`); }
+      while (feedSeen < m.events.length) { const e = m.events[feedSeen++]; if (e.kind === "break" || e.kind === "set") marks.push({ at: Math.max(0, recent.length - 1), kind: e.kind, who: e.who }); if (U.sfx && timer) { if (e.kind === "set") U.sfx("set"); else if (e.kind === "break" && e.who === hi) U.sfx("brk"); } feed.unshift(`<div class="${e.kind === "set" || e.kind === "end" ? "gold" : e.kind === "break" ? (e.who === hi ? "green" : "red") : e.kind === "pt" ? (e.who === hi ? "" : "muted") : "muted"}">${esc(e.text)}</div>`); }
       $("v-feed").innerHTML = feed.slice(0, 16).join("");
+      momentum();
       if (m.last && m.last.kind !== undefined && m.last.winner !== undefined) { const tr = $("v-board").children[m.last.winner]; if (tr) tr.classList.add(m.last.winner === hi ? "flash-me" : "flash-op"); }
       tacticsBoard();
       if (m.done && !ended) { ended = true; if (U.sfx) U.sfx(m.winnerIdx === hi ? "win" : "lose"); }
@@ -180,6 +181,19 @@
     }
     let ended = false;
     function step(anim) { const ev = m.step(); if (ev && ev.winner !== undefined) { recent.push(ev.winner); if (anim) { animate(ev); if (U.sfxPoint) U.sfxPoint(ev, hi); } } return ev; }
+    // v2.25: momentum — rolling difference over the last 12 points, with break and set markers
+    const marks = [];
+    function momentum() {
+      const el = $("v-momsvg"); if (!el) return;
+      const n = recent.length; if (n < 2) { el.innerHTML = ""; return; }
+      const W0 = el.clientWidth || 600, H0 = 44, win = 12;
+      let acc = 0; const vals = [];
+      for (let k = 0; k < n; k++) { acc += recent[k] === hi ? 1 : -1; if (k >= win) acc -= recent[k - win] === hi ? 1 : -1; vals.push(acc); }
+      const x = (k) => (k / Math.max(1, n - 1)) * W0, y = (v) => H0 / 2 - (v / win) * (H0 / 2 - 3);
+      const pts = vals.map((v, k) => `${x(k).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+      const area = `M0,${H0 / 2} L${pts} L${W0},${H0 / 2} Z`;
+      el.innerHTML = `<svg viewBox="0 0 ${W0} ${H0}" preserveAspectRatio="none" width="100%" height="${H0}"><line x1="0" y1="${H0 / 2}" x2="${W0}" y2="${H0 / 2}" class="mid"/>${marks.map((mk) => `<line x1="${x(mk.at).toFixed(1)}" y1="2" x2="${x(mk.at).toFixed(1)}" y2="${H0 - 2}" class="mk ${mk.kind} ${mk.who === hi ? "me" : "op"}"/>`).join("")}<path d="${area}" class="area"/><polyline points="${pts}" class="line"/></svg>`;
+    }
     function stop() { if (timer) { clearInterval(timer); timer = null; } $("v-play").textContent = "▶ 再生"; }
     function start() { if (m.done) return; stop(); $("v-play").textContent = "❚❚ 停止"; timer = setInterval(() => { if (m.done) { stop(); return; } step(true); board(); if (m.betweenSets) stop(); }, speed); }
     $("v-play").onclick = () => (timer ? stop() : start());

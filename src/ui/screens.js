@@ -144,6 +144,21 @@
     U.bindPlayerLinks(c);
   };
 
+  // v2.25: run/watch settings live in the settings tab (the plan screen is for decisions only)
+  U.runSettingsHtml = function () {
+    const settings = U.settings;
+    return `<div class="grid2"><div class="panel"><h2>自動進行の停止条件</h2>
+      ${[["stopTournament", "自分の大会が終わるごと"], ["stopMilestone", "ランキングの節目"], ["stopEvent", "イベント（選択肢）"], ["stopRival", "宿敵との対戦"], ["stopSeason", "シーズン終了"]].map(([k, l]) => `<label class="small" style="display:inline-block;margin-right:14px"><input type="checkbox" data-set="${k}" ${settings[k] ? "checked" : ""}> ${l}</label>`).join("")}</div>
+    <div class="panel"><h2>観戦モード</h2>${U.help(`重要試合はポイント単位で観戦し、セット間にプランを変えられる。`)}
+      ${[["watchEnabled", "観戦モードを使う"], ["watchFinals", "ATPファイナルズ（全試合）"], ["watchTop10", "トップ10戦"], ["watchRival", "宿敵戦"]].map(([k, l]) => `<label class="small" style="display:inline-block;margin-right:14px"><input type="checkbox" data-set="${k}" ${settings[k] ? "checked" : ""}> ${l}</label>`).join("")}
+      <div class="row" style="gap:14px;flex-wrap:wrap;margin-top:8px">${(() => { const d = U.watchDepth(); const opt = (k, list) => list.map(([v, l]) => `<option value="${v}" ${d[k] === v ? "selected" : ""}>${l}</option>`).join("");
+        const F = [["off", "観戦しない"], ["final", "決勝のみ"], ["sf", "準決勝から"], ["qf", "準々決勝から"], ["all", "全試合"]];
+        return [["gs", "グランドスラム", F], ["m1000", "マスターズ1000・五輪・デビスカップ", F.slice(0, 4)], ["tour", "ATP 500・250", F.slice(0, 3)], ["lower", "チャレンジャー・ITF", F.slice(0, 2)]].map(([k, l, list]) => `<label class="small">${l} <select data-wdepth="${k}">${opt(k, list)}</select></label>`).join(""); })()}</div></div></div>`;
+  };
+  U.bindRunSettings = function (c) {
+    c.querySelectorAll("[data-set]").forEach((cb) => cb.onchange = () => { U.settings[cb.dataset.set] = cb.checked; U.saveSettings(); });
+    c.querySelectorAll("[data-wdepth]").forEach((sel) => sel.onchange = () => { U.watchDepth()[sel.dataset.wdepth] = sel.value; U.saveSettings(); });
+  };
   // ---------- プラン（UI-3: 月カレンダー形式） ----------
   function weekAt(i) { const S = U.S; let wk = S.week + i, yr = S.year; while (wk > 52) { wk -= 52; yr++; } return { wk, yr }; }
   function ensurePlan() { const S = U.S; if (U.planSel && U.planWeekT === S.t) return; U.planSel = [0, 1, 2, 3].map(() => ({ choice: "auto", doubles: false })); U.planWeekT = S.t; }
@@ -221,13 +236,7 @@
     html += `<div class="panel"><div class="wtabs">${wtabs}</div><div class="planner">${cols}</div>
       <div class="row between actions" style="margin-top:12px"><div class="row actions" style="flex:1"><button class="primary bigbtn" data-run="4">この4週を進める</button><button data-run="1">1週だけ進める</button><button data-auto="60">自動進行（停止条件まで）</button></div>${hidden || showAll ? `<button data-showall class="small">${showAll ? "出られない大会を隠す" : `出られない大会を表示（${hidden}）`}</button>` : ""}</div>
       <p class="small muted" style="margin:8px 0 0">大会カードをクリックで選択。「おまかせ」は出られる最上位の大会に出るが、疲労45超・負荷上限・GS翌週は休む。先の週の当落は現在のランキングで推定。</p></div>`;
-    html += `<div class="grid2"><div class="panel"><h2>自動進行の停止条件</h2>
-      ${[["stopTournament", "自分の大会が終わるごと"], ["stopMilestone", "ランキングの節目"], ["stopEvent", "イベント（選択肢）"], ["stopRival", "宿敵との対戦"], ["stopSeason", "シーズン終了"]].map(([k, l]) => `<label class="small" style="display:inline-block;margin-right:14px"><input type="checkbox" data-set="${k}" ${settings[k] ? "checked" : ""}> ${l}</label>`).join("")}</div>
-    <div class="panel"><h2>観戦モード</h2>${U.help(`重要試合はポイント単位で観戦し、セット間にプランを変えられる。`)}
-      ${[["watchEnabled", "観戦モードを使う"], ["watchFinals", "ATPファイナルズ（全試合）"], ["watchTop10", "トップ10戦"], ["watchRival", "宿敵戦"]].map(([k, l]) => `<label class="small" style="display:inline-block;margin-right:14px"><input type="checkbox" data-set="${k}" ${settings[k] ? "checked" : ""}> ${l}</label>`).join("")}
-      <div class="row" style="gap:14px;flex-wrap:wrap;margin-top:8px">${(() => { const d = U.watchDepth(); const opt = (k, list) => list.map(([v, l]) => `<option value="${v}" ${d[k] === v ? "selected" : ""}>${l}</option>`).join("");
-        const F = [["off", "観戦しない"], ["final", "決勝のみ"], ["sf", "準決勝から"], ["qf", "準々決勝から"], ["all", "全試合"]];
-        return [["gs", "グランドスラム", F], ["m1000", "マスターズ1000・五輪・デビスカップ", F.slice(0, 4)], ["tour", "ATP 500・250", F.slice(0, 3)], ["lower", "チャレンジャー・ITF", F.slice(0, 2)]].map(([k, l, list]) => `<label class="small">${l} <select data-wdepth="${k}">${opt(k, list)}</select></label>`).join(""); })()}</div></div></div>`;
+    html += `<p class="small muted" style="margin:4px 0 0">自動進行の停止条件と観戦モードは <a href="#" data-goto-settings class="accent">設定タブ</a>（怪我とスポンサー満了は常に止まる）</p>`;
     c.innerHTML = html;
     const gp = c.querySelector("[data-goto-player]"); if (gp) gp.onclick = (e) => { e.preventDefault(); U.tab = "player"; U.render(); };
     const stSel = c.querySelector("[data-strategy]"); if (stSel) stSel.onchange = () => { S.human.strategy = stSel.value; U.save(); U.render(); };
@@ -238,8 +247,7 @@
     c.querySelectorAll("[data-seg]").forEach((b) => b.onclick = () => { const [i, k] = b.dataset.seg.split(":"); U.planSel[parseInt(i, 10)].choice = k; U.render(); });
     c.querySelectorAll("[data-pick]").forEach((el) => el.onclick = (e) => { if (el.dataset.disabled || e.target.closest("[data-dbl]")) return; const idx = el.dataset.pick.indexOf(":"); const i = parseInt(el.dataset.pick.slice(0, idx), 10), tid = el.dataset.pick.slice(idx + 1); U.planSel[i].choice = U.planSel[i].choice === tid ? "auto" : tid; U.render(); });
     c.querySelectorAll("[data-dbl]").forEach((cb) => cb.onchange = () => { U.planSel[parseInt(cb.dataset.dbl, 10)].doubles = cb.checked; });
-    c.querySelectorAll("[data-set]").forEach((cb) => cb.onchange = () => { settings[cb.dataset.set] = cb.checked; U.saveSettings(); });
-    c.querySelectorAll("[data-wdepth]").forEach((sel) => sel.onchange = () => { U.watchDepth()[sel.dataset.wdepth] = sel.value; U.saveSettings(); });
+    const gst = c.querySelector("[data-goto-settings]"); if (gst) gst.onclick = (e) => { e.preventDefault(); U.tab = "settings"; U.render(); };
     c.querySelectorAll("[data-run]").forEach((b) => b.onclick = () => U.runWeeks(U.planSel.slice(0, parseInt(b.dataset.run, 10)).map(toAction)));
     c.querySelector("[data-auto]").onclick = () => U.autoRun(60);
     const sa = c.querySelector("[data-showall]"); if (sa) sa.onclick = () => { window._showAllTours = !showAll; U.render(); };
@@ -650,13 +658,29 @@
   // ---------- 記録 ----------
   U.screens.records = function (c) {
     const S = U.S;
+    // v2.25: filters and paging instead of one endless list
+    const F = U.recF || (U.recF = { year: "all", cat: "all", res: "all", n: 40, nn: 30 });
     const seasons = S.history.seasons.slice().reverse();
-    const matches = S.history.matches.slice().reverse().slice(0, 60);
+    const allM = S.history.matches.slice().reverse();
+    const years = [...new Set(allM.map((m) => m.year))];
+    const CATS = [["all", "すべて"], ["GS", "GS"], ["1000", "1000"], ["500", "500"], ["250", "250"], ["CH", "チャレンジャー"], ["ITF", "ITF"], ["other", "ファイナルズ・五輪・デビス"]];
+    const catOf = (m) => /^CH/.test(m.cat) ? "CH" : /^M\d/.test(m.cat) ? "ITF" : ["GS", "1000", "500", "250"].includes(m.cat) ? m.cat : "other";
+    const fm = allM.filter((m) => (F.year === "all" || m.year === parseInt(F.year, 10)) && (F.cat === "all" || catOf(m) === F.cat) && (F.res === "all" || (F.res === "w") === !!m.won));
+    const w = fm.filter((m) => m.won).length;
+    const shown = fm.slice(0, F.n);
+    const sel = (key, list, cur) => `<select data-recf="${key}">${list.map(([v, l]) => `<option value="${v}" ${String(cur) === String(v) ? "selected" : ""}>${l}</option>`).join("")}</select>`;
+    const news = S.history.news.slice().reverse();
     c.innerHTML = `<div class="panel"><h2>シーズン履歴</h2>${seasons.length ? `<table><tr><th>年</th><th class="num">年齢</th><th class="num">年末</th><th class="num">成績</th><th class="num">勝</th><th class="num">賞金</th><th>優勝</th></tr>${seasons.map((z) => `<tr><td>${z.calendarYear}</td><td class="num">${z.age}</td><td class="num">${z.rank || "-"}</td><td class="num">${z.w}-${z.l}</td><td class="num">${z.titles.length}</td><td class="num">${money(z.prize)}</td><td class="small">${z.titles.map(esc).join("、")}</td></tr>`).join("")}</table>` : '<div class="empty">まだシーズンを終えていない。</div>'}</div>
-      <div class="panel"><h2>最近の試合</h2>${matches.map((m) => `<div class="match ${m.won ? "win" : "loss"} small"><span class="muted">${cal(m.year)} W${m.week}</span> ${esc(m.tour)} <span class="pill">${esc(m.cat)}</span> ${esc(m.round)} vs <span data-player="${m.oppId}" class="accent">${esc(m.opp)}</span>(${m.oppRank || "-"}) <span class="score ${m.won ? "green" : "red"}">${m.won ? "W" : "L"} ${esc(m.score)}</span></div>`).join("") || '<div class="empty">まだ試合がない。</div>'}</div>
+      <div class="panel"><div class="row between" style="flex-wrap:wrap;gap:8px"><h2>試合 <span class="muted small">${fm.length}試合 ・ ${w}勝${fm.length - w}敗</span></h2>
+        <div class="recfilter small">${sel("year", [["all", "全期間"], ...years.map((y) => [y, cal(y) + "年"])], F.year)} ${sel("cat", CATS, F.cat)} ${sel("res", [["all", "勝敗"], ["w", "勝ち"], ["l", "負け"]], F.res)}</div></div>
+        ${shown.map((m) => `<div class="match ${m.won ? "win" : "loss"} small"><span class="muted">${cal(m.year)} W${m.week}</span> ${esc(m.tour)} <span class="pill">${esc(m.cat)}</span> ${esc(m.round)} vs <span data-player="${m.oppId}" class="accent">${esc(m.opp)}</span>(${m.oppRank || "-"}) <span class="score ${m.won ? "green" : "red"}">${m.won ? "W" : "L"} ${esc(m.score)}</span></div>`).join("") || '<div class="empty">該当する試合がない。</div>'}
+        ${fm.length > shown.length ? `<div class="row" style="justify-content:center;margin-top:8px"><button class="small" data-more="n">さらに表示（残り ${fm.length - shown.length}）</button></div>` : ""}</div>
       ${(S.history.brackets || []).length ? `<div class="panel"><h2>最近のドロー</h2><div class="row">${S.history.brackets.slice().reverse().map((e, i) => `<button class="small" data-br="${S.history.brackets.length - 1 - i}">${flag(e.country)} ${esc(e.name)} ${cal(e.year)}</button>`).join("")}</div></div>` : ""}
-      <div class="panel"><h2>ニュース</h2><ul class="news small">${S.history.news.slice().reverse().slice(0, 40).map((n) => `<li><span class="muted">${cal(n.year)} W${n.week}</span> ${esc(n.text)}</li>`).join("")}</ul></div>`;
+      <div class="panel"><h2>ニュース <span class="muted small">${news.length}件</span></h2><ul class="news small">${news.slice(0, F.nn).map((n) => `<li><span class="muted">${cal(n.year)} W${n.week}</span> ${esc(n.text)}</li>`).join("")}</ul>
+        ${news.length > F.nn ? `<div class="row" style="justify-content:center;margin-top:8px"><button class="small" data-more="nn">さらに表示（残り ${news.length - F.nn}）</button></div>` : ""}</div>`;
     U.bindPlayerLinks(c);
+    c.querySelectorAll("[data-recf]").forEach((el) => el.onchange = () => { F[el.dataset.recf] = el.value; F.n = 40; U.render(); });
+    c.querySelectorAll("[data-more]").forEach((b) => b.onclick = () => { F[b.dataset.more] += b.dataset.more === "n" ? 40 : 30; U.render(); });
     c.querySelectorAll("[data-br]").forEach((b) => b.onclick = () => { const e = S.history.brackets[parseInt(b.dataset.br, 10)]; U.openBracket(e, e.bracket.N > 32); });
   };
 
@@ -670,6 +694,7 @@
         <div class="row" style="gap:8px;flex-wrap:wrap">${S.human.retireYear ? "" : '<button class="primary" data-announce-open>今季限りで引退を表明…</button>'}<button class="danger" id="retire">今すぐ引退する</button></div>
         <p class="tiny muted" style="margin-top:6px">表明するとラストシーズンに: 全試合で勝負所 +2、各地の大会の引退セレモニー、元トップ50なら本戦ワイルドカード、最後のGSの決意、好成績なら一度だけ撤回できる。</p></div>`}
       <div class="panel"><h2>セーブスロット</h2><p class="small muted">3つのキャリアを並行して持てる。殿堂ギャラリーは共通。</p>${U.slotsHtml(false)}</div>
+      ${U.runSettingsHtml()}
       <div class="panel"><h2>表示とサウンド</h2>
         <label class="small" style="display:flex;gap:8px;align-items:center;margin:6px 0"><input type="checkbox" style="width:auto;margin:0" data-setting="sound" ${U.settings.sound ? "checked" : ""}> サウンド（観戦モードの効果音・節目のファンファーレ）</label>
         <label class="small" style="display:flex;gap:8px;align-items:center;margin:6px 0">音量 <input type="range" min="0" max="1" step="0.1" value="${U.settings.volume == null ? 0.5 : U.settings.volume}" data-volume style="vertical-align:middle;width:140px"> <button class="small" data-sound-test>テスト</button></label>
@@ -678,6 +703,7 @@
         <div class="row" style="margin-top:8px"><button class="small" data-hints-reset>ヒントをもう一度表示</button><button class="small" data-intro>遊び方を見る</button></div></div>
       <div class="panel"><h2>新しいキャリア</h2><p class="small muted">現在のスロットのセーブは消える。</p><button class="danger" id="newgame">新しいキャリアを始める</button></div>
       <div class="panel"><h2>このゲームについて</h2>${U.help(`Tour Life ${U.VERSION}。登場選手はすべて架空（2025/26年のツアーをモデルにした近似名）。能力値は推定であり公式データではない。ポイント表は現行ATPルールの近似。`)}</div>`;
+    U.bindRunSettings(c);
     c.querySelector("[data-export]").onclick = () => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([W.serialize(S)], { type: "application/json" })); a.download = `tourlife_${cal()}_w${S.week}.json`; a.click(); };
     document.getElementById("imp").onchange = (e) => { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = () => { try { U.S = W.deserialize(r.result); U.save(); U.tab = "plan"; U.runLog = null; U.planSel = null; U.render(); } catch (err) { U.openModal(`<h2>読み込めませんでした</h2><p class="small">${esc(err.message)}</p><button data-close>閉じる</button>`); } }; r.readAsText(f); };
     document.getElementById("newgame").onclick = U.newGame;
