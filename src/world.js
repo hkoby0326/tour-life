@@ -302,6 +302,7 @@
     const usedRanks = new Set();
     for (const r of D.REAL_PLAYERS) {
       const p = newPlayer(state, { name: r[0], country: r[1], birthYear: r[2], overall: interp(OVR_TABLE, r[3]), style: r[4], real: true });
+      p.seedName = r[0]; // v2.26: the roster name this player was seeded with; display may differ by name mode
       p.initRank = r[3];
       p.stats.bestRank = r[3];
       usedRanks.add(r[3]);
@@ -1122,7 +1123,7 @@
       list.push({ id: c.id + "-" + year, tid: c.id, name: c.name, cat: c.cat, def: D.CATS[c.cat], surface: c.surface, country, region: D.COUNTRIES[country].region, isAtp: c.cat !== "DAVIS" });
     }
     const oly = week === D.OLYMPICS.week ? D.olympicsFor(START_YEAR + year - 1) : null;
-    if (oly) list.push({ id: "oly-" + year, tid: "oly", name: `${oly.city}オリンピック`, cat: "OLY", def: D.CATS.OLY, surface: oly.surface, country: oly.country, region: D.COUNTRIES[oly.country].region, isAtp: false, oly: true });
+    if (oly) list.push({ id: "oly-" + year, tid: "oly", name: `${oly.city}${D.olyWord()}`, cat: "OLY", def: D.CATS.OLY, surface: oly.surface, country: oly.country, region: D.COUNTRIES[oly.country].region, isAtp: false, oly: true });
     const lower = D.LOWER_CALENDAR[week] || [];
     lower.forEach((l, i) => {
       const def = D.CATS[l[0]];
@@ -1670,8 +1671,8 @@
     if (p.isHuman) {
       const bonus = { g: 100, s: 40, b: 20 }[kind];
       state.human.money += bonus; state.human.pendingBonus = (state.human.pendingBonus || 0) + bonus;
-      awardGP(state, { g: 5, s: 3, b: 2 }[kind], `オリンピック${label}`, report);
-      (report.items || (report.items = [])).push({ type: "milestone", text: `オリンピック${label}！ スポンサーから $${bonus}k` });
+      awardGP(state, { g: 5, s: 3, b: 2 }[kind], `${D.olyWord()}${label}`, report);
+      (report.items || (report.items = [])).push({ type: "milestone", text: `${D.olyWord()}${label}！ スポンサーから $${bonus}k` });
       if (kind === "g") { state.human.olyGold = (state.human.olyGold || 0) + 1; state.human.sponsor2 = { weekly: (state.human.sponsor2.weekly || 0) + 1, until: state.t + 52 }; }
     }
   }
@@ -3145,6 +3146,28 @@
     outlookCache.set(key, out);
     return out;
   }
+  // v2.26: display names by mode. Roster players keep their seed name; "safe" draws a plausible name
+  // from the country pools with a fixed seed, so it is stable across sessions. A pack overrides by seed name.
+  function safeNameOf(p) { return randomName(new TL.RNG(TL.RNG.hash("safename:" + p.seedName + ":" + p.country)), p.country); }
+  function applyNames(state, mode, pack) {
+    D.applyNameMode(mode, pack);
+    if (!state) return;
+    const pk = (pack && pack.players) || {};
+    const used = new Set(state.players.filter((p) => !p.seedName).map((p) => p.name));
+    for (const p of state.players) {
+      if (!p.seedName) continue;
+      let name = pk[p.seedName] || (D.nameMode === "near" ? p.seedName : safeNameOf(p));
+      // no two roster players may share a generated name: re-roll with a counter until unique
+      for (let k = 1; used.has(name) && D.nameMode !== "near" && !pk[p.seedName] && k < 20; k++) name = randomName(new TL.RNG(TL.RNG.hash(`safename:${p.seedName}:${p.country}:${k}`)), p.country);
+      used.add(name); p.name = name;
+    }
+  }
+  // the mapping a pack would need to restore today's near names (for export)
+  function nearNamePack(state) {
+    const players = {}; for (const p of (state ? state.players : [])) if (p.seedName) players[p.seedName] = p.seedName;
+    for (const r of D.REAL_PLAYERS) players[r[0]] = r[0];
+    return { version: 1, players, tours: Object.assign({}, D.NAME_NEAR.tours), cats: Object.assign({}, D.NAME_NEAR.cats), oly: D.NAME_NEAR.oly };
+  }
   // ---------- public view of any player (no hidden potential) ----------
   function playerInfo(state, id) {
     const p = state.players.find((x) => x.id === id);
@@ -3205,6 +3228,7 @@
     s.cutoffs = s.cutoffs || {};
     if (!DIFFICULTY[s.config.difficulty]) s.config.difficulty = "normal";
     if (!H.econ) H.econ = { tier: "normal", debt: 0 }; // v2.21: saves from before the economic roll
+    { const seeds = new Set(D.REAL_PLAYERS.map((r) => r[0])); for (const p of s.players) if (!p.seedName && !p.isHuman && seeds.has(p.name)) p.seedName = p.name; } // v2.26
     for (const p of s.players) if (!p.cs) p.cs = p.isHuman ? statsFromHistory(s) : initCs();
     for (const p of s.players) { if (p.sharp === undefined) p.sharp = p.injury ? 30 : 65; if (p.conf === undefined) p.conf = 0; if (p.mw === undefined) p.mw = 0; }
     if (!H.strategy) H.strategy = "big";
@@ -3253,5 +3277,5 @@
     return s;
   }
 
-  TL.World = { tourOutlook, ECON_TIERS, econOf, potNow, DEV_PROFILES, profileOf, MENTOR_COST, MENTOR_MULT, MENTOR_UNLOCK, mentorOf, mentorUnlocked, mentorCandidates, setProtege, mentorLegacy, davisField, rivalScores, RIVAL_MIN, GP_SINK, DRILL_COOLDOWN, gpDrill, gpPrep, gpSlot, olympicQuota, HEIGHT_BASE, HEIGHT_FX, heightOf, heightEffects, attrCeil, announceRetirement, isFarewell, farewellOf, coachTalk, LEGACY, LEGACY_LABEL, HOF_LINE, legacyOf, legacyView, goalsView, strategyOk, devStyleOk, declineMods, declineEstimate, RIVALS, rehabWeekly, aiTraitList, TRAIT_LV, TRAIT_COST, traitLevels, traitLevel, traitList, traitSlots, traitEffectText, traitReq, dropTrait, bigTimeline, strengthOf, cashOf, fundingOptions, useFunding, setBudget, JOBS, forcedRetire, TRAIN_SLOTS, TRAIN_CATS, allocOf, allocShare, autoAlloc, allocSummary, TRAITS, hasTrait, traitReqOk, learnTrait, DEV_STYLES, INTENSITY, devOf, styleGap, autoFocus, trainRate, STRATEGIES, sharpBonus, sharpLabel, confLabel, sponsorsOf, brandOf, sponsorOffer, sponsorUnlocked, activeContracts, signSponsor, releaseSponsor, sponsorTerminationFee, sponsorPerks, sponsorWeekly, ASSETS, TAX, AGENT_CUT, assetsOf, assetUnlocked, buyAsset, assetsWeekly, DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
+  TL.World = { applyNames, nearNamePack, safeNameOf, tourOutlook, ECON_TIERS, econOf, potNow, DEV_PROFILES, profileOf, MENTOR_COST, MENTOR_MULT, MENTOR_UNLOCK, mentorOf, mentorUnlocked, mentorCandidates, setProtege, mentorLegacy, davisField, rivalScores, RIVAL_MIN, GP_SINK, DRILL_COOLDOWN, gpDrill, gpPrep, gpSlot, olympicQuota, HEIGHT_BASE, HEIGHT_FX, heightOf, heightEffects, attrCeil, announceRetirement, isFarewell, farewellOf, coachTalk, LEGACY, LEGACY_LABEL, HOF_LINE, legacyOf, legacyView, goalsView, strategyOk, devStyleOk, declineMods, declineEstimate, RIVALS, rehabWeekly, aiTraitList, TRAIT_LV, TRAIT_COST, traitLevels, traitLevel, traitList, traitSlots, traitEffectText, traitReq, dropTrait, bigTimeline, strengthOf, cashOf, fundingOptions, useFunding, setBudget, JOBS, forcedRetire, TRAIN_SLOTS, TRAIN_CATS, allocOf, allocShare, autoAlloc, allocSummary, TRAITS, hasTrait, traitReqOk, learnTrait, DEV_STYLES, INTENSITY, devOf, styleGap, autoFocus, trainRate, STRATEGIES, sharpBonus, sharpLabel, confLabel, sponsorsOf, brandOf, sponsorOffer, sponsorUnlocked, activeContracts, signSponsor, releaseSponsor, sponsorTerminationFee, sponsorPerks, sponsorWeekly, ASSETS, TAX, AGENT_CUT, assetsOf, assetUnlocked, buyAsset, assetsWeekly, DIFFICULTY, csView, statsFromHistory, initCs, rivalryLabel, travelQuote, partySize, distKm, likelyEntrants, terminationFee, compatKnown, compatLabel, renewalTerms, retireNow, injuryFactor, STYLE_LABEL, ROLES, staffOf, roleUnlocked, setStaff, staffCost, playerInfo, recentLoad, create, advanceWeek, advanceWeekGen, weekTournaments, humanStatus, human, rival, age, serialize, deserialize, ATTRS, ATTR_LABEL, START_YEAR, rank6, directCut, interp, OVR_TABLE, autoAction, headroomMult, expectedCut, COACH_TYPES, hireCoach, fireCoach, resolveEvent, genCoachOffers };
 })(typeof globalThis !== "undefined" ? globalThis : window);

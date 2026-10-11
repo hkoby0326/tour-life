@@ -4,8 +4,8 @@
   const U = (TL.UI = {
     W, D, S: null, tab: "home", modal: null, planSel: null, planWeekT: -1, runLog: null, running: false, screens: {},
     SAVE_KEY: "tourlife_v1", SETTINGS_KEY: "tourlife_settings_v1", HOF_KEY: "tourlife_hof_v1",
-    DEFAULT_SETTINGS: { stopTournament: true, stopMilestone: true, stopInjury: true, stopSeason: true, stopEvent: true, stopRival: true, watchEnabled: true, watchDepth: { gs: "all", m1000: "sf", tour: "final", lower: "final" }, watchLowerFinal: true, watchGs: true, watchFinals: true, watchRival: true, watchTop10: true, watchTitle: true, watchSpeed: 300, sound: false, volume: 0.5, reduceMotion: false, slot: 1, introSeen: false, hints: {}, hintsAlways: false },
-    VERSION: "v2.25",
+    DEFAULT_SETTINGS: { stopTournament: true, stopMilestone: true, stopInjury: true, stopSeason: true, stopEvent: true, stopRival: true, watchEnabled: true, watchDepth: { gs: "all", m1000: "sf", tour: "final", lower: "final" }, watchLowerFinal: true, watchGs: true, watchFinals: true, watchRival: true, watchTop10: true, watchTitle: true, watchSpeed: 300, sound: false, volume: 0.5, reduceMotion: false, slot: 1, introSeen: false, hints: {}, hintsAlways: false, nameMode: "near", namePack: null },
+    VERSION: "v2.26",
   });
   U.ATTRL = W.ATTR_LABEL;
   U.ORIGINS = {
@@ -67,7 +67,8 @@
   U.slot = () => U.settings.slot || 1;
   U.saveKeyFor = (n) => (n === 1 ? U.SAVE_KEY : `${U.SAVE_KEY}_s${n}`);
   U.save = () => { try { localStorage.setItem(U.saveKeyFor(U.slot()), W.serialize(U.S)); } catch (e) { console.warn(e); } };
-  U.load = () => { let j = null; try { j = localStorage.getItem(U.saveKeyFor(U.slot())); U.S = j ? W.deserialize(j) : null; U.loadError = null; } catch (e) { console.error(e); U.S = null; U.loadError = { e, raw: j }; } };
+  U.applyNames = () => { try { W.applyNames(U.S, U.settings.nameMode, U.settings.namePack); } catch (e) {} };
+  U.load = () => { let j = null; try { j = localStorage.getItem(U.saveKeyFor(U.slot())); U.S = j ? W.deserialize(j) : null; U.loadError = null; U.applyNames(); } catch (e) { console.error(e); U.S = null; U.loadError = { e, raw: j }; } };
   // v2.20.1: errors are shown on screen (with the save still exportable) instead of a blank page
   U.fatalHtml = (e, title) => `<div class="panel fatal"><h2>${U.esc(title || "エラーが発生しました")}</h2><p class="small">${U.esc(String(e && e.message || e))}</p><pre class="tiny muted" style="white-space:pre-wrap;max-height:160px;overflow:auto">${U.esc(String(e && e.stack || "").split("\n").slice(0, 6).join("\n"))}</pre>
     <p class="small muted">${U.VERSION} ・ まず再読み込み（スマホは一度タブを閉じて開き直す、PCは Shift+再読み込み）で古いファイルの混在が直ることがあります。直らなければ、この文面とエクスポートしたセーブを開発者に送ってください。</p>
@@ -519,6 +520,7 @@
       const name = document.getElementById("name").value.trim() || "名無しの選手";
       const seedStr = document.getElementById("seed").value.trim();
       U.S = W.create({ name, height: parseInt(document.getElementById("height").value, 10) || W.HEIGHT_BASE, country: document.getElementById("country").value, origin: sel, difficulty: document.getElementById("diff").value, injuryRealism: document.getElementById("inj").value, seed: seedStr ? (parseInt(seedStr, 10) || TL.RNG.hash(seedStr)) : undefined });
+      U.applyNames();
       U.save(); U.tab = "home"; U.runLog = null; U.planSel = null; U.render();
       if (!U.settings.introSeen) { U.settings.introSeen = true; U.saveSettings(); U.openModal(U.introHtml()); }
     };

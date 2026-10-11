@@ -695,6 +695,10 @@
         <p class="tiny muted" style="margin-top:6px">表明するとラストシーズンに: 全試合で勝負所 +2、各地の大会の引退セレモニー、元トップ50なら本戦ワイルドカード、最後のGSの決意、好成績なら一度だけ撤回できる。</p></div>`}
       <div class="panel"><h2>セーブスロット</h2><p class="small muted">3つのキャリアを並行して持てる。殿堂ギャラリーは共通。</p>${U.slotsHtml(false)}</div>
       ${U.runSettingsHtml()}
+      <div class="panel"><h2>名前の表示 ${U.helpTo("settings")}</h2>
+        <div class="row" style="gap:14px;flex-wrap:wrap"><label class="small"><input type="radio" name="nm" value="near" data-namemode ${U.settings.nameMode !== "safe" ? "checked" : ""}> 近似名（現行）</label><label class="small"><input type="radio" name="nm" value="safe" data-namemode ${U.settings.nameMode === "safe" ? "checked" : ""}> 架空名（商標・実在選手を避ける）</label></div>
+        <p class="small muted" style="margin:6px 0">初期ロスターの選手名、四大大会・年間最終戦・国別対抗戦・五輪の呼び方、大会カテゴリーの表記が切り替わる。過去のニュースや対戦記録の文字列は当時のまま。${U.settings.namePack ? '<span class="gold">名前パック適用中</span>' : ""}</p>
+        <div class="row" style="gap:8px;flex-wrap:wrap"><button class="small" data-pack-export>名前パックを書き出す（現行の近似名）</button><label class="small">パックを読み込む <input type="file" id="packimp" accept=".json" style="width:auto"></label>${U.settings.namePack ? '<button class="small" data-pack-clear>パックを外す</button>' : ""}</div></div>
       <div class="panel"><h2>表示とサウンド</h2>
         <label class="small" style="display:flex;gap:8px;align-items:center;margin:6px 0"><input type="checkbox" style="width:auto;margin:0" data-setting="sound" ${U.settings.sound ? "checked" : ""}> サウンド（観戦モードの効果音・節目のファンファーレ）</label>
         <label class="small" style="display:flex;gap:8px;align-items:center;margin:6px 0">音量 <input type="range" min="0" max="1" step="0.1" value="${U.settings.volume == null ? 0.5 : U.settings.volume}" data-volume style="vertical-align:middle;width:140px"> <button class="small" data-sound-test>テスト</button></label>
@@ -704,6 +708,10 @@
       <div class="panel"><h2>新しいキャリア</h2><p class="small muted">現在のスロットのセーブは消える。</p><button class="danger" id="newgame">新しいキャリアを始める</button></div>
       <div class="panel"><h2>このゲームについて</h2>${U.help(`Tour Life ${U.VERSION}。登場選手はすべて架空（2025/26年のツアーをモデルにした近似名）。能力値は推定であり公式データではない。ポイント表は現行ATPルールの近似。`)}</div>`;
     U.bindRunSettings(c);
+    c.querySelectorAll("[data-namemode]").forEach((r) => r.onchange = () => { U.settings.nameMode = r.value; U.saveSettings(); U.applyNames(); U.save(); U.render(); U.toast(r.value === "safe" ? "架空名に切り替えた" : "近似名に切り替えた"); });
+    const pe = c.querySelector("[data-pack-export]"); if (pe) pe.onclick = () => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(W.nearNamePack(S), null, 1)], { type: "application/json" })); a.download = "tourlife_namepack.json"; a.click(); };
+    const pc = c.querySelector("[data-pack-clear]"); if (pc) pc.onclick = () => { U.settings.namePack = null; U.saveSettings(); U.applyNames(); U.save(); U.render(); };
+    const pi = c.querySelector("#packimp"); if (pi) pi.onchange = () => { const f = pi.files[0]; if (!f) return; const rd = new FileReader(); rd.onload = () => { try { const pk = JSON.parse(rd.result); if (!pk || typeof pk !== "object") throw new Error("形式が違う"); U.settings.namePack = { players: pk.players || {}, tours: pk.tours || {}, cats: pk.cats || {}, oly: pk.oly }; U.saveSettings(); U.applyNames(); U.save(); U.render(); U.toast("名前パックを読み込んだ", "green"); } catch (e) { U.openModal(`<h2>読み込み失敗</h2><p>${esc(e.message)}</p><button data-close>閉じる</button>`); } }; rd.readAsText(f); };
     c.querySelector("[data-export]").onclick = () => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([W.serialize(S)], { type: "application/json" })); a.download = `tourlife_${cal()}_w${S.week}.json`; a.click(); };
     document.getElementById("imp").onchange = (e) => { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = () => { try { U.S = W.deserialize(r.result); U.save(); U.tab = "plan"; U.runLog = null; U.planSel = null; U.render(); } catch (err) { U.openModal(`<h2>読み込めませんでした</h2><p class="small">${esc(err.message)}</p><button data-close>閉じる</button>`); } }; r.readAsText(f); };
     document.getElementById("newgame").onclick = U.newGame;

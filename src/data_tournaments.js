@@ -212,4 +212,23 @@
     const l = CITY[country] || [D.COUNTRIES[country] ? D.COUNTRIES[country].name : country];
     return l[((i % l.length) + l.length) % l.length];
   };
+
+  // v2.26: name sets. "near" is the shipped-for-now roster/tournament naming; "safe" avoids trademarks
+  // and real-player likeness. A pack (JSON) can override either. The near set is captured from the
+  // data above so removing it later is a matter of deleting it, not rewriting the game.
+  D.NAME_SAFE = {
+    tours: { ao: "メルボルン・オープン", rg: "パリ・クレー選手権", wimbledon: "ロンドン芝選手権", uso: "ニューヨーク・オープン", finals: "年間最終戦", davis: "国別対抗戦 ファイナルズ" },
+    cats: { GS: ["四大大会", "四大"], M1000L: ["ツアー1000", "1000"], M1000S: ["ツアー1000", "1000"], A500L: ["ツアー500", "500"], A500: ["ツアー500", "500"], A250: ["ツアー250", "250"], A250B: ["ツアー250", "250"], FINALS: ["年間最終戦", "最終戦"], DAVIS: ["国別対抗戦", "国別"], OLY: ["世界競技大会", "世界大会"] },
+    oly: "世界競技大会",
+  };
+  D.NAME_NEAR = { tours: Object.fromEntries(D.ATP_CALENDAR.map((c) => [c.id, c.name])), cats: Object.fromEntries(Object.entries(D.CATS).map(([k, v]) => [k, [v.label, v.short]])), oly: "オリンピック" };
+  D.nameMode = "near";
+  D.olyWord = () => (D.nameMode === "near" ? D.NAME_NEAR.oly : (D.namePack && D.namePack.oly) || D.NAME_SAFE.oly);
+  D.applyNameMode = function (mode, pack) {
+    D.nameMode = mode === "safe" ? "safe" : "near"; D.namePack = pack || null;
+    const tours = Object.assign({}, D.nameMode === "near" ? D.NAME_NEAR.tours : Object.assign({}, D.NAME_NEAR.tours, D.NAME_SAFE.tours), (pack && pack.tours) || {});
+    const cats = Object.assign({}, D.nameMode === "near" ? D.NAME_NEAR.cats : Object.assign({}, D.NAME_NEAR.cats, D.NAME_SAFE.cats), (pack && pack.cats) || {});
+    for (const c of D.ATP_CALENDAR) if (tours[c.id]) c.name = tours[c.id];
+    for (const [k, v] of Object.entries(cats)) if (D.CATS[k]) { D.CATS[k].label = v[0]; D.CATS[k].short = v[1]; }
+  };
 })(typeof globalThis !== "undefined" ? globalThis : window);
