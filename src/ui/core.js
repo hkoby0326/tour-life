@@ -4,8 +4,8 @@
   const U = (TL.UI = {
     W, D, S: null, tab: "home", modal: null, planSel: null, planWeekT: -1, runLog: null, running: false, screens: {},
     SAVE_KEY: "tourlife_v1", SETTINGS_KEY: "tourlife_settings_v1", HOF_KEY: "tourlife_hof_v1",
-    DEFAULT_SETTINGS: { stopTournament: true, stopMilestone: true, stopInjury: true, stopSeason: true, stopEvent: true, stopRival: true, watchEnabled: true, watchDepth: { gs: "all", m1000: "sf", tour: "final", lower: "final" }, watchLowerFinal: true, watchGs: true, watchFinals: true, watchRival: true, watchTop10: true, watchTitle: true, watchSpeed: 300, sound: false, volume: 0.5, reduceMotion: false, slot: 1, introSeen: false, hints: {}, hintsAlways: false, nameMode: "near", namePack: null },
-    VERSION: "v2.26",
+    DEFAULT_SETTINGS: { stopTournament: true, stopMilestone: true, stopInjury: true, stopSeason: true, stopEvent: true, stopRival: true, watchEnabled: true, watchDepth: { gs: "all", m1000: "sf", tour: "final", lower: "final" }, watchLowerFinal: true, watchGs: true, watchFinals: true, watchRival: true, watchTop10: true, watchTitle: true, watchSpeed: 300, sound: false, volume: 0.5, reduceMotion: false, slot: 1, introSeen: false, hints: {}, hintsAlways: false, nameMode: "near", namePack: null, onlineUrl: "", onlineNick: "" },
+    VERSION: "v2.27",
   });
   U.ATTRL = W.ATTR_LABEL;
   U.ORIGINS = {
@@ -41,11 +41,12 @@
     team: '<circle cx="9" cy="8" r="3.5"/><circle cx="17" cy="9" r="2.5"/><path d="M2 20a7 7 0 0 1 14 0M15 20a5 5 0 0 1 7-4"/>',
     finance: '<path d="M3 7h18v12H3zM3 11h18M16 15h2"/>',
     sponsor: '<path d="M20 7h-4V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1zM10 5h4v2h-4z"/><path d="M3 12h18"/>',
+    online: '<path d="M4 12a8 8 0 0 1 16 0M4 12a8 8 0 0 0 16 0M4 12h16M12 4c3 3 3 13 0 16M12 4c-3 3-3 13 0 16"/>',
     records: '<path d="M4 4h12a2 2 0 0 1 2 2v14H6a2 2 0 0 1-2-2zM4 18a2 2 0 0 1 2-2h12"/>',
     settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
   };
   U.icon = (n) => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n] || ""}</svg>`;
-  U.TABS = [["home", "ホーム"], ["plan", "プラン"], ["report", "結果"], ["ranking", "ランキング"], ["calendar", "カレンダー"], ["player", "選手"], ["team", "チーム"], ["sponsor", "スポンサー"], ["finance", "財務"], ["records", "記録"], ["guide", "説明"], ["settings", "設定"]];
+  U.TABS = [["home", "ホーム"], ["plan", "プラン"], ["report", "結果"], ["ranking", "ランキング"], ["calendar", "カレンダー"], ["player", "選手"], ["team", "チーム"], ["sponsor", "スポンサー"], ["finance", "財務"], ["records", "記録"], ["online", "対戦"], ["guide", "説明"], ["settings", "設定"]];
   U.PRIMARY = ["home", "plan", "report", "ranking"]; // bottom tab bar on phones; the rest live behind "その他"
   U.TAB_LABEL = Object.fromEntries(U.TABS);
 
@@ -278,6 +279,7 @@
     ["sponsor", "スポンサー", "ラケット・ウエア・シューズ・その他。ランキングが上がるほど上位ブランドが解放され、提示額も上がる。週給と契約金、優勝ボーナス（250以上／1000／GS）。契約中に下位ブランドへ乗り換えると違約金。用具には小さな性能効果（サーブ・リターン・怪我・回復など）。"],
     ["legacy", "レガシー・殿堂", "配点: GS 100、ファイナルズ 50、マスターズ1000 30、500 15、250 8、チャレンジャー 1、No.1在位 3/週、年末トップ10 10、年末No.1 40、五輪 金60・銀25・銅12、デビス優勝40・準優勝15、有言実行 20、指導者（教え子の実績）。<br>殿堂ライン 400（キャリアの約6〜10%が到達）。ゲーム開始以降のこの世界の成績で数え、歴代ランキングはAI選手と共通。記録への挑戦: GS・マスターズ・ツアー優勝数、No.1在位、年末トップ10の最多記録。"],
     ["events", "特別な大会", "オリンピック: 4年に1度（2028〜）第30週。各国トップ100以内の上位4人（開催国6人）。ポイント・賞金なし、3位決定戦あり。メダルはレガシーとボーナス、金なら1年間スポンサー収入 +$1k/週。<br>デビスカップ: 第47週、8か国。各国上位2人。自分が30位以内で国内上位2人なら自国を枠に引き寄せる。第1S→第2S→1-1ならダブルス。優勝でレガシー 40、スポンサー +$0.5k/週。<br>ATPファイナルズ: 年末上位8人。ラウンドロビン→準決勝→決勝。"],
+    ["online", "オンライン対戦", "対戦タブで、いまの自分の選手を使って友人とリアルタイムのエキシビションができる。小さな専用サーバー（server/server.js）が必要で、設定した URL に接続し、片方が「部屋を作る」で出た5文字のコードをもう片方が入れる。試合はサーバーが1ポイントずつ進め、両方の画面で同じ試合が流れる。セット間に20秒でプランを選べる（選ばなければ現在のまま）。結果はランキングやレガシーには入らず、対戦タブの記録に残る。能力はその時点のスナップショットで、疲労と怪我は考慮しない。"],
     ["settings", "セーブ・設定", "毎回自動保存（このブラウザの localStorage）。乱数はシード固定で、リロードしてやり直しても同じ結果。3つのセーブスロット、殿堂ギャラリーは共通。エクスポート／インポートでJSONとして保存できる。<br>観戦・停止条件・サウンド・アニメーション・ヒントは設定タブ。"],
   ];
   U.helpTo = (id) => `<button class="helpbtn" data-help-to="${id}" title="説明" aria-label="説明">?</button>`;

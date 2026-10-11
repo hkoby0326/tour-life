@@ -194,14 +194,32 @@
       const area = `M0,${H0 / 2} L${pts} L${W0},${H0 / 2} Z`;
       el.innerHTML = `<svg viewBox="0 0 ${W0} ${H0}" preserveAspectRatio="none" width="100%" height="${H0}"><line x1="0" y1="${H0 / 2}" x2="${W0}" y2="${H0 / 2}" class="mid"/>${marks.map((mk) => `<line x1="${x(mk.at).toFixed(1)}" y1="2" x2="${x(mk.at).toFixed(1)}" y2="${H0 - 2}" class="mk ${mk.kind} ${mk.who === hi ? "me" : "op"}"/>`).join("")}<path d="${area}" class="area"/><polyline points="${pts}" class="line"/></svg>`;
     }
+    const online = y.online || null; // v2.27: the server drives the clock; local controls are off
     function stop() { if (timer) { clearInterval(timer); timer = null; } $("v-play").textContent = "▶ 再生"; }
-    function start() { if (m.done) return; stop(); $("v-play").textContent = "❚❚ 停止"; timer = setInterval(() => { if (m.done) { stop(); return; } step(true); board(); if (m.betweenSets) stop(); }, speed); }
+    function start() { if (m.done || online) return; stop(); $("v-play").textContent = "❚❚ 停止"; timer = setInterval(() => { if (m.done) { stop(); return; } step(true); board(); if (m.betweenSets) stop(); }, speed); }
     $("v-play").onclick = () => (timer ? stop() : start());
     $("v-point").onclick = () => { stop(); step(true); board(); };
     $("v-set").onclick = () => { stop(); const n = m.setNo; while (!m.done && m.setNo === n) step(false); board(); };
     $("v-skip").onclick = () => { stop(); while (!m.done) step(false); board(); };
     $("v-speed").onchange = (e) => { speed = parseInt(e.target.value, 10); U.settings.watchSpeed = speed; U.saveSettings(); if (timer) start(); };
-    $("v-planSel").onchange = (e) => setPlan(e.target.value);
+    $("v-planSel").onchange = (e) => { if (online) { online.sendPlan(e.target.value); $("v-banner").innerHTML = `<b class="gold">セット間</b> ${TL.PLANS[e.target.value].label} を送った。相手を待っている…`; return; } setPlan(e.target.value); };
+    if (online) {
+      for (const id of ["v-play", "v-point", "v-set", "v-skip"]) { const b = $(id); b.disabled = true; b.style.display = "none"; }
+      $("v-speed").disabled = true; $("v-speed").style.display = "none";
+      $("v-banner").innerHTML = `<b class="gold">オンライン対戦</b> まもなく開始…`;
+      const emo = document.createElement("div"); emo.className = "emotes"; emo.innerHTML = ["👏", "🔥", "😱", "😂", "🙏"].map((e) => `<button class="small" data-emote="${e}">${e}</button>`).join("") + '<span class="emofeed" id="v-emofeed"></span>';
+      $("v-tactics").parentNode.insertBefore(emo, $("v-tactics"));
+      emo.querySelectorAll("[data-emote]").forEach((b) => b.onclick = () => online.emote(b.dataset.emote));
+      online.attach({
+        step: () => { if (!m.done) { step(true); board(); } },
+        breakNotice: (secs) => { $("v-banner").innerHTML = `<b class="gold">セット間</b> プランを選べる（${secs}秒）。選ばなければ現在のまま`; $("v-planSel").disabled = false; },
+        planned: (idx) => { if (idx !== hi) $("v-banner").innerHTML += ' <span class="muted small">相手は選んだ</span>'; },
+        applyPlans: (plans) => { for (const i of [0, 1]) if (plans[i] && TL.PLANS[plans[i]] && plans[i] !== m.plans[i]) { m.setPlan(i, plans[i]); m.events.push({ kind: "plan", who: i, text: `${m.players[i].name} が${TL.PLANS[plans[i]].label}に切り替える` }); } $("v-planSel").value = m.plans[hi]; $("v-banner").innerHTML = `<b class="gold">セット間</b> 再開…`; board(); },
+        ended: (won, score) => { if (!m.done) m.finish(); board(); },
+        emote: (idx, e) => { const f = $("v-emofeed"); if (f) { f.textContent = `${idx === hi ? "自分" : "相手"} ${e}`; f.style.opacity = 1; setTimeout(() => { f.style.opacity = 0.4; }, 1500); } },
+        abort: (why) => { $("v-banner").innerHTML = `<b class="red">中断</b> ${U.esc(why || "")}`; if (!m.done) m.finish(); $("v-done").disabled = false; },
+      });
+    }
     $("v-snd").onclick = () => { U.settings.sound = !U.settings.sound; U.saveSettings(); $("v-snd").textContent = U.settings.sound ? "🔊" : "🔇"; if (U.settings.sound && U.sfx) U.sfx("click"); };
     $("v-done").onclick = () => { stop(); if (raf) cancelAnimationFrame(raf); if (!m.done) m.finish(); bg.remove(); done(); };
     board();

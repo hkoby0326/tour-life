@@ -521,3 +521,8 @@ tr.flash-me td{animation:flashMe .45s} tr.flash-op td{animation:flashOp .45s}
 .recfilter{display:flex;gap:6px;flex-wrap:wrap}
 .recfilter select{padding:4px 8px;font-size:12px}
 @media(max-width:800px){.cmp{grid-template-columns:1fr}}
+
+/* v2.27 online */
+.code{font-family:monospace;font-size:26px;letter-spacing:.18em;color:var(--gold);font-weight:800;margin-left:8px}
+.emotes{display:flex;gap:6px;align-items:center;margin:6px 0}
+.emotes .emofeed{margin-left:8px;font-size:14px;transition:opacity .4s}

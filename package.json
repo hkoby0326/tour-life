@@ -1,0 +1,8 @@
+{
+  "name": "tour-life",
+  "private": true,
+  "version": "2.27.0",
+  "description": "Tour Life - browser tennis career sim; server/ is the optional online match server (no dependencies)",
+  "scripts": { "start": "node server/server.js" },
+  "engines": { "node": ">=18" }
+}
